@@ -5,6 +5,8 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
+const val DEFAULT_SYNC_TIMEOUT_MS = 4_500L
+
 enum class ShuttleNotReadyCause {
 	PermissionDenied,
 	UnknownAuthority,

@@ -1,5 +1,3 @@
-@file:Suppress("DEPRECATION_ERROR")
-
 package com.yzddmr6.prismspace.shuttle
 
 import android.app.Activity
@@ -11,23 +9,20 @@ import android.database.Cursor
 import android.net.Uri
 import android.os.*
 import android.util.Log
-import android.util.Size
-import android.util.SizeF
-import android.util.SparseArray
 import com.yzddmr6.prismspace.bridge.BridgeCommand
+import com.yzddmr6.prismspace.bridge.Bridge
 import com.yzddmr6.prismspace.bridge.BridgeDispatcher
 import com.yzddmr6.prismspace.bridge.BridgeTargets
 import com.yzddmr6.prismspace.bridge.BridgeWire
 import com.yzddmr6.prismspace.bridge.Ping
+import com.yzddmr6.prismspace.bridge.EstablishBackwardGrant
 import com.yzddmr6.prismspace.util.UserHandles
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
-import com.yzddmr6.prismspace.analytics.analytics
 import com.yzddmr6.prismspace.util.DevicePolicies
 import com.yzddmr6.prismspace.util.OwnerUser
 import com.yzddmr6.prismspace.util.ProfileUser
 import com.yzddmr6.prismspace.util.Users
 import com.yzddmr6.prismspace.util.Users.Companion.toId
-import java.io.Serializable
 
 class ShuttleProvider: ContentProvider() {
 
@@ -68,36 +63,6 @@ class ShuttleProvider: ContentProvider() {
 					ShuttleOutcome.Failed(error)
 				}
 			}
-		}
-
-		fun <R> call(context: Context, profile: UserHandle, function: ContextFun<R>): ShuttleResult<R> {
-			val functionFqn = function.javaClass.name
-			val targetUser = profile.toId()
-			if (!isReady(context, profile)) {
-				DiagnosticLog.w(
-					TAG,
-					"Shuttle call skipped fqn=$functionFqn targetUser=$targetUser cause=${ShuttleNotReadyCause.PermissionDenied}",
-				)
-				return ShuttleResult.notReady(ShuttleNotReadyCause.PermissionDenied)
-			}
-			val bundle = Bundle(1).apply { putParcelable(null, Closure(function)) }
-			val uri = buildCrossProfileUri(profile.toId())
-			try { return ShuttleResult.value(context.contentResolver.call(uri, functionFqn, null, bundle)) }
-			catch (e: RuntimeException) { // "SecurityException" or "IllegalArgumentException: Unknown authority 0@..." if shuttle is not ready
-				val permissionGranted = isReady(context, profile)
-				val cause = classifyShuttleNotReadyCause(e, permissionGranted)
-				if (cause != null) {
-					val message = "Shuttle call failed fqn=$functionFqn targetUser=$targetUser " +
-						"exception=${e.javaClass.name} cause=$cause permissionGranted=$permissionGranted"
-					DiagnosticLog.w(TAG, message, e)
-					if (permissionGranted) analytics().report(message, e)
-					return ShuttleResult.notReady(cause) }
-				DiagnosticLog.w(
-					TAG,
-					"Shuttle execution failed fqn=$functionFqn targetUser=$targetUser exception=${e.javaClass.name}",
-					e,
-				)
-				throw e }
 		}
 
 		private fun isReady(c: Context, profile: UserHandle) = c.isPermissionGranted(buildCrossProfileUri(profile.toId()))
@@ -156,7 +121,7 @@ class ShuttleProvider: ContentProvider() {
 				return Users.getProfilesManagedByPrism().forEach {
 					if (isReady(context, it)) {
 						Log.i(TAG, "Shuttle to profile ${it.toId()}: ready")
-						if (! isBackwardReady(context, it)) initializeBackwardShuttle(context, it) }
+						if (! isBackwardReady(context, it)) initializeBackwardBridge(context, it) }
 					else Log.w(TAG, "Shuttle to profile ${it.toId()}: not ready") }
 			if (! DevicePolicies(context).isProfileOwner) return
 
@@ -173,10 +138,9 @@ class ShuttleProvider: ContentProvider() {
 			initializeInPrism(context, force = true)
 		}
 
-		private fun initializeBackwardShuttle(context: Context, profile: UserHandle) {
+		private fun initializeBackwardBridge(context: Context, profile: UserHandle) {
 			val target = BridgeTargets.profile(context, profile.toId()) ?: return
-			com.yzddmr6.prismspace.bridge.Bridge.inProfile(context, target)
-				.execute(com.yzddmr6.prismspace.bridge.EstablishBackwardGrant)
+			Bridge.inProfile(context, target).execute(EstablishBackwardGrant)
 		}
 
 		internal fun establishBackwardGrant(context: Context) = initializeInPrism(context)
@@ -228,29 +192,17 @@ class ShuttleProvider: ContentProvider() {
 	}
 
 	override fun call(method: String, arg: String?, extras: Bundle?): Bundle? {
-		if (extras?.containsKey(BridgeWire.KEY_COMMAND) == true) {
-			val command = requireNotNull(BridgeWire.readCommand(extras)) { "Missing bridge command" }
-			if (method != command.id) {
-				return com.yzddmr6.prismspace.bridge.BridgeWire.invalidRequest(
-					command.id,
-					"method=$method",
-				)
-			}
-			val token = Binder.clearCallingIdentity()
-			return try {
-				BridgeDispatcher.dispatch(context, command)
-			} finally {
-				Binder.restoreCallingIdentity(token)
-			}
+		if (extras?.containsKey(BridgeWire.KEY_COMMAND) != true) {
+			return BridgeWire.invalidRequest(method, "missing typed bridge command")
 		}
-		val closure = requireNotNull(extras?.apply { classLoader = Closure::class.java.classLoader }?.getParcelable<Closure>(null)) { "Missing extra" }
+		val command = requireNotNull(BridgeWire.readCommand(extras)) { "Missing bridge command" }
+		if (method != command.id) return BridgeWire.invalidRequest(command.id, "method=$method")
 		val token = Binder.clearCallingIdentity()
-		val result = try {
-			closure.invoke(context)
+		return try {
+			BridgeDispatcher.dispatch(context, command)
 		} finally {
 			Binder.restoreCallingIdentity(token)
-		}.also { Log.i(TAG, "Call: $method()=$it") }
-		return if (result == null || result == Unit) null else Bundle().apply { put(null, result) }
+		}
 	}
 
 	override fun onCreate() = true.also { initialize(context) }
@@ -270,69 +222,6 @@ class ShuttleProvider: ContentProvider() {
 			finish()
 			intent.data?.also { takeUriGranted(this, it) }
 		}
-	}
-}
-
-class ShuttleResult<R> private constructor(private val bundle: Bundle?, val notReadyCause: ShuttleNotReadyCause?) {
-
-	companion object {
-		fun <R> value(bundle: Bundle?) = ShuttleResult<R>(bundle, null)
-		fun <R> notReady(cause: ShuttleNotReadyCause) = ShuttleResult<R>(null, cause)
-	}
-
-	fun isNotReady() = notReadyCause != null
-	@Suppress("UNCHECKED_CAST") fun get(): R = bundle?.get(null) as R
-	@Suppress("UNCHECKED_CAST") fun getOrNull(): R? = bundle?.get(null) as R?
-	override fun toString() =
-		if (isNotReady()) "ShuttleResult{NOT_READY cause=$notReadyCause}"
-		else "ShuttleResult{" + bundle.toString() + "}"
-}
-
-//private fun Bundle?.toStr() = this?.toString()?.substring(6) ?: "null"
-
-private typealias ContextFun<R> = Context.() -> R?
-
-private fun Bundle.put(key: String?, value: Any?) {
-	when (value) {
-		null -> putString(key, null)
-		is Boolean -> putBoolean(key, value)
-		is Int -> putInt(key, value)
-		is Long -> putLong(key, value)
-		is String -> putString(key, value)
-		is CharSequence -> putCharSequence(key, value)
-		// These Parcelable types must be checked before "is Parcelable".
-		is Bundle -> putBundle(key, value)
-		is SizeF -> putSizeF(key, value)
-		is Parcelable -> putParcelable(key, value)
-
-		is Array<*> -> when {
-			value.isArrayOf<Parcelable>() -> @Suppress("UNCHECKED_CAST") putParcelableArray(key, value as Array<Parcelable?>)
-			value.isArrayOf<CharSequence>() -> @Suppress("UNCHECKED_CAST") putCharSequenceArray(key, value as Array<CharSequence?>)
-			value.isArrayOf<String>() -> @Suppress("UNCHECKED_CAST") putStringArray(key, value as Array<String?>)
-			else -> throw IllegalArgumentException("Unsupported array type: " + value.javaClass) }
-		is List<*> -> @Suppress("UNCHECKED_CAST") putParcelableArrayList(key,
-				if (value is ArrayList<*>) (value as ArrayList<Parcelable>) else ArrayList(value as List<Parcelable>))
-		is SparseArray<*> -> @Suppress("UNCHECKED_CAST") putSparseParcelableArray(key, value as SparseArray<Parcelable>)
-
-		is Byte -> putByte(key, value)
-		is Char -> putChar(key, value)
-		is Short -> putShort(key, value)
-		is Float -> putFloat(key, value)
-		is Double -> putDouble(key, value)
-		is Size -> putSize(key, value)
-		is BooleanArray -> putBooleanArray(key, value)
-		is IntArray -> putIntArray(key, value)
-		is LongArray -> putLongArray(key, value)
-		is ByteArray -> putByteArray(key, value)
-		is CharArray -> putCharArray(key, value)
-		is ShortArray -> putShortArray(key, value)
-		is FloatArray -> putFloatArray(key, value)
-		is DoubleArray -> putDoubleArray(key, value)
-
-		is IBinder -> putBinder(key, value)
-
-		is Serializable -> putSerializable(key, value)      // Must be the last one
-		else -> throw IllegalArgumentException("Unsupported type: " + value.javaClass)
 	}
 }
 

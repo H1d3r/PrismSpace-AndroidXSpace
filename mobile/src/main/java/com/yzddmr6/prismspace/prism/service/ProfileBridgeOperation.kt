@@ -1,9 +1,6 @@
-@file:Suppress("DEPRECATION_ERROR")
-
 package com.yzddmr6.prismspace.prism.service
 
 import android.content.Context
-import android.os.UserHandle
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
 import com.yzddmr6.prismspace.bridge.Bridge
 import com.yzddmr6.prismspace.bridge.BridgeTargets
@@ -12,13 +9,11 @@ import com.yzddmr6.prismspace.bridge.DestinationCommand
 import com.yzddmr6.prismspace.bridge.ProfileCommand
 import com.yzddmr6.prismspace.bridge.ProfileTarget
 import com.yzddmr6.prismspace.mobile.R
-import com.yzddmr6.prismspace.shuttle.Shuttle
 import com.yzddmr6.prismspace.shuttle.ShuttleNotReadyCause
 import com.yzddmr6.prismspace.shuttle.ShuttleOutcome
 import com.yzddmr6.prismspace.shuttle.ShuttleProvider
 import com.yzddmr6.prismspace.util.PrismLocale
 import com.yzddmr6.prismspace.util.Users
-import com.yzddmr6.prismspace.util.Users.Companion.toId
 
 internal fun <R> runProfileBridgeOperation(
     context: Context,
@@ -83,36 +78,6 @@ internal sealed class ProfileBridgeResult<out R> {
                 is ShuttleOutcome.Skipped -> SpaceInactive(outcome.reason)
             }
     }
-}
-
-internal fun <R> runProfileBridgeOperation(
-    context: Context,
-    tag: String,
-    operation: String,
-    target: UserHandle? = Users.profile,
-    timeoutMs: Long? = null,
-    block: Context.() -> R,
-): ProfileBridgeResult<R> {
-    val profile = target ?: return ProfileBridgeResult.SpaceMissing
-    if (profile == Users.current()) {
-        DiagnosticLog.i(tag, "$operation local profile=${profile.toId()}")
-        val outcome = Shuttle(context, to = profile).invokeOutcome(block)
-        return ProfileBridgeResult.from(outcome)
-    }
-    val health = ShuttleProvider.health(context, profile)
-    DiagnosticLog.i(
-        tag,
-        "$operation preflight profile=${profile.toId()} ${health.diagnosticLine()}",
-    )
-	if (!health.available) {
-		return ProfileBridgeResult.from(health.ping).asFailureResult()
-	}
-    val outcome = if (timeoutMs != null) {
-        Shuttle(context, to = profile).invokeOutcomeWithin(timeoutMs, block)
-    } else {
-        Shuttle(context, to = profile).invokeOutcome(block)
-    }
-    return ProfileBridgeResult.from(outcome)
 }
 
 internal fun ProfileBridgeResult<*>.failureReason(): FileTransferFailureReason? =
