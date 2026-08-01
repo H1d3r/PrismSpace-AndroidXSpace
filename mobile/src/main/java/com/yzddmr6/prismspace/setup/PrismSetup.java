@@ -34,7 +34,11 @@ import com.yzddmr6.prismspace.mobile.R;
 import com.yzddmr6.prismspace.prism.compose.settings.ExperimentalFlags;
 import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository;
 import com.yzddmr6.prismspace.space.SpaceState;
-import com.yzddmr6.prismspace.shuttle.Shuttle;
+import com.yzddmr6.prismspace.bridge.Bridge;
+import com.yzddmr6.prismspace.bridge.BridgeTargets;
+import com.yzddmr6.prismspace.bridge.ParentTarget;
+import com.yzddmr6.prismspace.bridge.QueryParentIsProfileOwner;
+import com.yzddmr6.prismspace.shuttle.ShuttleOutcome;
 import com.yzddmr6.prismspace.util.DeviceAdmins;
 import com.yzddmr6.prismspace.util.DevicePolicies;
 import com.yzddmr6.prismspace.util.Hacks;
@@ -221,7 +225,12 @@ public class PrismSetup {
 	}
 
 	private static void requestProfileRemovalConfirmed(final Activity activity) {
-		if (new Shuttle(activity, Users.getParentProfile()).invokeNoThrows(c -> new DevicePolicies(c).isProfileOwner()) == FALSE)
+		final ParentTarget target = BridgeTargets.INSTANCE.parent(activity);
+		final ShuttleOutcome<Boolean> outcome = target == null ? null
+				: Bridge.INSTANCE.inParent(activity, target).execute(QueryParentIsProfileOwner.INSTANCE);
+		final Boolean parentIsProfileOwner = outcome instanceof ShuttleOutcome.Value
+				? ((ShuttleOutcome.Value<Boolean>) outcome).getValue() : null;
+		if (parentIsProfileOwner == FALSE)
 			destroyProfileLegacy(activity);
 		else new AlertDialog.Builder(activity).setTitle(R.string.dialog_title_warning)
 				.setMessage(R.string.dialog_destroy_message_for_managed_user)

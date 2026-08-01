@@ -16,7 +16,11 @@
             </intent-filter>
         </receiver>
         <service android:name=".PrismWatcher$PrismDeactivationService" android:directBootAware="true"
-            android:foregroundServiceType="shortService" tools:targetApi="28" />
+            android:exported="false" android:foregroundServiceType="shortService" tools:targetApi="28">
+            <intent-filter>
+                <action android:name="com.yzddmr6.prismspace.action.START_PROFILE_DEACTIVATION" />
+            </intent-filter>
+        </service>
 
         <receiver android:name=".PrismAppWatcher" android:enabled="@bool/since_api_26" android:directBootAware="true"
             android:exported="false" tools:targetApi="26">

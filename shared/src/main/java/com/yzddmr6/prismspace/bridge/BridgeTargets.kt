@@ -11,14 +11,20 @@ sealed interface BridgeTarget {
     val userId: Int
 }
 
-@JvmInline
-value class ProfileTarget internal constructor(internal val handle: UserHandle) : BridgeTarget {
+class ProfileTarget private constructor(internal val handle: UserHandle) : BridgeTarget {
     override val userId: Int get() = handle.toId()
+
+    internal companion object {
+        fun validated(handle: UserHandle) = ProfileTarget(handle)
+    }
 }
 
-@JvmInline
-value class ParentTarget internal constructor(internal val handle: UserHandle) : BridgeTarget {
+class ParentTarget private constructor(internal val handle: UserHandle) : BridgeTarget {
     override val userId: Int get() = handle.toId()
+
+    internal companion object {
+        fun validated(handle: UserHandle) = ParentTarget(handle)
+    }
 }
 
 object BridgeTargets {
@@ -31,13 +37,13 @@ object BridgeTargets {
         } else {
             Users.isParentProfile() && runCatching { Users.isProfileManagedByPrism(context, handle) }.getOrDefault(false)
         }
-        return handle.takeIf { valid }?.let(::ProfileTarget)
+        return handle.takeIf { valid }?.let(ProfileTarget::validated)
     }
 
     fun parent(context: Context): ParentTarget? {
         val parent = runCatching { Users.parentProfile }.getOrNull() ?: return null
         val valid = if (parent == Users.current()) Users.isParentProfile()
         else !Users.isParentProfile() && DevicePolicies(context).isProfileOwner
-        return parent.takeIf { valid }?.let(::ParentTarget)
+        return parent.takeIf { valid }?.let(ParentTarget::validated)
     }
 }

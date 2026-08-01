@@ -1,19 +1,18 @@
-@file:Suppress("DEPRECATION_ERROR")
-
 package com.yzddmr6.prismspace.prism.compose.space
 
 import android.content.Context
 import android.content.pm.LauncherApps
 import android.content.pm.PackageManager.MATCH_UNINSTALLED_PACKAGES
-import android.os.Bundle
 import android.os.SystemClock
 import android.os.UserHandle
 import android.os.UserManager
-import android.preference.PreferenceManager
+import com.yzddmr6.prismspace.bridge.Bridge
+import com.yzddmr6.prismspace.bridge.BridgeTargets
+import com.yzddmr6.prismspace.bridge.ProfileProvisioningFactsDto
+import com.yzddmr6.prismspace.bridge.QueryProfileProvisioningFacts
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
 import com.yzddmr6.prismspace.data.helper.installed
 import com.yzddmr6.prismspace.settings.PrismSettingsActivity
-import com.yzddmr6.prismspace.shuttle.Shuttle
 import com.yzddmr6.prismspace.shuttle.ShuttleNotReadyCause
 import com.yzddmr6.prismspace.shuttle.ShuttleOutcome
 import com.yzddmr6.prismspace.space.SpaceBridgeCause
@@ -100,22 +99,19 @@ class SpaceStateRepository(private val appContext: Context) {
             quietMode = quiet,
             bridgeReady = bridgeReady,
             bridgeCause = cachedHealth?.ping?.toBridgeCause() ?: SpaceBridgeCause.NotChecked,
-            profileOwner = exact?.getBoolean(EXACT_OWNER),
-            provisionComplete = exact?.getBoolean(EXACT_COMPLETE),
+            profileOwner = exact?.profileOwner,
+            provisionComplete = exact?.provisionComplete,
         )
     }
 
-    private fun exactProfileFacts(profile: UserHandle): Bundle? =
-        when (val result = Shuttle(appContext, to = profile).invokeOutcomeWithin(timeoutMs = 1_500L) {
-            Bundle().apply {
-                putBoolean("owner", DevicePolicies(this@invokeOutcomeWithin).isProfileOwner)
-                putBoolean("complete", PreferenceManager.getDefaultSharedPreferences(this@invokeOutcomeWithin)
-                    .getInt("provision.state", 0) > 1)
-            }
-        }) {
+    private fun exactProfileFacts(profile: UserHandle): ProfileProvisioningFactsDto? {
+        val target = BridgeTargets.profile(appContext, profile.toId()) ?: return null
+        return when (val result = Bridge.inProfile(appContext, target)
+            .execute(QueryProfileProvisioningFacts, timeoutMs = 1_500L)) {
             is ShuttleOutcome.Value -> result.value
             else -> null
         }
+    }
 
     private fun SpaceFacts.diagnosticLine(): String = profiles.joinToString(
         prefix = "Prism.SpaceState facts(profiles=[",
@@ -139,8 +135,6 @@ class SpaceStateRepository(private val appContext: Context) {
 
     private companion object {
         const val TAG = "Prism.SpaceState"
-        const val EXACT_OWNER = "owner"
-        const val EXACT_COMPLETE = "complete"
     }
 }
 

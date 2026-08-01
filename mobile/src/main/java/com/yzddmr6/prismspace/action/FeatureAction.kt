@@ -8,7 +8,8 @@ import android.os.Bundle
 import android.os.UserHandle
 import android.widget.Toast
 import androidx.core.content.getSystemService
-import com.yzddmr6.prismspace.engine.PrismManager
+import com.yzddmr6.prismspace.bridge.BridgeTargets
+import com.yzddmr6.prismspace.bridge.UnfreezeAndLaunchApp
 import com.yzddmr6.prismspace.mobile.BuildConfig
 import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.prism.service.ProfileBridgeResult
@@ -17,6 +18,7 @@ import com.yzddmr6.prismspace.prism.service.runProfileBridgeOperation
 import com.yzddmr6.prismspace.util.CallerAwareActivity
 import com.yzddmr6.prismspace.util.Toasts
 import com.yzddmr6.prismspace.util.Users
+import com.yzddmr6.prismspace.util.Users.Companion.toId
 
 /**
  * Activity to handle app action "Open Feature"
@@ -43,10 +45,13 @@ class FeatureActionActivity : CallerAwareActivity() {
             val profile = Users.profile ?: return@execute Toasts.showLong(this, R.string.fb_need_create_space)
             findApp(query, profile)?.also { activity ->
                 val pkg = activity.componentName.packageName
-                when (val result = runProfileBridgeOperation(this, TAG, "feature launch pkg=$pkg", target = profile) {
-                    if (PrismManager.ensureAppFreeToLaunch(this, pkg).isEmpty())
-                        PrismManager.launchApp(this, pkg, Users.current())
-                }) {
+                when (val result = runProfileBridgeOperation(
+                    this,
+                    TAG,
+                    "feature launch pkg=$pkg",
+                    target = BridgeTargets.profile(this, profile.toId()),
+                    command = UnfreezeAndLaunchApp(pkg),
+                )) {
                     is ProfileBridgeResult.Value -> Unit
                     else -> Toasts.showLong(
                         this,

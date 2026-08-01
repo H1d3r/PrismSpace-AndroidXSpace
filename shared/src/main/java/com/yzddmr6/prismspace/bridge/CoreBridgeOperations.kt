@@ -1,0 +1,103 @@
+package com.yzddmr6.prismspace.bridge
+
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.preference.PreferenceManager
+import android.provider.Settings
+import com.yzddmr6.prismspace.PrismNameManager
+import com.yzddmr6.prismspace.appops.AppOpsHelper
+import com.yzddmr6.prismspace.engine.LaunchResult
+import com.yzddmr6.prismspace.engine.PrismManager
+import com.yzddmr6.prismspace.shuttle.ShuttleProvider
+import com.yzddmr6.prismspace.util.DevicePolicies
+import com.yzddmr6.prismspace.util.UserHandles
+import com.yzddmr6.prismspace.util.Users
+
+const val ACTION_START_PROFILE_DEACTIVATION = "com.yzddmr6.prismspace.action.START_PROFILE_DEACTIVATION"
+const val EXTRA_PROFILE_USER_ID = "com.yzddmr6.prismspace.extra.PROFILE_USER_ID"
+
+internal object CoreBridgeOperations {
+    fun queryProfileProvisioningFacts(context: Context) = ProfileProvisioningFactsDto(
+        profileOwner = DevicePolicies(context).isProfileOwner,
+        provisionComplete = PreferenceManager.getDefaultSharedPreferences(context)
+            .getInt(PROVISION_STATE_KEY, 0) > PROVISION_STATE_STARTED,
+    )
+
+    fun triggerIncrementalProvisioning(context: Context): Boolean {
+        if (!DevicePolicies(context).isProfileOwner) return false
+        val intent = Intent(DevicePolicyManager.ACTION_PROVISION_MANAGED_PROFILE)
+            .setComponent(ComponentName(context.packageName, PROVISIONING_SERVICE))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
+        else context.startService(intent)
+        return true
+    }
+
+    fun wipeProfile(context: Context): Boolean {
+        val policies = DevicePolicies(context)
+        if (!policies.isProfileOwner) return false
+        policies.manager.wipeData(0)
+        return true
+    }
+
+    fun queryIsProfileOwner(context: Context) = DevicePolicies(context).isProfileOwner
+
+    fun saveProfileName(context: Context, profileUserId: Int, name: String): Boolean {
+        requireNotNull(BridgeTargets.profile(context, profileUserId)) { "Unmanaged profile $profileUserId" }
+        PrismNameManager.saveProfileNameFromBridge(context, profileUserId, name)
+        return true
+    }
+
+    fun establishBackwardGrant(context: Context) = ShuttleProvider.establishBackwardGrant(context)
+
+    fun setAppOpMode(context: Context, packageName: String, op: Int, mode: Int, uid: Int) {
+        check(Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) { "App-op delegation requires Android P" }
+        require(UserHandles.getUserId(uid) == Users.currentId()) { "UID does not belong to command user" }
+        AppOpsHelper(context).setMode(packageName, op, mode, uid)
+    }
+
+    fun startProfileDeactivation(context: Context, profileUserId: Int) {
+        requireNotNull(BridgeTargets.profile(context, profileUserId)) { "Unmanaged profile $profileUserId" }
+        val implicit = Intent(ACTION_START_PROFILE_DEACTIVATION)
+            .setPackage(context.packageName)
+            .putExtra(EXTRA_PROFILE_USER_ID, profileUserId)
+        val component = requireNotNull(context.packageManager.resolveService(implicit, 0)?.serviceInfo) {
+            "Profile deactivation service is unavailable"
+        }.let { ComponentName(it.packageName, it.name) }
+        context.startService(implicit.setComponent(component))
+    }
+
+    fun unfreezeAndLaunch(context: Context, packageName: String): LaunchOutcomeDto {
+        val reason = PrismManager.ensureAppFreeToLaunch(context, packageName)
+        if (reason.isNotEmpty()) return LaunchOutcomeDto(LaunchOutcomeKind.Unknown, reason)
+        return PrismManager.launchApp(context, packageName, Users.current()).toDto()
+    }
+
+    fun launchApp(context: Context, packageName: String, unfreezeFirst: Boolean): Boolean {
+        if (unfreezeFirst && PrismManager.ensureAppFreeToLaunch(context, packageName).isNotEmpty()) return false
+        return PrismManager.launchApp(context, packageName, Users.current()) is LaunchResult.Ok
+    }
+
+    fun openAppDetails(context: Context, packageName: String) {
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.fromParts("package", packageName, null),
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+    }
+
+    private fun LaunchResult.toDto() = when (this) {
+        LaunchResult.Ok -> LaunchOutcomeDto(LaunchOutcomeKind.Ok)
+        LaunchResult.AppMissing -> LaunchOutcomeDto(LaunchOutcomeKind.AppMissing)
+        LaunchResult.Denied -> LaunchOutcomeDto(LaunchOutcomeKind.Denied)
+        LaunchResult.SpaceNotReady -> LaunchOutcomeDto(LaunchOutcomeKind.Unknown, "space_not_ready")
+        is LaunchResult.Unknown -> LaunchOutcomeDto(LaunchOutcomeKind.Unknown, reason)
+    }
+}
+
+private const val PROVISION_STATE_KEY = "provision.state"
+private const val PROVISION_STATE_STARTED = 1
+private const val PROVISIONING_SERVICE = "com.yzddmr6.prismspace.provisioning.PrismProvisioning"

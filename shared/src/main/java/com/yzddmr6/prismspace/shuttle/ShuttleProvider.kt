@@ -174,8 +174,12 @@ class ShuttleProvider: ContentProvider() {
 		}
 
 		private fun initializeBackwardShuttle(context: Context, profile: UserHandle) {
-			Shuttle(context, to = profile).launchNoThrows { initializeInPrism(this) }
+			val target = BridgeTargets.profile(context, profile.toId()) ?: return
+			com.yzddmr6.prismspace.bridge.Bridge.inProfile(context, target)
+				.execute(com.yzddmr6.prismspace.bridge.EstablishBackwardGrant)
 		}
+
+		internal fun establishBackwardGrant(context: Context) = initializeInPrism(context)
 
 		private fun initializeInPrism(context: Context, force: Boolean = false) {
 			if (!force && context.isPermissionGranted(Uri.parse(CONTENT_URI), uid = UserHandles.getAppId(Process.myUid())))

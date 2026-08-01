@@ -58,22 +58,10 @@ class LegacyBridgeCallGuardTest {
     private companion object {
         val MODULES = listOf("shared", "mobile", "installer", "open", "watcher")
         val DIRECT_SHUTTLE_WHITELIST = mapOf(
-            "shared/src/main/java/com/yzddmr6/prismspace/PrismNameManager.kt" to 1,
-            "shared/src/main/java/com/yzddmr6/prismspace/shuttle/ShuttleProvider.kt" to 1,
-            "mobile/src/main/java/com/yzddmr6/prismspace/prism/compose/space/SpaceStateRepository.kt" to 1,
+            // Diagnostics migrates directly to chunk commands in diagnostics-chunked-transfer.
             "mobile/src/main/java/com/yzddmr6/prismspace/prism/compose/vm/SettingsViewModel.kt" to 1,
             "mobile/src/main/java/com/yzddmr6/prismspace/prism/service/ProfileBridgeOperation.kt" to 3,
-            "mobile/src/main/java/com/yzddmr6/prismspace/setup/PrismSetup.java" to 1,
-            "mobile/src/main/java/com/yzddmr6/prismspace/shortcut/PrismAppShortcut.kt" to 5,
-            "installer/src/main/java/com/yzddmr6/prismspace/installer/AppInfoForwarderActivity.kt" to 1,
-            "installer/src/main/java/com/yzddmr6/prismspace/installer/AppSettingsHelperService.kt" to 1,
-            "open/src/main/java/com/yzddmr6/prismspace/api/DelegatedAppOpsManager.java" to 1,
-            "watcher/src/main/java/com/yzddmr6/prismspace/watcher/PrismWatcher.kt" to 2,
         )
-        val PROFILE_BRIDGE_CLOSURE_WHITELIST = mapOf(
-            "mobile/src/main/java/com/yzddmr6/prismspace/action/FeatureAction.kt" to 1,
-            "mobile/src/main/java/com/yzddmr6/prismspace/prism/service/ProfileRecoveryService.kt" to 2,
-            "mobile/src/main/java/com/yzddmr6/prismspace/shortcut/PrismAppShortcut.kt" to 1,
-        )
+        val PROFILE_BRIDGE_CLOSURE_WHITELIST = emptyMap<String, Int>()
     }
 }

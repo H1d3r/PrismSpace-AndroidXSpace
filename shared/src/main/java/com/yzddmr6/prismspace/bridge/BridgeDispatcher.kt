@@ -52,6 +52,68 @@ internal object BridgeDispatcher {
             is QueryProfileAppsPage -> appList(command) {
                 queryProfileApps(context, command.pageIndex, command.pageSize)
             }
+            is RequestPinShortcutInProfile -> shortcut(command) {
+                requestPin(context, command.packageName, command.dynamicLabel)
+            }
+            is UpdateAllShortcutsInProfile -> shortcut(command) {
+                updateAll(context, command.dynamicLabel)
+            }
+            is RemoveShortcutsInParent -> shortcut(command) {
+                removeInParent(context, command.packageName, command.profileUserId)
+            }
+            is RefreshShortcutInParent -> shortcut(command) {
+                refreshInParent(context, command.packageName, command.profileUserId)
+            }
+            QueryDynamicShortcutLabelEnabled -> shortcut(QueryDynamicShortcutLabelEnabled) {
+                queryDynamicLabelEnabled(context)
+            }
+            QueryProfileProvisioningFacts -> success(
+                QueryProfileProvisioningFacts,
+                CoreBridgeOperations.queryProfileProvisioningFacts(context),
+            )
+            TriggerIncrementalProvisioning -> success(
+                TriggerIncrementalProvisioning,
+                CoreBridgeOperations.triggerIncrementalProvisioning(context),
+            )
+            WipeProfile -> success(WipeProfile, CoreBridgeOperations.wipeProfile(context))
+            QueryParentIsProfileOwner -> success(
+                QueryParentIsProfileOwner,
+                CoreBridgeOperations.queryIsProfileOwner(context),
+            )
+            is SaveProfileName -> success(
+                command,
+                CoreBridgeOperations.saveProfileName(context, command.profileUserId, command.name),
+            )
+            EstablishBackwardGrant -> success(
+                EstablishBackwardGrant,
+                CoreBridgeOperations.establishBackwardGrant(context),
+            )
+            is SetAppOpMode -> success(command, CoreBridgeOperations.setAppOpMode(
+                context,
+                command.packageName,
+                command.op,
+                command.mode,
+                command.uid,
+            ))
+            is NotifyPackageRestarted -> installer(command) {
+                notifyPackageRestarted(context, command.packageName, command.uid, command.uptimeMillis)
+            }
+            is StartProfileDeactivation -> success(
+                command,
+                CoreBridgeOperations.startProfileDeactivation(context, command.profileUserId),
+            )
+            is UnfreezeAndLaunchApp -> success(
+                command,
+                CoreBridgeOperations.unfreezeAndLaunch(context, command.packageName),
+            )
+            is LaunchAppInProfile -> success(
+                command,
+                CoreBridgeOperations.launchApp(context, command.packageName, command.unfreezeFirst),
+            )
+            is OpenAppDetailsInProfile -> success(
+                command,
+                CoreBridgeOperations.openAppDetails(context, command.packageName),
+            )
         }
     } catch (error: Throwable) {
         failure(command.id, BridgeErrorCategory.ExecutionFailed, error.javaClass.name + ": " + error.message.orEmpty())
@@ -72,6 +134,18 @@ internal object BridgeDispatcher {
     private fun <R> appList(command: BridgeCommand<R>, block: AppListPort.() -> R): Bundle {
         val port = BridgePorts.handlers()?.appList
             ?: return failure(command.id, BridgeErrorCategory.HandlerUnavailable, "AppListPort")
+        return success(command, port.block())
+    }
+
+    private fun <R> shortcut(command: BridgeCommand<R>, block: ShortcutPort.() -> R): Bundle {
+        val port = BridgePorts.handlers()?.shortcut
+            ?: return failure(command.id, BridgeErrorCategory.HandlerUnavailable, "ShortcutPort")
+        return success(command, port.block())
+    }
+
+    private fun <R> installer(command: BridgeCommand<R>, block: InstallerPort.() -> R): Bundle {
+        val port = BridgePorts.handlers()?.installer
+            ?: return failure(command.id, BridgeErrorCategory.HandlerUnavailable, "InstallerPort")
         return success(command, port.block())
     }
 

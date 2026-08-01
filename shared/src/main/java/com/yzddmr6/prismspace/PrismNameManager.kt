@@ -1,5 +1,3 @@
-@file:Suppress("DEPRECATION_ERROR")
-
 package com.yzddmr6.prismspace
 
 import android.app.admin.DevicePolicyManager
@@ -8,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.UserHandle
 import com.yzddmr6.prismspace.shared.R
-import com.yzddmr6.prismspace.shuttle.Shuttle
 import com.yzddmr6.prismspace.util.DevicePolicies
 import com.yzddmr6.prismspace.util.OwnerUser
 import com.yzddmr6.prismspace.util.ProfileUser
@@ -18,6 +15,7 @@ import com.yzddmr6.prismspace.util.Users.Companion.EXTRA_USER_HANDLE
 import com.yzddmr6.prismspace.util.Users.Companion.isParentProfile
 import com.yzddmr6.prismspace.util.Users.Companion.toId
 import com.yzddmr6.prismspace.util.sendProtectedBroadcastInternally
+import com.yzddmr6.prismspace.util.UserHandles
 
 object PrismNameManager {
 
@@ -51,6 +49,11 @@ object PrismNameManager {
 	@OwnerUser @ProfileUser private fun saveProfileName(context: Context, profile: UserHandle?, name: String)
 			= getStore(context).edit().putString(buildPrismNameKey(context, profile), name).apply()
 
+	/** Typed bridge entry; the validated ParentCommand prevents arbitrary cross-user execution. */
+	internal fun saveProfileNameFromBridge(context: Context, profileUserId: Int, name: String) {
+		saveProfileName(context, UserHandles.of(profileUserId), name)
+	}
+
 	@Suppress("DEPRECATION") private fun getStore(context: Context) =
 		android.preference.PreferenceManager.getDefaultSharedPreferences(context.createDeviceProtectedStorageContext())
 
@@ -68,7 +71,10 @@ object PrismNameManager {
 
 	@ProfileUser fun syncNameToParentProfile(context: Context, name: String = getName(context)): Boolean {
 		val profile = Users.current()
-		return Shuttle(context, to = Users.parentProfile).launchNoThrows { saveProfileName(this, profile, name) }
+		val target = com.yzddmr6.prismspace.bridge.BridgeTargets.parent(context) ?: return false
+		return com.yzddmr6.prismspace.bridge.Bridge.inParent(context, target)
+			.execute(com.yzddmr6.prismspace.bridge.SaveProfileName(profile.toId(), name))
+			.let { it is com.yzddmr6.prismspace.shuttle.ShuttleOutcome.Value && it.value == true }
 	}
 
 	class NameInitializer: BroadcastReceiver() {

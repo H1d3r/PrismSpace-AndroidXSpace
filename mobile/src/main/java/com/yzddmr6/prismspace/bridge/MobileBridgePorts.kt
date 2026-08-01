@@ -6,6 +6,7 @@ import com.yzddmr6.prismspace.engine.ClonedHiddenSystemApps
 import com.yzddmr6.prismspace.engine.PrismManager
 import com.yzddmr6.prismspace.data.MobileAppListPort
 import com.yzddmr6.prismspace.prism.service.MobileFileBridgePort
+import com.yzddmr6.prismspace.shortcut.MobileShortcutPort
 import com.yzddmr6.prismspace.util.DevicePolicies
 import com.yzddmr6.prismspace.util.PseudoContentProvider
 
@@ -47,6 +48,7 @@ class MobileBridgePortsProvider : PseudoContentProvider() {
             builder.appControl(MobileAppControlPort)
             builder.fileBridge(MobileFileBridgePort)
             builder.appList(MobileAppListPort)
+            builder.shortcut(MobileShortcutPort)
         }
         return true
     }

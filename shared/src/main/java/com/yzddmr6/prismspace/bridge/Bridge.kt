@@ -23,6 +23,7 @@ class ProfileBridgeEndpoint internal constructor(
     private val context: Context,
     private val target: ProfileTarget,
 ) {
+    @JvmOverloads
     fun <R> execute(command: ProfileCommand<R>, timeoutMs: Long? = DEFAULT_SYNC_TIMEOUT_MS): ShuttleOutcome<R> =
         executeCommand(context, target.handle, command, timeoutMs)
 }
@@ -31,6 +32,7 @@ class ParentBridgeEndpoint internal constructor(
     private val context: Context,
     private val target: ParentTarget,
 ) {
+    @JvmOverloads
     fun <R> execute(command: ParentCommand<R>, timeoutMs: Long? = DEFAULT_SYNC_TIMEOUT_MS): ShuttleOutcome<R> =
         executeCommand(context, target.handle, command, timeoutMs)
 }
@@ -39,6 +41,7 @@ class DestinationBridgeEndpoint internal constructor(
     private val context: Context,
     private val target: android.os.UserHandle,
 ) {
+    @JvmOverloads
     fun <R> execute(command: DestinationCommand<R>, timeoutMs: Long? = DEFAULT_SYNC_TIMEOUT_MS): ShuttleOutcome<R> =
         executeCommand(context, target, command, timeoutMs)
 }

@@ -61,6 +61,29 @@ class BridgeCommandParcelTest {
                 QueryProfileAppsPage(1, Int.MAX_VALUE),
                 ProfileAppPage(listOf(sampleProfileApp()), hasMore = false),
             )
+            assertRoundTrip(RequestPinShortcutInProfile("pkg", true), true)
+            assertRoundTrip(UpdateAllShortcutsInProfile(false), true)
+            assertRoundTrip(RemoveShortcutsInParent("pkg", 10), true)
+            assertRoundTrip(RefreshShortcutInParent("pkg", 10), false)
+            assertRoundTrip(QueryDynamicShortcutLabelEnabled, true)
+            assertRoundTrip(
+                QueryProfileProvisioningFacts,
+                ProfileProvisioningFactsDto(profileOwner = true, provisionComplete = false),
+            )
+            assertRoundTrip(TriggerIncrementalProvisioning, true)
+            assertRoundTrip(WipeProfile, false)
+            assertRoundTrip(QueryParentIsProfileOwner, true)
+            assertRoundTrip(SaveProfileName(10, "Work"), true)
+            assertRoundTrip(EstablishBackwardGrant, Unit)
+            assertRoundTrip(SetAppOpMode("pkg", 1, 2, 1_000_001), Unit)
+            assertRoundTrip(NotifyPackageRestarted("pkg", 1_000_001, 123L), true)
+            assertRoundTrip(StartProfileDeactivation(10), Unit)
+            assertRoundTrip(
+                UnfreezeAndLaunchApp("pkg"),
+                LaunchOutcomeDto(LaunchOutcomeKind.Unknown, "reason"),
+            )
+            assertRoundTrip(LaunchAppInProfile("pkg", true), true)
+            assertRoundTrip(OpenAppDetailsInProfile("pkg"), Unit)
         } finally {
             writePipe.forEach(ParcelFileDescriptor::close)
             readPipe.forEach(ParcelFileDescriptor::close)

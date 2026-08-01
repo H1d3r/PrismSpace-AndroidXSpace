@@ -1,6 +1,7 @@
 package com.yzddmr6.prismspace.bridge
 
 import android.content.Context
+import android.content.Intent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -15,9 +16,29 @@ class BridgeProtocolContractTest {
     }
 
     @Test fun assembledHandlersExposeNoMissingPorts() {
-        val handlers = BridgeHandlers(FakeAppControlPort, FakeFileBridgePort, FakeAppListPort)
+        val handlers = BridgeHandlers(
+            FakeAppControlPort,
+            FakeFileBridgePort,
+            FakeAppListPort,
+            FakeShortcutPort,
+            FakeInstallerPort,
+        )
 
         assertTrue(handlers.missing().isEmpty())
+    }
+
+    @Test fun commandPayloadsCannotCarryExecutableOrIntentTargets() {
+        BridgeCommandCatalog.all.forEach { command ->
+            command.javaClass.declaredFields.filterNot { java.lang.reflect.Modifier.isStatic(it.modifiers) }.forEach { field ->
+                assertTrue("${command.id}.${field.name} carries Intent", !Intent::class.java.isAssignableFrom(field.type))
+                assertTrue("${command.id}.${field.name} carries function", !Function::class.java.isAssignableFrom(field.type))
+                assertTrue("${command.id}.${field.name} carries reflection target", !Class::class.java.isAssignableFrom(field.type))
+                assertTrue(
+                    "${command.id}.${field.name} looks like an executable escape hatch",
+                    FORBIDDEN_EXECUTABLE_FIELD_NAMES.none { field.name.contains(it, ignoreCase = true) },
+                )
+            }
+        }
     }
 
     @Test fun profileAppPageSizeIsServerBounded() {
@@ -91,6 +112,23 @@ class BridgeProtocolContractTest {
             ProfileAppPage(emptyList(), false)
     }
 
+    private object FakeShortcutPort : ShortcutPort {
+        override fun requestPin(context: Context, packageName: String, dynamicLabel: Boolean) = true
+        override fun updateAll(context: Context, dynamicLabel: Boolean) = true
+        override fun removeInParent(context: Context, packageName: String, profileUserId: Int) = true
+        override fun refreshInParent(context: Context, packageName: String, profileUserId: Int) = true
+        override fun queryDynamicLabelEnabled(context: Context) = true
+    }
+
+    private object FakeInstallerPort : InstallerPort {
+        override fun notifyPackageRestarted(
+            context: Context,
+            packageName: String,
+            uid: Int,
+            uptimeMillis: Long,
+        ) = true
+    }
+
     private fun sampleProfileApp(packageName: String) = ProfileAppEntry(
         packageName,
         uid = 1,
@@ -104,4 +142,14 @@ class BridgeProtocolContractTest {
         publicSourceDir = null,
         splitSourceDirs = emptyList(),
     )
+
+    private companion object {
+        val FORBIDDEN_EXECUTABLE_FIELD_NAMES = setOf(
+            "intent",
+            "className",
+            "methodName",
+            "fieldName",
+            "shellCommand",
+        )
+    }
 }

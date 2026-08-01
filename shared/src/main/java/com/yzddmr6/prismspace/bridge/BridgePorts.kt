@@ -51,15 +51,31 @@ interface AppListPort {
     fun queryProfileApps(context: Context, pageIndex: Int, pageSize: Int): ProfileAppPage
 }
 
+interface ShortcutPort {
+    fun requestPin(context: Context, packageName: String, dynamicLabel: Boolean): Boolean
+    fun updateAll(context: Context, dynamicLabel: Boolean): Boolean
+    fun removeInParent(context: Context, packageName: String, profileUserId: Int): Boolean
+    fun refreshInParent(context: Context, packageName: String, profileUserId: Int): Boolean
+    fun queryDynamicLabelEnabled(context: Context): Boolean
+}
+
+interface InstallerPort {
+    fun notifyPackageRestarted(context: Context, packageName: String, uid: Int, uptimeMillis: Long): Boolean
+}
+
 data class BridgeHandlers(
     val appControl: AppControlPort?,
     val fileBridge: FileBridgePort?,
     val appList: AppListPort?,
+    val shortcut: ShortcutPort?,
+    val installer: InstallerPort?,
 ) {
     fun missing(): List<String> = buildList {
         if (appControl == null) add("app_control")
         if (fileBridge == null) add("file_bridge")
         if (appList == null) add("app_list")
+        if (shortcut == null) add("shortcut")
+        if (installer == null) add("installer")
     }
 }
 
@@ -67,6 +83,8 @@ class BridgeHandlersBuilder internal constructor() {
     private var appControl: AppControlPort? = null
     private var fileBridge: FileBridgePort? = null
     private var appList: AppListPort? = null
+    private var shortcut: ShortcutPort? = null
+    private var installer: InstallerPort? = null
 
     fun appControl(port: AppControlPort) {
         check(appControl == null) { "AppControlPort already contributed" }
@@ -83,7 +101,17 @@ class BridgeHandlersBuilder internal constructor() {
         appList = port
     }
 
-    internal fun build() = BridgeHandlers(appControl, fileBridge, appList)
+    fun shortcut(port: ShortcutPort) {
+        check(shortcut == null) { "ShortcutPort already contributed" }
+        shortcut = port
+    }
+
+    fun installer(port: InstallerPort) {
+        check(installer == null) { "InstallerPort already contributed" }
+        installer = port
+    }
+
+    internal fun build() = BridgeHandlers(appControl, fileBridge, appList, shortcut, installer)
 }
 
 fun interface BridgePortsContributor {
