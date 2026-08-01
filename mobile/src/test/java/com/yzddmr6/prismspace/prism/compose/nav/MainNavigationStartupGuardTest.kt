@@ -20,4 +20,13 @@ class MainNavigationStartupGuardTest {
         assertFalse(navHost.contains("resetToHome"))
         assertTrue(navHost.contains("startDestination = PrismRoutes.HOME"))
     }
+
+    @Test fun `async initial route defers fragment commit after state was saved`() {
+        val activity = File("src/main/java/com/yzddmr6/prismspace/MainActivity.java").readText()
+
+        assertTrue(activity.contains("getSupportFragmentManager().isStateSaved()"))
+        assertTrue(activity.contains("mMainUiPending = true"))
+        assertTrue(activity.contains("@Override protected void onPostResume()"))
+        assertTrue(activity.contains("startMainUi(savedInstanceState)"))
+    }
 }

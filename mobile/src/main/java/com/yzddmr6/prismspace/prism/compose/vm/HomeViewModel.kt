@@ -42,6 +42,17 @@ internal fun spaceHealth(state: SpaceState): SpaceHealth = when (state) {
     is SpaceState.BridgeDown -> SpaceHealth.NeedsRepair
 }
 
+internal fun profileStatusLabelRes(state: SpaceState): Int = when (state) {
+    SpaceState.NoProfile -> R.string.lz_home_profile_not_created
+    is SpaceState.Provisioning -> R.string.lz_home_tag_provisioning
+    is SpaceState.Inactive -> R.string.lz_home_profile_suspended
+    is SpaceState.Locked -> R.string.lz_home_tag_locked
+    is SpaceState.Healthy -> R.string.lz_home_profile_ready
+    is SpaceState.OrphanProfile,
+    is SpaceState.HalfProvisioned,
+    is SpaceState.BridgeDown -> R.string.lz_home_tag_needsrepair
+}
+
 enum class HomePrimaryAction { OpenSpace, StartSetup, OpenSettings }
 
 // ---------------------------------------------------------------------------
@@ -283,12 +294,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             }.getOrElse { 0 }
         } else 0
 
-        // Profile Owner status label.
-		val profileOwnerLabel = when {
-			!profileOwner -> resolve(R.string.lz_home_profile_not_created)
-			!running || quietMode -> resolve(R.string.lz_home_profile_suspended)
-			else -> resolve(R.string.lz_home_profile_ready)
-		}
+        // This row must describe the same canonical state as the hero card. In particular, a
+        // half-provisioned profile exists even when its launcher marker is missing; the legacy
+        // ownership lookup must not turn that into the contradictory label "Not created".
+		val profileOwnerLabel = resolve(profileStatusLabelRes(state))
 
         // Configured mode comes from the same source as Settings.
         val capabilityText = resolve(prismModeLabelRes(capRepo.selectedMode.value))

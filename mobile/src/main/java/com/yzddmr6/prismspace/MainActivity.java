@@ -143,6 +143,15 @@ public class MainActivity extends FragmentActivity {
 		// (see startMainUi below, gated on savedInstanceState == null).
 	}
 
+	@Override protected void onPostResume() {
+		super.onPostResume();
+		if (! mMainUiPending) return;
+		final Bundle savedInstanceState = mPendingMainUiState;
+		mMainUiPending = false;
+		mPendingMainUiState = null;
+		startMainUi(savedInstanceState);
+	}
+
 	private void onCreateInProfile() {
 		final DevicePolicies policies = new DevicePolicies(this);
 		if (! policies.invoke(DevicePolicyManager::isAdminActive)) {
@@ -169,6 +178,17 @@ public class MainActivity extends FragmentActivity {
 	}
 
 	private void startMainUi(final Bundle savedInstanceState) {
+		if (mMainUiStarted) return;
+		// Initial routing runs off-main. A locked screen or a quick background transition can save
+		// FragmentManager state before that result arrives; committing then crashes instead of merely
+		// waiting for the Activity to become interactive again. onPostResume is the first lifecycle
+		// callback where FragmentManager has cleared its saved-state guard.
+		if (getSupportFragmentManager().isStateSaved()) {
+			mMainUiPending = true;
+			mPendingMainUiState = savedInstanceState;
+			return;
+		}
+		mMainUiStarted = true;
 		WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 		getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
 		getWindow().setNavigationBarColor(android.graphics.Color.TRANSPARENT);
@@ -203,6 +223,9 @@ public class MainActivity extends FragmentActivity {
 	}
 
 	private boolean mIsDeviceOwner;
+	private boolean mMainUiStarted;
+	private boolean mMainUiPending;
+	private Bundle mPendingMainUiState;
 
 	private static final long INITIAL_STATE_TIMEOUT_MS = 5_000L;
 	private static final String TAG = "Prism.Main";

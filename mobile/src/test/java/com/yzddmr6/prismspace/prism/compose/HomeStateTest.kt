@@ -5,6 +5,7 @@ import com.yzddmr6.prismspace.prism.compose.component.PrismLevel
 import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceHealth
 import com.yzddmr6.prismspace.prism.compose.vm.mapHomeState
+import com.yzddmr6.prismspace.prism.compose.vm.profileStatusLabelRes
 import com.yzddmr6.prismspace.prism.compose.vm.spaceHealth
 import com.yzddmr6.prismspace.space.SpaceBridgeCause
 import com.yzddmr6.prismspace.space.SpaceState
@@ -34,6 +35,18 @@ class HomeStateTest {
         assertEquals(SpaceHealth.Locked, spaceHealth(SpaceState.Locked(22)))
         assertEquals(SpaceHealth.Suspended, spaceHealth(SpaceState.Inactive(22)))
         assertEquals(SpaceHealth.Normal, spaceHealth(SpaceState.Healthy(22)))
+    }
+
+    @Test fun `existing abnormal profile is never labelled not created`() {
+        assertEquals(
+            R.string.lz_home_tag_needsrepair,
+            profileStatusLabelRes(SpaceState.HalfProvisioned(22, resumable = true)),
+        )
+        assertEquals(
+            R.string.lz_home_tag_needsrepair,
+            profileStatusLabelRes(SpaceState.OrphanProfile(22)),
+        )
+        assertEquals(R.string.lz_home_profile_not_created, profileStatusLabelRes(SpaceState.NoProfile))
     }
 
     // Fake string resolver maps the lz_home_ resource IDs that drive the
