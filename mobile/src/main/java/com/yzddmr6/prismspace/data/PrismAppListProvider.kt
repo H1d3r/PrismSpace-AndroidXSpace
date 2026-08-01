@@ -9,6 +9,7 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.LauncherApps
 import android.content.pm.PackageManager.MATCH_UNINSTALLED_PACKAGES
 import android.content.pm.PackageManager.MATCH_DISABLED_COMPONENTS
+import android.content.pm.PackageManager.MATCH_SYSTEM_ONLY
 import android.os.Handler
 import android.os.Looper
 import android.os.UserHandle
@@ -276,7 +277,11 @@ internal object MobileAppListPort : AppListPort {
         val effectiveSize = clampProfileAppPageSize(pageSize)
         val effectiveIndex = pageIndex.coerceAtLeast(0)
         val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        val apps = (context.packageManager.getInstalledApplications(MATCH_UNINSTALLED_PACKAGES or MATCH_DISABLED_COMPONENTS) +
+        val installedFlags = MATCH_UNINSTALLED_PACKAGES or MATCH_DISABLED_COMPONENTS
+        val apps = (context.packageManager.getInstalledApplications(installedFlags) +
+            // HyperOS may omit non-launchable system packages from the general query even with
+            // QUERY_ALL_PACKAGES. An explicit system query is the platform-level contract for this view.
+            context.packageManager.getInstalledApplications(installedFlags or MATCH_SYSTEM_ONLY) +
             context.packageManager.queryIntentActivities(launcher, 0).mapNotNull { it.activityInfo?.applicationInfo })
             .associateBy { it.packageName }
             .values
