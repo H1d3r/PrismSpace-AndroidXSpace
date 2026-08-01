@@ -61,18 +61,6 @@ fun PrismNavHost(navController: NavHostController) {
         }
     }
     LaunchedEffect(navController) {
-        AppLaunchSignals.resetToHome.collect {
-            navController.navigate(PrismRoutes.HOME) {
-                popUpTo(navController.graph.findStartDestination().id) {
-                    inclusive = false
-                    saveState = false
-                }
-                launchSingleTop = true
-                restoreState = false
-            }
-        }
-    }
-    LaunchedEffect(navController) {
         // "去启用" from the clone install-method selector → jump to Settings (run-mode row is at the top).
         AppLaunchSignals.openRunMode.collect {
             navController.navigate(PrismRoutes.SETTINGS) {

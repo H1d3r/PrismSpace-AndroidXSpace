@@ -24,7 +24,6 @@ import com.yzddmr6.prismspace.analytics.Analytics.Property;
 import com.yzddmr6.prismspace.mobile.BuildConfig;
 import com.yzddmr6.prismspace.mobile.R;
 import com.yzddmr6.prismspace.prism.compose.host.PrismComposeHostFragment;
-import com.yzddmr6.prismspace.prism.compose.nav.AppLaunchSignals;
 import com.yzddmr6.prismspace.prism.compose.space.ProvisioningSideEffects;
 import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository;
 import com.yzddmr6.prismspace.setup.SetupActivity;
@@ -175,9 +174,6 @@ public class MainActivity extends FragmentActivity {
 		getWindow().setNavigationBarColor(android.graphics.Color.TRANSPARENT);
 		setContentView(R.layout.activity_main);
 		if (savedInstanceState != null) return;
-		// Fresh MainActivity creation (cold start, force-kill restart). System-killed restoration
-		// has savedInstanceState != null and returns above, preserving the last visited tab.
-		AppLaunchSignals.INSTANCE.signalResetToHome();
 		final PrismComposeHostFragment fragment = new PrismComposeHostFragment();
 		final Intent intent = getIntent();
 		if (Intent.ACTION_SEARCH.equals(intent.getAction())) {
