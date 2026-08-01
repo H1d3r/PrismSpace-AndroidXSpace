@@ -125,6 +125,13 @@ class ProvisioningPathConsolidationTest {
         assertEquals(1, implementationCount)
     }
 
+    @Test fun `pending restore records are cleared only by their owning attempt`() {
+        assertTrue(pendingRecordOwned("attempt-a", "attempt-a"))
+        assertFalse(pendingRecordOwned("attempt-a", "attempt-b"))
+        assertFalse(pendingRecordOwned("attempt-a", null))
+        assertTrue(pendingRecordOwned(LEGACY_PENDING_TOKEN, null))
+    }
+
     private fun command(
         verifierOriginal: String? = "1",
         maxUsersOriginal: String? = "4",

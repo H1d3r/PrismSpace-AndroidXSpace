@@ -2,12 +2,15 @@ package com.yzddmr6.prismspace.prism.compose
 
 import com.yzddmr6.prismspace.prism.compose.space.SpaceCapProbe
 import com.yzddmr6.prismspace.prism.compose.space.computeCap
+import com.yzddmr6.prismspace.prism.compose.space.buildVerifiedRootRemovalCommand
 import com.yzddmr6.prismspace.prism.compose.space.effectiveMaxUsers
 import com.yzddmr6.prismspace.prism.compose.space.isRootOutput
 import com.yzddmr6.prismspace.prism.compose.space.parsePmCreateOutput
 import com.yzddmr6.prismspace.prism.compose.space.parsePmRemoveOutput
+import com.yzddmr6.prismspace.prism.compose.space.rootRemovalOwnerMismatch
 import com.yzddmr6.prismspace.prism.compose.space.PmCreateOutcome
 import com.yzddmr6.prismspace.prism.compose.space.PmRemoveOutcome
+import com.yzddmr6.prismspace.prism.compose.space.ROOT_DELETE_OWNER_MISMATCH
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -33,6 +36,21 @@ class SpaceProvisioningParsersTest {
         assertEquals(PmCreateOutcome.Failed("Error: some other failure"),
             parsePmCreateOutput(listOf("Error: some other failure")))
     }
+    @Test fun `parsePmCreateOutput - internal transaction lines never replace pm error`() {
+        assertEquals(
+            PmCreateOutcome.Failed("Error: actual create failure"),
+            parsePmCreateOutput(listOf(
+                "PRISM_SIDE_EFFECT_WRITE verifier original=1 temporary=0",
+                "PRISM_SIDE_EFFECT_WRITE max_users original=4 temporary=10",
+                "Error: actual create failure",
+                "PRISM_PROVISION_FAILED stage=create",
+            )),
+        )
+        assertEquals(
+            PmCreateOutcome.Failed(null),
+            parsePmCreateOutput(listOf("PRISM_SIDE_EFFECT_RESTORE verifier original=1", "PRISM_PROVISION_FAILED stage=create")),
+        )
+    }
     @Test fun `parsePmCreateOutput - null-empty is failure`() {
         assertEquals(PmCreateOutcome.Failed(null), parsePmCreateOutput(null))
         assertEquals(PmCreateOutcome.Failed(null), parsePmCreateOutput(emptyList()))
@@ -46,6 +64,15 @@ class SpaceProvisioningParsersTest {
     @Test fun `parsePmRemoveOutput - unsuccessful is not a false success`() {
         assertEquals(PmRemoveOutcome.Failed("Operation unsuccessful"),
             parsePmRemoveOutput(listOf("Operation unsuccessful")))
+    }
+    @Test fun `root removal command verifies exact user and owner before deletion`() {
+        val command = buildVerifiedRootRemovalCommand(22, "com.yzddmr6.prismspace")
+        assertTrue(command.contains("dpm list-owners"))
+        assertTrue(command.contains("User[[:space:]]+22"))
+        assertTrue(command.contains("com\\.yzddmr6\\.prismspace/"))
+        assertTrue(command.indexOf("grep -Eq") < command.indexOf("pm remove-user 22"))
+        assertTrue(rootRemovalOwnerMismatch(listOf("$ROOT_DELETE_OWNER_MISMATCH user=22")))
+        assertFalse(rootRemovalOwnerMismatch(listOf("Success: removed user")))
     }
     @Test fun `computeCap - known computes headroom, unknown when null max`() {
         assertEquals(SpaceCapProbe.Known(max = 4, current = 2), computeCap(maxUsers = 4, currentManaged = 1))

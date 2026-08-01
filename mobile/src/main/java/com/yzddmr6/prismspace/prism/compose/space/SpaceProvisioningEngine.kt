@@ -77,7 +77,8 @@ object SpaceProvisioningEngine {
                 maxUsersOriginal = maxUsersOriginal,
             ),
         )
-        if (verifierOriginal != "0" && !ProvisioningSideEffects.recordBeforeWrite(context, verifierOriginal)) {
+        val sideEffectToken = if (verifierOriginal == "0") null else
+            ProvisioningSideEffects.recordBeforeWrite(context, verifierOriginal) ?: run {
             return@withContext CreateSpaceResult.Failed(
                 "could not persist verifier restoration state",
                 analyticsPhase = 2,
@@ -92,7 +93,7 @@ object SpaceProvisioningEngine {
             SpaceProvisioningTracker.clear()
             return@withContext CreateSpaceResult.Failed(e.message, analyticsPhase = 2)
         } finally {
-            ProvisioningSideEffects.onShellCompleted(context, verifierOriginal, maxUsersOriginal)
+            ProvisioningSideEffects.onShellCompleted(context, sideEffectToken, verifierOriginal, maxUsersOriginal)
         }
         val create = parsePmCreateOutput(output)
         when (create) {
@@ -133,7 +134,12 @@ object SpaceProvisioningEngine {
 
     suspend fun deleteSpace(context: Context, space: PrismSpace): DeleteSpaceResult = withContext(Dispatchers.IO) {
         if (!rootOk()) return@withContext DeleteSpaceResult.RootUnavailable
-        when (val r = parsePmRemoveOutput(Shell.SU.run("pm remove-user ${space.userId}"))) {
+        val output = Shell.SU.run(buildVerifiedRootRemovalCommand(space.userId, Modules.MODULE_ENGINE))
+        if (rootRemovalOwnerMismatch(output)) {
+            DiagnosticLog.w(TAG, "root delete refused: owner mismatch user=${space.userId}")
+            return@withContext DeleteSpaceResult.ManualRemovalRequired("PrismSpace is not profile owner")
+        }
+        when (val r = parsePmRemoveOutput(output)) {
             PmRemoveOutcome.Removed -> {
                 SpaceStateRepository(context).refresh("root_delete_success")
                 DiagnosticLog.i(TAG, "root delete success user=${space.userId}")
