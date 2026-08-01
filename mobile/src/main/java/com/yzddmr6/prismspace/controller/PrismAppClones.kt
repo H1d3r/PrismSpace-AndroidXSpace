@@ -85,7 +85,12 @@ import kotlin.annotation.AnnotationTarget.TYPE
  *
  * Refactored by Oasis on 2018-9-30.
  */
-class PrismAppClones(val activity: FragmentActivity, val vm: AndroidViewModel, val app: PrismAppInfo) {
+class PrismAppClones(
+	val activity: FragmentActivity,
+	val vm: AndroidViewModel,
+	val app: PrismAppInfo,
+	private val onCloneStateChanged: () -> Unit = {},
+) {
 
 	fun request() {
 		val names = PrismNameManager.getAllNames(context)
@@ -181,8 +186,11 @@ class PrismAppClones(val activity: FragmentActivity, val vm: AndroidViewModel, v
 	private fun makeAppAvailable(profile: UserHandle, mode: Int) {
 		val target = PrismAppListProvider.getInstance(context)[pkg, profile]
 		if (target != null && target.isHiddenSysPrismAppTreatedAsDisabled) {   // Frozen system app shown as disabled, just unfreeze it.
-			if (unfreezeInitiallyFrozenSystemApp(target) == true)
+			if (unfreezeInitiallyFrozenSystemApp(target) == true) {
+				UserCloneRegistry.add(context, pkg)
+				onCloneStateChanged()
 				feedback(PrismLocale.wrap(context).getString(R.string.toast_successfully_cloned, app.label))
+			}
 		} else if (target != null && target.isInstalled && !target.enabled) {  // Disabled app may be shown as "removed"
 			launchSystemAppSettings(target)
 			feedback(PrismLocale.wrap(context).getString(R.string.toast_enable_disabled_system_app))
@@ -212,6 +220,7 @@ class PrismAppClones(val activity: FragmentActivity, val vm: AndroidViewModel, v
 					}
 					if (ok) {
 						PrismAppListProvider.getInstance(context).refreshPackage(pkg, target, true)
+						onCloneStateChanged()
 						feedback(PrismLocale.wrap(context).getString(R.string.toast_successfully_cloned, source.label))
 					} else {
 						feedback(PrismLocale.wrap(context).getString(R.string.toast_clone_root_unavailable), isError = true)
@@ -247,6 +256,8 @@ class PrismAppClones(val activity: FragmentActivity, val vm: AndroidViewModel, v
 						// enablement needs an explicit marker; recording earlier would create a ghost clone
 						// when enableSystemApp fails because the system package already exists in the profile.
 						UserCloneRegistry.add(context, pkg)
+						PrismAppListProvider.getInstance(context).refreshPackage(pkg, target, true)
+						onCloneStateChanged()
 						feedback(PrismLocale.wrap(context).getString(R.string.toast_successfully_cloned, source.label))
 					}
 					else feedback(PrismLocale.wrap(context).getString(R.string.toast_cannot_clone, source.label), isError = true)
@@ -292,6 +303,7 @@ class PrismAppClones(val activity: FragmentActivity, val vm: AndroidViewModel, v
 								)
 								if (result.resultCode == 1) {
 									PrismAppListProvider.getInstance(context).refreshPackage(pkg, target, true)
+									onCloneStateChanged()
 									feedback(PrismLocale.wrap(context).getString(R.string.toast_successfully_cloned, source.label))
 								} else {
 									fail(result.userFacingReason())

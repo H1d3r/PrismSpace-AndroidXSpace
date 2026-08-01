@@ -53,7 +53,14 @@ interface AppListPort {
 }
 
 interface ShortcutPort {
-    fun requestPin(context: Context, packageName: String, dynamicLabel: Boolean): Boolean
+    fun prepareProfileLaunch(
+        context: Context,
+        packageName: String,
+        action: String?,
+        dataUri: String?,
+        categories: List<String>,
+    ): Boolean
+    fun cancelProfileLaunch(context: Context)
     fun updateAll(context: Context, dynamicLabel: Boolean): Boolean
     fun removeInParent(context: Context, packageName: String, profileUserId: Int): Boolean
     fun refreshInParent(context: Context, packageName: String, profileUserId: Int): Boolean

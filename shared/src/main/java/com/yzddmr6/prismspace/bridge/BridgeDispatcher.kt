@@ -52,9 +52,6 @@ internal object BridgeDispatcher {
             is QueryProfileAppsPage -> appList(command) {
                 queryProfileApps(context, command.pageIndex, command.pageSize)
             }
-            is RequestPinShortcutInProfile -> shortcut(command) {
-                requestPin(context, command.packageName, command.dynamicLabel)
-            }
             is UpdateAllShortcutsInProfile -> shortcut(command) {
                 updateAll(context, command.dynamicLabel)
             }
@@ -66,6 +63,18 @@ internal object BridgeDispatcher {
             }
             QueryDynamicShortcutLabelEnabled -> shortcut(QueryDynamicShortcutLabelEnabled) {
                 queryDynamicLabelEnabled(context)
+            }
+            is PrepareProfileShortcutLaunch -> shortcut(command) {
+                prepareProfileLaunch(
+                    context,
+                    command.packageName,
+                    command.action,
+                    command.dataUri,
+                    command.categories,
+                )
+            }
+            CancelProfileShortcutLaunch -> shortcut(CancelProfileShortcutLaunch) {
+                cancelProfileLaunch(context)
             }
             QueryProfileProvisioningFacts -> success(
                 QueryProfileProvisioningFacts,
@@ -105,21 +114,6 @@ internal object BridgeDispatcher {
             is UnfreezeAndLaunchApp -> success(
                 command,
                 CoreBridgeOperations.unfreezeAndLaunch(context, command.packageName),
-            )
-            is LaunchAppInProfile -> success(
-                command,
-                CoreBridgeOperations.launchApp(context, command.packageName, command.unfreezeFirst),
-            )
-            is LaunchDeepLinkInProfile -> success(
-                command,
-                CoreBridgeOperations.launchDeepLink(
-                    context,
-                    command.packageName,
-                    command.action,
-                    command.dataUri,
-                    command.categories,
-                    command.unfreezeFirst,
-                ),
             )
             is OpenAppDetailsInProfile -> success(
                 command,

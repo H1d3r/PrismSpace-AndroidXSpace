@@ -13,6 +13,7 @@ import com.yzddmr6.prismspace.PrismNameManager
 import com.yzddmr6.prismspace.notification.NotificationPermissionPrompt
 import com.yzddmr6.prismspace.settings.profile.PrismProfileEntryScreen
 import com.yzddmr6.prismspace.shuttle.ShuttleProvider
+import com.yzddmr6.prismspace.shortcut.PrismAppShortcut
 import com.yzddmr6.prismspace.util.DevicePolicies
 import com.yzddmr6.prismspace.util.PrismLocale
 import com.yzddmr6.prismspace.util.Users
@@ -42,6 +43,10 @@ class PrismSettingsActivity : ComponentActivity() {
         // Sync this profile's display name back to the parent so parent-side UI
         // shows the renamed value promptly.
         if (! Users.isParentProfile()) {
+			if (PrismAppShortcut.launchPendingInProfile(this)) {
+				finish()
+				return
+			}
 			NotificationPermissionPrompt.requestOnce(this)
             runCatching { ShuttleProvider.initializeFromProfileForeground(this) }
                 .onFailure { Log.w(TAG, "Shuttle foreground initialize failed", it) }

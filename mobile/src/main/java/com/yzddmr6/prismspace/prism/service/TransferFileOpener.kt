@@ -26,7 +26,11 @@ import com.yzddmr6.prismspace.util.PrismLocale
 fun openSystemFileManager(context: Context) {
     val loc = PrismLocale.wrap(context)
     DiagnosticLog.i(TAG, "open system file manager requested")
-    prepareDownloadsViewerUsable(context)
+    if (!prepareDownloadsViewerUsable(context)) {
+        DiagnosticLog.w(TAG, "open system file manager unavailable after recovery")
+        Toast.makeText(context, loc.getString(R.string.lz_pf_open_fail), Toast.LENGTH_LONG).show()
+        return
+    }
     val intent = SystemFileManagerLaunchPlanner.buildChooserIntent(context, loc.getString(R.string.lz_pf_open_action))
     if (runCatching { context.startActivity(intent); true }.getOrDefault(false)) {
         DiagnosticLog.i(TAG, "open system file manager chooser launched")
@@ -38,6 +42,7 @@ fun openSystemFileManager(context: Context) {
 
 internal object SystemFileManagerLaunchPlanner {
     const val ACTION_XIAOMI_FILE_MANAGER_HOME = "com.android.fileexplorer.export.VIEW_HOME"
+    const val ACTION_XIAOMI_OPEN_DOCUMENT = "hyper.intent.action.OPEN_DOCUMENT"
 
     fun launchSpec(): SystemFileManagerLaunchSpec =
         SystemFileManagerLaunchSpec(
@@ -92,27 +97,70 @@ internal data class FileManagerIntentSpec(
  * hide + suspend on every package that can handle VIEW_DOWNLOADS (plus the well-known DocumentsUI
  * fallbacks), so the system installer-policy block no longer fires.
  */
-fun prepareDownloadsViewerUsable(context: Context, intent: Intent = Intent(DownloadManager.ACTION_VIEW_DOWNLOADS)) {
-    runCatching {
+fun prepareDownloadsViewerUsable(
+    context: Context,
+    intent: Intent = Intent(DownloadManager.ACTION_VIEW_DOWNLOADS),
+): Boolean {
+    return runCatching {
         val dp = DevicePolicies(context)
-        if (! dp.isProfileOwner) return
-        runCatching { dp.enableSystemAppByIntent(intent) }
+        if (!dp.isProfileOwner) return true
         val pm = context.packageManager
-        val viewers = buildSet {
+        val routeIntents = listOf(
+            intent,
+            // HyperOS rewrites ACTION_OPEN_DOCUMENT to this OEM route. Query and restore it too;
+            // otherwise DocumentsUI can be healthy while the actual Xiaomi picker is suspended.
+            Intent(SystemFileManagerLaunchPlanner.ACTION_XIAOMI_OPEN_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType(intent.type ?: "*/*"),
+        )
+        val routePackages = routeIntents.mapNotNull { route ->
+            runCatching { dp.enableSystemAppByIntent(route) }
             runCatching {
                 pm.queryIntentActivities(
-                    intent,
+                    route,
                     PackageManager.MATCH_DISABLED_COMPONENTS or PackageManager.MATCH_UNINSTALLED_PACKAGES,
-                ).forEach { add(it.activityInfo.packageName) }
-            }
-            add("com.google.android.documentsui")   // AOSP/Google Files — the VIEW_DOWNLOADS handler here
-            add("com.android.documentsui")
-            add("com.android.fileexplorer")
-            add("com.android.providers.downloads")
+                )
+                    // `android` is the cross-profile forwarder, not a file surface. Treating it as
+                    // a ready handler would launch into the profile-owner policy block while the
+                    // real picker remains suspended.
+                    .map { it.activityInfo.packageName }
+                    .filterTo(linkedSetOf(), ::isSystemFileSurfacePackage)
+                    .takeIf { it.isNotEmpty() }
+            }.getOrNull()
+        }.ifEmpty {
+            listOf(setOf(
+                "com.google.android.documentsui",
+                "com.android.documentsui",
+                "com.android.fileexplorer",
+            ))
         }
-        // ensureAppFreeToLaunch clears both setApplicationHidden and setPackagesSuspended for the package.
-        viewers.forEach { pkg -> runCatching { PrismManager.ensureAppFreeToLaunch(context, pkg) } }
+        // Restore every discovered route before deciding. HyperOS can silently rewrite the
+        // standard route to its OEM picker, so short-circuiting after DocumentsUI is insufficient.
+        val readyPackages = routePackages.flatten().toSet().filterTo(mutableSetOf()) { pkg ->
+            val reason = runCatching { PrismManager.ensureAppFreeToLaunch(context, pkg) }
+                .getOrElse { it.javaClass.simpleName }
+            if (reason.isNotEmpty()) DiagnosticLog.w(TAG, "system file surface unavailable pkg=$pkg reason=$reason")
+            reason.isEmpty()
+        }
+        routesHaveUsableSurface(routePackages, readyPackages)
+    }.getOrElse {
+        DiagnosticLog.w(TAG, "system file surface recovery failed", it)
+        false
     }
 }
+
+/** Restore and verify the exact system surface used by OpenMultipleDocuments. */
+fun prepareSystemFilePickerUsable(context: Context): Boolean =
+    prepareDownloadsViewerUsable(
+        context,
+        Intent(Intent.ACTION_OPEN_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType("*/*"),
+    )
+
+internal fun isSystemFileSurfacePackage(packageName: String): Boolean = packageName != "android"
+
+internal fun routesHaveUsableSurface(routes: List<Set<String>>, readyPackages: Set<String>): Boolean =
+    routes.isNotEmpty() && routes.all { route -> route.any(readyPackages::contains) }
 
 private const val TAG = "Prism.FileOpen"

@@ -51,6 +51,7 @@ import com.yzddmr6.prismspace.prism.service.TransferRecordActions
 import com.yzddmr6.prismspace.prism.service.TransferDirection
 import com.yzddmr6.prismspace.prism.service.displayTitle
 import com.yzddmr6.prismspace.prism.service.openSystemFileManager
+import com.yzddmr6.prismspace.prism.service.prepareSystemFilePickerUsable
 import com.yzddmr6.prismspace.prism.ui.CrossSpaceTransferEntry
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -118,7 +119,16 @@ fun FilesScreen(nav: NavHostController) {
                     title = stringResource(R.string.lz_pf_files_send_other),
                     summary = stringResource(R.string.lz_pf_files_send_other_summary),
                     leadingIcon = PrismIcons.File,
-                    onClick = { sendFiles.launch(arrayOf("*/*")) },
+                    onClick = {
+                        // The profile owner may have frozen the ROM's file picker together with
+                        // other explicit system clones. Restore that required system surface at
+                        // the point of use before Android resolves OPEN_DOCUMENT.
+                        if (prepareSystemFilePickerUsable(context)) {
+                            sendFiles.launch(arrayOf("*/*"))
+                        } else {
+                            Toast.makeText(context, R.string.lz_pf_open_fail, Toast.LENGTH_LONG).show()
+                        }
+                    },
                 )
                 GuideStep(1, stringResource(R.string.lz_pf_files_step1))
                 GuideStep(2, stringResource(R.string.lz_pf_files_step2))

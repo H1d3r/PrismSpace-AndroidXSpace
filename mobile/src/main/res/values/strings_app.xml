@@ -5,6 +5,7 @@
     <string name="lz_app_launch_frozen_subtitle">Frozen — will be unfrozen before launch</string>
     <string name="lz_app_freeze">Freeze</string>
     <string name="lz_app_unfreeze">Unfreeze</string>
+    <string name="lz_app_create_shortcut">Add shortcut to Home screen</string>
     <string name="lz_app_app_info">App info</string>
     <string name="lz_app_uninstall_clone">Uninstall clone</string>
     <string name="lz_app_go_to_dual_space">Go to dual space</string>

@@ -42,6 +42,7 @@ import com.yzddmr6.prismspace.prism.compose.vm.SpaceRow
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceSegment
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceViewModel
 import com.yzddmr6.prismspace.prism.ui.PrismAppsViewModel
+import com.yzddmr6.prismspace.shortcut.PrismAppShortcut
 import kotlinx.coroutines.launch
 
 /**
@@ -132,6 +133,16 @@ fun AppActionSheet(
                 }
 
                 SheetAction(
+                    icon = PrismIcons.Add,
+                    title = stringResource(R.string.lz_app_create_shortcut),
+                ) {
+                    dismiss()
+                    vm.appFor(row.pkg, SpaceSegment.Dual)?.let { app ->
+                        PrismAppShortcut.requestPin(context, app)
+                    }
+                }
+
+                SheetAction(
                     icon = PrismIcons.Gear,
                     title = stringResource(R.string.lz_app_app_info),
                 ) {
@@ -185,7 +196,7 @@ fun AppActionSheet(
                         val app = vm.appFor(row.pkg, SpaceSegment.Main)
                         Log.i(TAG, "Main action clone app lookup pkg=${row.pkg} found=${app != null}")
                         if (app != null && activity != null) {
-                            PrismAppClones(activity, prismAppsVm, app).request()
+                            PrismAppClones(activity, prismAppsVm, app, onCloneStateChanged = vm::refresh).request()
                         }
                     }
                 }

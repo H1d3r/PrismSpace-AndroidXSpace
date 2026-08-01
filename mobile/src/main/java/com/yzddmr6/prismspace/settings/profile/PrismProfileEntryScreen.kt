@@ -2,6 +2,7 @@ package com.yzddmr6.prismspace.settings.profile
 
 import android.content.Context
 import android.os.Build
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -33,6 +34,7 @@ import com.yzddmr6.prismspace.prism.service.TransferHistoryStore
 import com.yzddmr6.prismspace.prism.service.TransferDirection
 import com.yzddmr6.prismspace.prism.service.displayTitle
 import com.yzddmr6.prismspace.prism.service.openSystemFileManager
+import com.yzddmr6.prismspace.prism.service.prepareSystemFilePickerUsable
 import com.yzddmr6.prismspace.prism.ui.CrossSpaceTransferEntry
 import com.yzddmr6.prismspace.util.DevicePolicies
 import java.text.SimpleDateFormat
@@ -111,7 +113,13 @@ fun PrismProfileEntryScreen() {
                             title = stringResource(R.string.lz_pf_files_send_other),
                             summary = stringResource(R.string.lz_pf_files_send_other_summary),
                             leadingIcon = PrismIcons.File,
-                            onClick = { sendFiles.launch(arrayOf("*/*")) },
+                            onClick = {
+                                if (prepareSystemFilePickerUsable(context)) {
+                                    sendFiles.launch(arrayOf("*/*"))
+                                } else {
+                                    Toast.makeText(context, R.string.lz_pf_open_fail, Toast.LENGTH_LONG).show()
+                                }
+                            },
                         )
                     }
                     // Export starts from the source app through the system share sheet.

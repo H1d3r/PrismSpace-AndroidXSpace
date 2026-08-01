@@ -125,6 +125,10 @@ internal fun mapRows(inputs: List<SpaceAppInput>, res: StringResolver = zhFallba
     )
 }
 
+/** System packages exist in managed profiles for platform reasons; only an explicit marker makes one a user clone. */
+internal fun mainAppIsCloned(isSystem: Boolean, installedInDual: Boolean, systemCloneMarked: Boolean): Boolean =
+    if (isSystem) systemCloneMarked else installedInDual
+
 /**
  * The system-app view is intentionally search-first: a managed profile can contain hundreds of
  * packages, so a blank query reveals nothing and cannot invite accidental bulk operations.
@@ -864,7 +868,11 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
                 suspended = app.isSuspended,
                 launchable = app.isLaunchable,
                 system    = app.isSystem,
-                cloned    = app.packageName in dualPkgs,
+                cloned    = mainAppIsCloned(
+                    isSystem = app.isSystem,
+                    installedInDual = app.packageName in dualPkgs,
+                    systemCloneMarked = UserCloneRegistry.contains(context, app.packageName),
+                ),
                 segment   = SpaceSegment.Main,
                 critical  = app.isCritical,
             )

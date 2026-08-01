@@ -125,7 +125,14 @@ class BridgeProtocolContractTest {
     }
 
     private object FakeShortcutPort : ShortcutPort {
-        override fun requestPin(context: Context, packageName: String, dynamicLabel: Boolean) = true
+        override fun prepareProfileLaunch(
+            context: Context,
+            packageName: String,
+            action: String?,
+            dataUri: String?,
+            categories: List<String>,
+        ) = true
+        override fun cancelProfileLaunch(context: Context) = Unit
         override fun updateAll(context: Context, dynamicLabel: Boolean) = true
         override fun removeInParent(context: Context, packageName: String, profileUserId: Int) = true
         override fun refreshInParent(context: Context, packageName: String, profileUserId: Int) = true

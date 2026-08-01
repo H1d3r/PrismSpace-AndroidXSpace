@@ -87,6 +87,7 @@
     <string name="lz_space_main_copy_lost_body">完成 %1$s 的系統解除安裝流程後，偵測到它在主空間中的副本已不存在。這是 Android 目前回傳的真實狀態；如有需要，請從備份還原應用程式及其資料。</string>
     <string name="lz_vm_uninstall_queue_summary">解除安裝完成：已移除 %1$d 個、未移除 %2$d 個、無法確認 %3$d 個。</string>
     <string name="toast_shortcut_failed">快速啟動方式建立失敗</string>
+    <string name="lz_app_create_shortcut">新增桌面快速啟動方式</string>
     <string name="toast_error_freeze_failure">凍結失敗</string>
     <string name="toast_error_unfreeze_failure">解凍失敗</string>
     <string name="toast_error_freezing_active_admin">無法凍結已啟用裝置管理器的應用程式</string>

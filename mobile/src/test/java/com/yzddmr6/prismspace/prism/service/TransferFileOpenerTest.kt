@@ -51,4 +51,25 @@ class TransferFileOpenerTest {
         assertTrue(actions.canOpenWithFileManager)
         assertFalse(actions.canInstall)
     }
+
+    @Test fun crossProfileForwarderIsNotAFileSurface() {
+        assertFalse(isSystemFileSurfacePackage("android"))
+        assertTrue(isSystemFileSurfacePackage("com.android.fileexplorer"))
+        assertTrue(isSystemFileSurfacePackage("com.google.android.documentsui"))
+    }
+
+    @Test fun everyResolvedPickerRouteMustHaveAReadySurface() {
+        val routes = listOf(
+            setOf("com.google.android.documentsui"),
+            setOf("com.android.fileexplorer"),
+        )
+
+        assertFalse(routesHaveUsableSurface(routes, setOf("com.google.android.documentsui")))
+        assertTrue(
+            routesHaveUsableSurface(
+                routes,
+                setOf("com.google.android.documentsui", "com.android.fileexplorer"),
+            ),
+        )
+    }
 }

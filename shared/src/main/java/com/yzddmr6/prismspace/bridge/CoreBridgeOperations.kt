@@ -72,33 +72,6 @@ internal object CoreBridgeOperations {
         return PrismManager.launchApp(context, packageName, Users.current()).toDto()
     }
 
-    fun launchApp(context: Context, packageName: String, unfreezeFirst: Boolean): Boolean {
-        if (unfreezeFirst && PrismManager.ensureAppFreeToLaunch(context, packageName).isNotEmpty()) return false
-        return PrismManager.launchApp(context, packageName, Users.current()) is LaunchResult.Ok
-    }
-
-    fun launchDeepLink(
-        context: Context,
-        packageName: String,
-        action: String?,
-        dataUri: String?,
-        categories: List<String>,
-        unfreezeFirst: Boolean,
-    ): Boolean {
-        if (unfreezeFirst && PrismManager.ensureAppFreeToLaunch(context, packageName).isNotEmpty()) return false
-        val intent = Intent(action, dataUri?.let(Uri::parse)).setPackage(packageName)
-        categories.forEach(intent::addCategory)
-        val resolved = context.packageManager.resolveActivity(intent, 0)?.activityInfo ?: return false
-        if (resolved.packageName != packageName) return false
-        intent.component = ComponentName(resolved.packageName, resolved.name)
-        return try {
-            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            true
-        } catch (error: RuntimeException) {
-            false
-        }
-    }
-
     fun openAppDetails(context: Context, packageName: String) {
         val intent = Intent(
             Settings.ACTION_APPLICATION_DETAILS_SETTINGS,

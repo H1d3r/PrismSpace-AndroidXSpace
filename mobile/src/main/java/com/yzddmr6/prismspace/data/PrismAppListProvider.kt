@@ -44,6 +44,16 @@ import java.util.function.Predicate
  */
 class PrismAppListProvider : AppListProvider<PrismAppInfo>() {
 
+	override fun onStartLoadingApps(apps: MutableMap<String, PrismAppInfo>) {
+		super.onStartLoadingApps(apps)
+		// Some HyperOS builds omit system packages from the general query and expose launchable ones
+		// only through ResolveInfo snapshots whose flags are incomplete. Re-querying the system set
+		// explicitly makes PackageManager's ApplicationInfo the authoritative classification source.
+		context().packageManager
+			.getInstalledApplications(PM_FLAGS_APP_INFO or MATCH_SYSTEM_ONLY)
+			.forEach { info -> apps[info.packageName] = createEntry(info, apps[info.packageName]) }
+	}
+
 	operator fun get(pkg: String, profile: UserHandle): PrismAppInfo? {
 		return if (profile.isParentProfile()) super.get(pkg) else loadAppsInProfileIfNotYet(profile)[pkg]
 	}

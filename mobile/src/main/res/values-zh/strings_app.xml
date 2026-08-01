@@ -5,6 +5,7 @@
     <string name="lz_app_launch_frozen_subtitle">已冻结，将先解冻再启动</string>
     <string name="lz_app_freeze">冻结</string>
     <string name="lz_app_unfreeze">解冻</string>
+    <string name="lz_app_create_shortcut">添加桌面快捷方式</string>
     <string name="lz_app_app_info">应用信息</string>
     <string name="lz_app_uninstall_clone">卸载分身</string>
     <string name="lz_app_go_to_dual_space">跳双开空间</string>

@@ -63,7 +63,6 @@ class BridgeCommandParcelTest {
                 QueryProfileAppsPage(1, Int.MAX_VALUE),
                 ProfileAppPage(listOf(sampleProfileApp()), hasMore = false),
             )
-            assertRoundTrip(RequestPinShortcutInProfile("pkg", true), true)
             assertRoundTrip(UpdateAllShortcutsInProfile(false), true)
             assertRoundTrip(RemoveShortcutsInParent("pkg", 10), true)
             assertRoundTrip(RefreshShortcutInParent("pkg", 10), false)
@@ -84,17 +83,16 @@ class BridgeCommandParcelTest {
                 UnfreezeAndLaunchApp("pkg"),
                 LaunchOutcomeDto(LaunchOutcomeKind.Unknown, "reason"),
             )
-            assertRoundTrip(LaunchAppInProfile("pkg", true), true)
             assertRoundTrip(
-                LaunchDeepLinkInProfile(
+                PrepareProfileShortcutLaunch(
                     "pkg",
                     "android.intent.action.VIEW",
                     "https://example.test/path#fragment",
                     listOf("android.intent.category.BROWSABLE"),
-                    true,
                 ),
                 true,
             )
+            assertRoundTrip(CancelProfileShortcutLaunch, Unit)
             assertRoundTrip(OpenAppDetailsInProfile("pkg"), Unit)
             val diagnosticToken = "00000000-0000-0000-0000-000000000000"
             assertRoundTrip(

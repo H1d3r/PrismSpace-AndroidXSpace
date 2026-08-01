@@ -19,16 +19,6 @@ data class LaunchOutcomeDto(
 ) : Parcelable
 
 @Parcelize
-data class RequestPinShortcutInProfile(
-    val packageName: String,
-    val dynamicLabel: Boolean,
-) : ProfileCommand<Boolean> {
-    override val id get() = "shortcut.request_pin"
-    override fun encodeResult(result: Boolean, out: Bundle) = out.putBoolean(RESULT, result)
-    override fun decodeResult(src: Bundle) = src.getBoolean(RESULT)
-}
-
-@Parcelize
 data class UpdateAllShortcutsInProfile(val dynamicLabel: Boolean) : ProfileCommand<Boolean> {
     override val id get() = "shortcut.update_all"
     override fun encodeResult(result: Boolean, out: Bundle) = out.putBoolean(RESULT, result)
@@ -141,29 +131,23 @@ data class UnfreezeAndLaunchApp(val packageName: String) : ProfileCommand<Launch
     override fun decodeResult(src: Bundle): LaunchOutcomeDto = src.requireParcelableBridgeResult()
 }
 
-/** Internal shortcut producers only encode package launches; no Intent/component crosses the boundary. */
 @Parcelize
-data class LaunchAppInProfile(
-    val packageName: String,
-    val unfreezeFirst: Boolean,
-) : ProfileCommand<Boolean> {
-    override val id get() = "app.launch_in_profile"
-    override fun encodeResult(result: Boolean, out: Bundle) = out.putBoolean(RESULT, result)
-    override fun decodeResult(src: Bundle) = src.getBoolean(RESULT)
-}
-
-/** Reconstructs a bounded deep-link intent in the target profile; no Intent or component crosses IPC. */
-@Parcelize
-data class LaunchDeepLinkInProfile(
+data class PrepareProfileShortcutLaunch(
     val packageName: String,
     val action: String?,
     val dataUri: String?,
     val categories: List<String>,
-    val unfreezeFirst: Boolean,
 ) : ProfileCommand<Boolean> {
-    override val id get() = "app.launch_deep_link_in_profile"
+    override val id get() = "shortcut.prepare_profile_launch"
     override fun encodeResult(result: Boolean, out: Bundle) = out.putBoolean(RESULT, result)
     override fun decodeResult(src: Bundle) = src.getBoolean(RESULT)
+}
+
+@Parcelize
+data object CancelProfileShortcutLaunch : ProfileCommand<Unit> {
+    override val id get() = "shortcut.cancel_profile_launch"
+    override fun encodeResult(result: Unit, out: Bundle) = Unit
+    override fun decodeResult(src: Bundle) = Unit
 }
 
 @Parcelize
@@ -174,7 +158,6 @@ data class OpenAppDetailsInProfile(val packageName: String) : ProfileCommand<Uni
 }
 
 internal val SPACE_AND_SHORTCUT_COMMAND_SAMPLES: List<BridgeCommand<*>> = listOf(
-    RequestPinShortcutInProfile("pkg", true),
     UpdateAllShortcutsInProfile(true),
     RemoveShortcutsInParent("pkg", 10),
     RefreshShortcutInParent("pkg", 10),
@@ -189,8 +172,8 @@ internal val SPACE_AND_SHORTCUT_COMMAND_SAMPLES: List<BridgeCommand<*>> = listOf
     NotifyPackageRestarted("pkg", 10001, 1L),
     StartProfileDeactivation(10),
     UnfreezeAndLaunchApp("pkg"),
-    LaunchAppInProfile("pkg", true),
-    LaunchDeepLinkInProfile("pkg", "android.intent.action.VIEW", "https://example.test/path", listOf("cat"), true),
+    PrepareProfileShortcutLaunch("pkg", "android.intent.action.VIEW", "https://example.test/path", listOf("cat")),
+    CancelProfileShortcutLaunch,
     OpenAppDetailsInProfile("pkg"),
 )
 

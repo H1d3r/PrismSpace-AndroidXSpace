@@ -3,6 +3,7 @@ package com.yzddmr6.prismspace.prism.compose
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceAppInput4
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceSegment
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceUiState
+import com.yzddmr6.prismspace.prism.compose.vm.mainAppIsCloned
 import com.yzddmr6.prismspace.prism.compose.vm.mapSpaceRows
 import com.yzddmr6.prismspace.prism.compose.space.PrismSpace
 import com.yzddmr6.prismspace.prism.compose.space.PrismSpaceKind
@@ -58,6 +59,22 @@ class SpaceUiStateTest {
 
         assertEquals(SpaceSegment.Dual, selection.segment)
         assertEquals("space_22", selection.selectedDualSpaceId)
+    }
+
+    @Test
+    fun `system package presence alone is not an explicit clone`() {
+        assertEquals(false, mainAppIsCloned(isSystem = true, installedInDual = true, systemCloneMarked = false))
+    }
+
+    @Test
+    fun `explicitly marked system package is cloned`() {
+        assertEquals(true, mainAppIsCloned(isSystem = true, installedInDual = true, systemCloneMarked = true))
+    }
+
+    @Test
+    fun `third party clone follows dual installation fact`() {
+        assertEquals(true, mainAppIsCloned(isSystem = false, installedInDual = true, systemCloneMarked = false))
+        assertEquals(false, mainAppIsCloned(isSystem = false, installedInDual = false, systemCloneMarked = true))
     }
 
     @Test
