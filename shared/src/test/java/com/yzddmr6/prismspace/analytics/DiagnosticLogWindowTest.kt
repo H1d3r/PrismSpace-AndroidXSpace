@@ -11,6 +11,35 @@ import java.io.File
 
 class DiagnosticLogWindowTest {
 
+    @Test fun snapshotLeaseTouchRenewsActiveSession() {
+        val leases = DiagnosticSnapshotLeaseRegistry(maxActive = 2, ttlMs = 100)
+        assertTrue(leases.acquire("active", nowMs = 0))
+
+        assertTrue(leases.touch("active", nowMs = 99))
+        assertTrue(leases.expire(nowMs = 150).isEmpty())
+        assertEquals(setOf("active"), leases.activeTokens())
+    }
+
+    @Test fun snapshotLeaseExpiresAfterInactivity() {
+        val leases = DiagnosticSnapshotLeaseRegistry(maxActive = 2, ttlMs = 100)
+        assertTrue(leases.acquire("abandoned", nowMs = 0))
+
+        assertEquals(setOf("abandoned"), leases.expire(nowMs = 100))
+        assertFalse(leases.touch("abandoned", nowMs = 101))
+        assertTrue(leases.activeTokens().isEmpty())
+    }
+
+    @Test fun snapshotLeaseRejectsThirdConcurrentSessionUntilOneCloses() {
+        val leases = DiagnosticSnapshotLeaseRegistry(maxActive = 2, ttlMs = 100)
+        assertTrue(leases.acquire("first", nowMs = 0))
+        assertTrue(leases.acquire("second", nowMs = 0))
+
+        assertFalse(leases.acquire("third", nowMs = 1))
+        leases.release("first")
+        assertTrue(leases.acquire("third", nowMs = 2))
+        assertEquals(setOf("second", "third"), leases.activeTokens())
+    }
+
     @Test fun snapshotChunksUseBoundedReadsAndExactBoundaryEof() {
         val input = ByteArray(DIAGNOSTICS_CHUNK_BYTES + 17) { (it % 251).toByte() }
         val file = File.createTempFile("diagnostic-snapshot", ".tmp")

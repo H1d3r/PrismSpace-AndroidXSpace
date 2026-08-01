@@ -8,12 +8,12 @@ import android.util.Log
 import androidx.core.content.FileProvider
 import com.yzddmr6.prismspace.util.Users
 import java.io.File
+import java.io.RandomAccessFile
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.UUID
-import java.io.RandomAccessFile
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -25,6 +25,51 @@ data class DiagnosticSection(
 
 internal data class DiagnosticSnapshotSession(val token: String, val totalLength: Long)
 internal data class DiagnosticSnapshotChunk(val bytes: ByteArray, val eof: Boolean)
+
+internal class DiagnosticSnapshotLeaseRegistry(
+    private val maxActive: Int,
+    private val ttlMs: Long,
+) {
+    private val lastAccessByToken = mutableMapOf<String, Long>()
+
+    init {
+        require(maxActive > 0)
+        require(ttlMs > 0L)
+    }
+
+    fun expire(nowMs: Long): Set<String> {
+        val expired = lastAccessByToken
+            .filterValues { lastAccessMs -> nowMs - lastAccessMs >= ttlMs }
+            .keys
+            .toSet()
+        expired.forEach(lastAccessByToken::remove)
+        return expired
+    }
+
+    fun hasCapacity(): Boolean = lastAccessByToken.size < maxActive
+
+    fun acquire(token: String, nowMs: Long): Boolean {
+        if (token in lastAccessByToken || !hasCapacity()) return false
+        lastAccessByToken[token] = nowMs
+        return true
+    }
+
+    fun touch(token: String, nowMs: Long): Boolean {
+        val lastAccessMs = lastAccessByToken[token] ?: return false
+        if (nowMs - lastAccessMs >= ttlMs) {
+            lastAccessByToken.remove(token)
+            return false
+        }
+        lastAccessByToken[token] = nowMs
+        return true
+    }
+
+    fun release(token: String) {
+        lastAccessByToken.remove(token)
+    }
+
+    fun activeTokens(): Set<String> = lastAccessByToken.keys.toSet()
+}
 
 /**
  * Low-overhead local diagnostic log.
@@ -45,6 +90,7 @@ object DiagnosticLog {
     private const val SNAPSHOT_PREFIX = "prismspace-snapshot-"
     private const val SNAPSHOT_SUFFIX = ".tmp"
     private const val MAX_EXPORT_FILES = 2
+    private const val MAX_SNAPSHOT_FILES = 2
     private const val SNAPSHOT_TTL_MS = 10 * 60 * 1_000L
     private const val TRIM_HEADROOM_BYTES = 128 * 1024
     private const val LOGCAT_MAX_BYTES = 1 * 1024 * 1024
@@ -52,6 +98,7 @@ object DiagnosticLog {
     private val executor = Executors.newSingleThreadExecutor { task ->
         Thread(task, "PrismDiagnosticLog").apply { isDaemon = true }
     }
+    private val snapshotLeases = DiagnosticSnapshotLeaseRegistry(MAX_SNAPSHOT_FILES, SNAPSHOT_TTL_MS)
 
     @Volatile private var appContext: Context? = null
 
@@ -128,14 +175,19 @@ object DiagnosticLog {
         i("Prism.Diag", "profile snapshot open start")
         val dir = exportDir(context.applicationContext).apply { mkdirs() }
         cleanupOldSnapshots(dir)
+        check(snapshotLeases.hasCapacity()) { "Too many active diagnostic snapshot sessions" }
         val token = UUID.randomUUID().toString()
         val file = snapshotFile(dir, token)
         return try {
             file.writeText(buildSnapshotText(context.applicationContext, includeLogcat = true), Charsets.UTF_8)
+            check(snapshotLeases.acquire(token, System.currentTimeMillis())) {
+                "Diagnostic snapshot session capacity changed unexpectedly"
+            }
             DiagnosticSnapshotSession(token, file.length()).also {
                 i("Prism.Diag", "profile snapshot open success bytes=${it.totalLength}")
             }
         } catch (error: Throwable) {
+            snapshotLeases.release(token)
             runCatching { file.delete() }
             e("Prism.Diag", "profile snapshot open failed exception=${error.javaClass.name}", error)
             throw error
@@ -150,14 +202,21 @@ object DiagnosticLog {
         maxBytes: Int,
     ): DiagnosticSnapshotChunk? {
         if (offset < 0L || maxBytes <= 0) return null
-        val file = snapshotFileOrNull(exportDir(context.applicationContext), token)
-            ?.takeIf(File::isFile)
-            ?: return null
+        if (!snapshotLeases.touch(token, System.currentTimeMillis())) {
+            snapshotFileOrNull(exportDir(context.applicationContext), token)?.let { runCatching { it.delete() } }
+            return null
+        }
+        val file = snapshotFileOrNull(exportDir(context.applicationContext), token)?.takeIf(File::isFile)
+        if (file == null) {
+            snapshotLeases.release(token)
+            return null
+        }
         return readSnapshotChunk(file, offset, maxBytes)
     }
 
     @Synchronized
     internal fun closeChunkedSnapshot(context: Context, token: String) {
+        snapshotLeases.release(token)
         snapshotFileOrNull(exportDir(context.applicationContext), token)?.let { file ->
             if (file.exists() && !file.delete()) w("Prism.Diag", "profile snapshot close could not delete token=$token")
         }
@@ -284,12 +343,24 @@ object DiagnosticLog {
     }
 
     private fun cleanupOldSnapshots(dir: File, nowMs: Long = System.currentTimeMillis()) {
+        snapshotLeases.expire(nowMs).forEach { token ->
+            snapshotFileOrNull(dir, token)?.let { runCatching { it.delete() } }
+        }
+        snapshotLeases.activeTokens()
+            .filterNot { token -> snapshotFile(dir, token).isFile }
+            .forEach(snapshotLeases::release)
+        val activeTokens = snapshotLeases.activeTokens()
         val snapshots = dir.listFiles { file ->
             file.name.startsWith(SNAPSHOT_PREFIX) && file.name.endsWith(SNAPSHOT_SUFFIX)
         }?.sortedByDescending(File::lastModified).orEmpty()
-        snapshots.filter { nowMs - it.lastModified() >= SNAPSHOT_TTL_MS }
+        snapshots.filter { file ->
+            snapshotTokenOrNull(file) !in activeTokens && nowMs - file.lastModified() >= SNAPSHOT_TTL_MS
+        }
             .forEach { runCatching { it.delete() } }
-        snapshots.filter(File::exists).drop(MAX_EXPORT_FILES - 1)
+        val inactiveSlotsBeforeOpen = (MAX_SNAPSHOT_FILES - activeTokens.size - 1).coerceAtLeast(0)
+        snapshots.filter(File::exists)
+            .filter { snapshotTokenOrNull(it) !in activeTokens }
+            .drop(inactiveSlotsBeforeOpen)
             .forEach { runCatching { it.delete() } }
     }
 
@@ -297,6 +368,12 @@ object DiagnosticLog {
 
     private fun snapshotFileOrNull(dir: File, token: String): File? =
         runCatching { UUID.fromString(token) }.getOrNull()?.let { snapshotFile(dir, it.toString()) }
+
+    private fun snapshotTokenOrNull(file: File): String? {
+        if (!file.name.startsWith(SNAPSHOT_PREFIX) || !file.name.endsWith(SNAPSHOT_SUFFIX)) return null
+        val token = file.name.removePrefix(SNAPSHOT_PREFIX).removeSuffix(SNAPSHOT_SUFFIX)
+        return runCatching { UUID.fromString(token).toString() }.getOrNull()
+    }
 
     private fun flush(timeoutMs: Long = 1_000L) {
         val latch = CountDownLatch(1)

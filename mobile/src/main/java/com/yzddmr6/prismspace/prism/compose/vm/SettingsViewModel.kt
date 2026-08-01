@@ -704,11 +704,18 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             title = "Dual-space diagnostic snapshot",
             body = "No managed profile is currently known to the main space.",
         ))
-        val health = ShuttleProvider.health(context, profile)
-        val healthSection = DiagnosticSection(
-            title = "Dual-space shuttle health user=${profile.toId()}",
-            body = health.diagnosticLine(),
-        )
+        val healthSection = try {
+            DiagnosticSection(
+                title = "Dual-space shuttle health user=${profile.toId()}",
+                body = ShuttleProvider.health(context, profile).diagnosticLine(),
+            )
+        } catch (error: Exception) {
+            DiagnosticLog.w(TAG, "dual-space shuttle health collection failed user=${profile.toId()}", error)
+            DiagnosticSection(
+                title = "Dual-space shuttle health user=${profile.toId()}",
+                body = "Health check failed: ${error.javaClass.name}: ${error.message.orEmpty()}",
+            )
+        }
         return try {
             DiagnosticLog.i(TAG, "dual-space diagnostic chunk collection start user=${profile.toId()}")
             val target = BridgeTargets.profile(context, profile.toId())
