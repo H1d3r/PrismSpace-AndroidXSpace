@@ -4,7 +4,6 @@ import android.content.Context
 import android.provider.Settings
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
 import eu.chainfire.libsuperuser.Shell
-import java.util.UUID
 
 internal const val VERIFIER_SETTING = "verifier_verify_adb_installs"
 internal const val MAX_USERS_PROPERTY = "fw.max_users"
@@ -12,35 +11,23 @@ internal const val MAX_USERS_PROPERTY = "fw.max_users"
 internal data class RootProvisioningCommandInput(
     val parentUserId: Int,
     val temporaryMaxUsers: Int,
-    val apkPath: String,
+    val packageName: String,
     val adminComponent: String,
-    val debugBuild: Boolean,
-    val verifierOriginal: String?,
     val maxUsersOriginal: String?,
 )
 
 internal fun buildRootProvisioningCommand(input: RootProvisioningCommandInput): String {
-    val verifierRestore = verifierRestoreCommand(input.verifierOriginal)
     val maxUsersRestore = "setprop $MAX_USERS_PROPERTY ${shellQuote(input.maxUsersOriginal.orEmpty())}"
-    val verifierWrite = if (input.verifierOriginal == "0") {
-        "echo 'PRISM_SIDE_EFFECT_WRITE verifier unchanged original=0'"
-    } else {
-        "settings put global $VERIFIER_SETTING 0; " +
-            "echo ${shellQuote("PRISM_SIDE_EFFECT_WRITE verifier original=${input.verifierOriginal ?: "<unset>"} temporary=0")}"
-    }
     val maxUsersWrite = if (input.maxUsersOriginal == input.temporaryMaxUsers.toString()) {
         "echo ${shellQuote("PRISM_SIDE_EFFECT_WRITE max_users unchanged original=${input.maxUsersOriginal}")}"
     } else {
         "setprop $MAX_USERS_PROPERTY ${input.temporaryMaxUsers}; " +
             "echo ${shellQuote("PRISM_SIDE_EFFECT_WRITE max_users original=${input.maxUsersOriginal ?: "<unset>"} temporary=${input.temporaryMaxUsers}")}"
     }
-    val debugFlag = if (input.debugBuild) " -t" else ""
     return """
         PROFILE_ID=""
         PRISM_PROVISION_SUCCEEDED=0
         restore_prism_side_effects() {
-          $verifierRestore
-          echo ${shellQuote("PRISM_SIDE_EFFECT_RESTORE verifier original=${input.verifierOriginal ?: "<unset>"}")}
           $maxUsersRestore
           echo ${shellQuote("PRISM_SIDE_EFFECT_RESTORE max_users original=${input.maxUsersOriginal ?: "<unset>"}")}
         }
@@ -71,7 +58,6 @@ internal fun buildRootProvisioningCommand(input: RootProvisioningCommandInput): 
         }
         trap handle_prism_unexpected_exit EXIT
         trap 'fail_prism_provisioning 70 interrupted' HUP INT TERM
-        $verifierWrite
         $maxUsersWrite
         CREATE_OUTPUT="$(pm create-user --profileOf ${input.parentUserId} --managed PrismSpace 2>&1)"
         CREATE_STATUS="${'$'}?"
@@ -79,8 +65,7 @@ internal fun buildRootProvisioningCommand(input: RootProvisioningCommandInput): 
         [ "${'$'}CREATE_STATUS" -eq 0 ] || fail_prism_provisioning 20 create
         PROFILE_ID="$(printf '%s\n' "${'$'}CREATE_OUTPUT" | sed -n 's/.*[Ii][Dd] \([0-9][0-9]*\).*/\1/p' | tail -n 1)"
         [ -n "${'$'}PROFILE_ID" ] || fail_prism_provisioning 20 parse_user
-        pm install -r --user "${'$'}PROFILE_ID"$debugFlag ${shellQuote(input.apkPath)} || fail_prism_provisioning 30 install
-        restore_prism_side_effects
+        pm install-existing --user "${'$'}PROFILE_ID" ${shellQuote(input.packageName)} || fail_prism_provisioning 30 install_existing
         dpm set-profile-owner --user "${'$'}PROFILE_ID" ${shellQuote(input.adminComponent)} || fail_prism_provisioning 40 owner
         am start-user "${'$'}PROFILE_ID" || fail_prism_provisioning 50 start
         PRISM_PROVISION_SUCCEEDED=1
@@ -123,42 +108,8 @@ internal object ProvisioningSideEffects {
     fun verifierOriginal(context: Context): String? =
         Settings.Global.getString(context.contentResolver, VERIFIER_SETTING)
 
-    @Synchronized
-    fun recordBeforeWrite(context: Context, original: String?): String? {
-        val token = UUID.randomUUID().toString()
-        val recorded = prefs(context).edit()
-            .putBoolean(KEY_PENDING, true)
-            .putBoolean(KEY_ORIGINAL_PRESENT, original != null)
-            .putString(KEY_ORIGINAL_VALUE, original.orEmpty())
-            .putString(KEY_ATTEMPT_TOKEN, token)
-            .commit()
-        if (!recorded) return null
-        DiagnosticLog.i(TAG, "side_effect write key=$VERIFIER_SETTING original=${original ?: "<unset>"} temporary=0")
-        return token
-    }
-
     fun logMaxUsersWrite(original: String?, temporary: Int) {
         DiagnosticLog.i(TAG, "side_effect write key=$MAX_USERS_PROPERTY original=${original ?: "<unset>"} temporary=$temporary")
-    }
-
-    @Synchronized
-    fun onShellCompleted(
-        context: Context,
-        attemptToken: String?,
-        verifierOriginal: String?,
-        maxUsersOriginal: String?,
-    ) {
-        val verifierRestored = verifierOriginal(context) == verifierOriginal
-        val recordCleared = verifierRestored && attemptToken != null && clearPendingIfOwned(context, attemptToken)
-        DiagnosticLog.i(
-            TAG,
-            "side_effect restore key=$VERIFIER_SETTING original=${verifierOriginal ?: "<unset>"} " +
-                "restored=$verifierRestored record_cleared=$recordCleared",
-        )
-        DiagnosticLog.i(
-            TAG,
-            "side_effect restore key=$MAX_USERS_PROPERTY original=${maxUsersOriginal ?: "<unset>"} shell_completed=true",
-        )
     }
 
     /** Worker-thread preflight. It never calls su. */

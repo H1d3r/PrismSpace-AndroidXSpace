@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.pm.LauncherApps
 import android.os.SystemClock
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
-import com.yzddmr6.prismspace.mobile.BuildConfig
 import com.yzddmr6.prismspace.util.DeviceAdmins
 import com.yzddmr6.prismspace.util.Hacks
 import com.yzddmr6.prismspace.util.Modules
@@ -62,28 +61,17 @@ object SpaceProvisioningEngine {
             ?.takeIf { it.current >= it.max }
             ?.let { return@withContext CreateSpaceResult.CapReached(it.max) }
         val cap = (probe as? SpaceCapProbe.Known)?.max ?: DEFAULT_MAX_USERS_SETPROP
-        val verifierOriginal = ProvisioningSideEffects.verifierOriginal(context)
         val maxUsersOriginal = maxUsersProperty()
-        val sourcePath = context.packageManager.getApplicationInfo(Modules.MODULE_ENGINE, 0).sourceDir
         val admin = DeviceAdmins.getComponentName(context).flattenToString()
         val command = buildRootProvisioningCommand(
             RootProvisioningCommandInput(
                 parentUserId = Users.currentId(),
                 temporaryMaxUsers = cap,
-                apkPath = sourcePath,
+                packageName = Modules.MODULE_ENGINE,
                 adminComponent = admin,
-                debugBuild = BuildConfig.DEBUG,
-                verifierOriginal = verifierOriginal,
                 maxUsersOriginal = maxUsersOriginal,
             ),
         )
-        val sideEffectToken = if (verifierOriginal == "0") null else
-            ProvisioningSideEffects.recordBeforeWrite(context, verifierOriginal) ?: run {
-            return@withContext CreateSpaceResult.Failed(
-                "could not persist verifier restoration state",
-                analyticsPhase = 2,
-            )
-        }
         ProvisioningSideEffects.logMaxUsersWrite(maxUsersOriginal, cap)
         SpaceProvisioningTracker.markStarted()
         val output = try {
@@ -92,8 +80,6 @@ object SpaceProvisioningEngine {
             DiagnosticLog.e(TAG, "root provisioning shell failed", e)
             SpaceProvisioningTracker.clear()
             return@withContext CreateSpaceResult.Failed(e.message, analyticsPhase = 2)
-        } finally {
-            ProvisioningSideEffects.onShellCompleted(context, sideEffectToken, verifierOriginal, maxUsersOriginal)
         }
         val create = parsePmCreateOutput(output)
         when (create) {

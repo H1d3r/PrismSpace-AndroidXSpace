@@ -10,26 +10,19 @@ import java.io.File
 
 class ProvisioningPathConsolidationTest {
 
-    @Test fun `verifier restoration covers every original state on success and failure`() {
-        listOf(null, "0", "1").forEach { original ->
-            val command = command(verifierOriginal = original, maxUsersOriginal = "4")
-            assertTrue(command.contains("trap handle_prism_unexpected_exit EXIT"))
-            assertTrue(command.contains("trap 'fail_prism_provisioning 70 interrupted' HUP INT TERM"))
-            assertTrue(command.contains("pm install -r --user \"${'$'}PROFILE_ID\""))
-            assertTrue(command.contains("fail_prism_provisioning 30 install"))
-            assertTrue(command.contains("am start-user \"${'$'}PROFILE_ID\" || fail_prism_provisioning 50 start"))
-            assertTrue(command.contains("echo \"PRISM_PROVISION_FAILED stage=${'$'}PRISM_FAILURE_STAGE\""))
-            assertTrue(command.contains("PRISM_PROVISION_SUCCESS user=${'$'}PROFILE_ID"))
-            assertTrue(command.contains("fail_prism_provisioning()"))
-            assertTrue(command.contains("finish_prism_transaction\n  echo \"PRISM_PROVISION_FAILED stage=${'$'}PRISM_FAILURE_STAGE\"\n  exit \"${'$'}PRISM_FAILURE_STATUS\""))
-            assertTrue(command.contains("fail_prism_provisioning 30 install\nrestore_prism_side_effects\ndpm set-profile-owner"))
-            val expectedRestore = if (original == null) {
-                "settings delete global $VERIFIER_SETTING"
-            } else {
-                "settings put global $VERIFIER_SETTING '$original'"
-            }
-            assertTrue(command.contains(expectedRestore))
-        }
+    @Test fun `existing package is enabled without replacement install or verifier changes`() {
+        val command = command(maxUsersOriginal = "4")
+        assertTrue(command.contains("trap handle_prism_unexpected_exit EXIT"))
+        assertTrue(command.contains("trap 'fail_prism_provisioning 70 interrupted' HUP INT TERM"))
+        assertTrue(command.contains("pm install-existing --user \"${'$'}PROFILE_ID\" 'com.example'"))
+        assertTrue(command.contains("fail_prism_provisioning 30 install_existing"))
+        assertTrue(command.contains("am start-user \"${'$'}PROFILE_ID\" || fail_prism_provisioning 50 start"))
+        assertTrue(command.contains("echo \"PRISM_PROVISION_FAILED stage=${'$'}PRISM_FAILURE_STAGE\""))
+        assertTrue(command.contains("PRISM_PROVISION_SUCCESS user=${'$'}PROFILE_ID"))
+        assertTrue(command.contains("fail_prism_provisioning()"))
+        assertTrue(command.contains("finish_prism_transaction\n  echo \"PRISM_PROVISION_FAILED stage=${'$'}PRISM_FAILURE_STAGE\"\n  exit \"${'$'}PRISM_FAILURE_STATUS\""))
+        assertFalse(command.contains("pm install -r"))
+        assertFalse(command.contains("verifier_verify_adb_installs"))
     }
 
     @Test fun `failed or interrupted transaction rolls back only its newly created profile`() {
@@ -43,23 +36,17 @@ class ProvisioningPathConsolidationTest {
         assertTrue(command.indexOf("restore_prism_side_effects\n  if [") < command.indexOf("pm remove-user"))
     }
 
-    @Test fun `verifier is only changed when its original state requires it`() {
-        assertFalse(command(verifierOriginal = "0").contains("settings put global $VERIFIER_SETTING 0; echo"))
-        assertTrue(command(verifierOriginal = "1").contains("settings put global $VERIFIER_SETTING 0; echo"))
-        assertTrue(command(verifierOriginal = null).contains("settings put global $VERIFIER_SETTING 0; echo"))
-    }
-
     @Test fun `max users property restores its exact original state`() {
         assertTrue(command(maxUsersOriginal = "4").contains("setprop $MAX_USERS_PROPERTY '4'"))
         assertTrue(command(maxUsersOriginal = null).contains("setprop $MAX_USERS_PROPERTY ''"))
     }
 
-    @Test fun `shell quoting preserves apostrophes in package paths`() {
-        assertTrue(command(apkPath = "/data/app/it's/base.apk").contains("'/data/app/it'\"'\"'s/base.apk'"))
+    @Test fun `shell quoting preserves apostrophes in package names`() {
+        assertTrue(command(packageName = "com.example.it's").contains("'com.example.it'\"'\"'s'"))
     }
 
-    @Test fun `root transaction is detached before package replacement can kill the caller`() {
-        val launcher = detachedRootProvisioningLauncher("pm install /data/app/base.apk", "/data/user/0/app/cache/out")
+    @Test fun `root transaction remains detached so rollback survives caller interruption`() {
+        val launcher = detachedRootProvisioningLauncher("pm install-existing --user 22 com.example", "/data/user/0/app/cache/out")
         assertTrue(launcher.startsWith("setsid sh -c "))
         assertTrue(launcher.contains("</dev/null & echo ${'$'}!"))
         assertTrue(provisioningTransactionFinished(listOf("PRISM_PROVISION_SUCCESS user=22")))
@@ -161,17 +148,14 @@ class ProvisioningPathConsolidationTest {
     }
 
     private fun command(
-        verifierOriginal: String? = "1",
         maxUsersOriginal: String? = "4",
-        apkPath: String = "/data/app/base.apk",
+        packageName: String = "com.example",
     ) = buildRootProvisioningCommand(
         RootProvisioningCommandInput(
             parentUserId = 0,
             temporaryMaxUsers = 4,
-            apkPath = apkPath,
+            packageName = packageName,
             adminComponent = "com.example/.Admin",
-            debugBuild = false,
-            verifierOriginal = verifierOriginal,
             maxUsersOriginal = maxUsersOriginal,
         ),
     )

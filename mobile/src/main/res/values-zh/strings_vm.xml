@@ -68,7 +68,7 @@
     <string name="lz_vm_mode_shizuku_summary_not_running">启动 Shizuku 或无线调试后可启用增强能力。</string>
     <string name="lz_vm_mode_shizuku_summary_not_installed">未检测到 Shizuku；普通双开功能仍可使用。</string>
     <string name="lz_vm_mode_root_title">Root 模式</string>
-    <string name="lz_vm_mode_root_summary">Root 仅用于高级诊断和兜底维护。Root 开通会临时调整系统用户上限与 ADB 安装校验，并在结束后还原。</string>
+    <string name="lz_vm_mode_root_summary">Root 仅用于高级诊断和兜底维护。Root 开通会临时调整系统用户上限，并在结束后还原。</string>
 
     <!-- PrismShizukuAdbStatus labels -->
     <string name="lz_vm_shizuku_status_not_installed">未安装</string>
