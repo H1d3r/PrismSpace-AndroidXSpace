@@ -69,6 +69,13 @@ object PrismAppControl {
 
 	@JvmStatic fun launch(context: Context, app: PrismAppInfo) {
 		analytics().event("action_launch").with(ITEM_ID, app.packageName).send()
+		// System-app search intentionally includes packages without a launcher activity. Never thaw
+		// one of those packages for an action that cannot succeed: doing so changes the user's freeze
+		// state and then reports only a launch failure.
+		if (!app.isLaunchable) {
+			toastLaunch(context, LaunchResult.AppMissing, app.label.toString(), app.packageName)
+			return
+		}
 		// Suspended counts as frozen too (hybrid freeze): ensureAppFreeToLaunch lifts both hide and
 		// suspend, but we must route here when EITHER is set — a suspended app won't launch otherwise.
 		if (app.isHidden || app.isSuspended) unfreezeAndLaunch(context, app)

@@ -111,13 +111,15 @@ fun AppActionSheet(
                 // A clone is "frozen" to the user if it's hidden OR suspended (one unified concept);
                 // 解冻 then clears whichever applied (vm.setFrozen(false) recovers both).
                 val paused = row.frozen || row.suspended
-                SheetAction(
-                    icon = PrismIcons.Play,
-                    title = stringResource(R.string.lz_app_launch),
-                    subtitle = if (paused) stringResource(R.string.lz_app_launch_frozen_subtitle) else null,
-                ) {
-                    dismiss()
-                    vm.launch(context, row.pkg, SpaceSegment.Dual)
+                if (row.launchable) {
+                    SheetAction(
+                        icon = PrismIcons.Play,
+                        title = stringResource(R.string.lz_app_launch),
+                        subtitle = if (paused) stringResource(R.string.lz_app_launch_frozen_subtitle) else null,
+                    ) {
+                        dismiss()
+                        vm.launch(context, row.pkg, SpaceSegment.Dual)
+                    }
                 }
 
                 SheetAction(
@@ -132,13 +134,15 @@ fun AppActionSheet(
                     }
                 }
 
-                SheetAction(
-                    icon = PrismIcons.Add,
-                    title = stringResource(R.string.lz_app_create_shortcut),
-                ) {
-                    dismiss()
-                    vm.appFor(row.pkg, SpaceSegment.Dual)?.let { app ->
-                        PrismAppShortcut.requestPin(context, app)
+                if (row.launchable) {
+                    SheetAction(
+                        icon = PrismIcons.Add,
+                        title = stringResource(R.string.lz_app_create_shortcut),
+                    ) {
+                        dismiss()
+                        vm.appFor(row.pkg, SpaceSegment.Dual)?.let { app ->
+                            PrismAppShortcut.requestPin(context, app)
+                        }
                     }
                 }
 
@@ -161,13 +165,16 @@ fun AppActionSheet(
                 }
             } else {
                 // --- Main tab actions ---
-                // 启动应用 is the most frequent action → always first, mirroring the Dual tab.
-                SheetAction(
-                    icon = PrismIcons.Play,
-                    title = stringResource(R.string.lz_app_launch),
-                ) {
-                    dismiss()
-                    vm.launch(context, row.pkg, SpaceSegment.Main)
+                // 启动应用 is the most frequent action → first when the package actually has
+                // a launcher activity. System-app search can surface packages without one.
+                if (row.launchable) {
+                    SheetAction(
+                        icon = PrismIcons.Play,
+                        title = stringResource(R.string.lz_app_launch),
+                    ) {
+                        dismiss()
+                        vm.launch(context, row.pkg, SpaceSegment.Main)
+                    }
                 }
 
                 SheetAction(
