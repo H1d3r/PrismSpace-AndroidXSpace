@@ -8,6 +8,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResultLauncher
 import androidx.annotation.StringRes
 import androidx.lifecycle.lifecycleScope
+import com.yzddmr6.prismspace.MainActivity
+import com.yzddmr6.prismspace.analytics.DiagnosticLog
 import com.yzddmr6.prismspace.help.PrismHelp
 import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.setup.PrismSetup
@@ -40,7 +42,7 @@ class SetupController(
 
     /** Primary CTA tapped (welcome state or retry-from-error). */
     fun onPrimaryCta() {
-        if (stateVm.uiState.value is SetupUiState.Checking) return
+        if (stateVm.provisioningLaunched || stateVm.uiState.value is SetupUiState.Checking) return
         stateVm.setUiState(SetupUiState.Checking)
         activity.lifecycleScope.launch {
             if (!ExperimentalFlags.isMultiProfileEnabled(activity)) {
@@ -102,9 +104,11 @@ class SetupController(
     private fun launchManagedProvisioning() {
         val intent = SetupViewModel.buildManagedProfileProvisioningIntentPublic(activity)
         try {
+            stateVm.provisioningLaunched = true
             SpaceProvisioningTracker.markStarted()
             provisionLauncher.launch(intent)
         } catch (e: ActivityNotFoundException) {
+            stateVm.provisioningLaunched = false
             SpaceProvisioningTracker.clear()
             Log.w(TAG, "Managed provisioning activity not found", e)
             stateVm.setUiState(SetupUiState.Error(
@@ -123,29 +127,54 @@ class SetupController(
          * ActivityResultLauncher (rebuilt on every recreate) does not need to hold a
          * reference to a stale Controller — it dispatches directly into the retained VM.
          */
-        @JvmStatic fun handleProvisionResult(activity: Activity, vm: SetupStateViewModel, resultCode: Int) {
-            when (resultCode) {
-                Activity.RESULT_OK -> {
-                    SpaceProvisioningTracker.markReturnedSuccess()
-                    Log.i(TAG, "Managed provisioning finished — closing setup activity.")
-                    activity.finish()
-                }
-                Activity.RESULT_CANCELED -> {
-                    SpaceProvisioningTracker.clear()
-                    Log.i(TAG, "Managed provisioning was cancelled — show cancel recovery options.")
-                    vm.setUiState(SetupUiState.Error(
-                        messageRes = R.string.setup_solution_for_cancelled_provision,
-                        messageParams = null,
-                        extraActionRes = R.string.button_setup_space_with_root,
-                    ))
-                }
-                else -> {
-                    SpaceProvisioningTracker.clear()
-                    Log.w(TAG, "Unexpected provision resultCode=$resultCode")
+        @JvmStatic fun handleProvisionResult(activity: ComponentActivity, vm: SetupStateViewModel, resultCode: Int) {
+            activity.lifecycleScope.launch {
+                val repository = SpaceStateRepository(activity.applicationContext)
+                val refreshed = repository.refresh("setup_result:$resultCode")
+                val state = repository.currentState().takeIf { refreshed }
+                when (setupCompletionAction(resultCode, state)) {
+                    SetupCompletionAction.Finish -> finishSuccessfulProvisioning(activity, vm, "activity_result")
+                    SetupCompletionAction.ShowCanceled -> {
+                        vm.provisioningLaunched = false
+                        SpaceProvisioningTracker.clear()
+                        DiagnosticLog.i(TAG, "Managed provisioning canceled with fresh state=$state")
+                        vm.setUiState(SetupUiState.Error(
+                            messageRes = R.string.setup_solution_for_cancelled_provision,
+                            messageParams = null,
+                            extraActionRes = R.string.button_setup_space_with_root,
+                        ))
+                    }
+                    SetupCompletionAction.WaitForHealth -> DiagnosticLog.i(
+                        TAG,
+                        "Managed provisioning result=$resultCode state=$state; waiting for healthy facts",
+                    )
                 }
             }
         }
+
+        @JvmStatic fun finishSuccessfulProvisioning(
+            activity: Activity,
+            vm: SetupStateViewModel,
+            reason: String,
+        ): Boolean {
+            if (!vm.consumeProvisioningLaunched()) return false
+            SpaceProvisioningTracker.markReturnedSuccess()
+            DiagnosticLog.i(TAG, "Managed provisioning healthy reason=$reason; opening main activity")
+            activity.startActivity(Intent(activity, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            })
+            activity.finish()
+            return true
+        }
     }
+}
+
+internal enum class SetupCompletionAction { Finish, ShowCanceled, WaitForHealth }
+
+internal fun setupCompletionAction(resultCode: Int, state: SpaceState?): SetupCompletionAction = when {
+    state is SpaceState.Healthy -> SetupCompletionAction.Finish
+    resultCode == Activity.RESULT_CANCELED && state == SpaceState.NoProfile -> SetupCompletionAction.ShowCanceled
+    else -> SetupCompletionAction.WaitForHealth
 }
 
 /** Compose-friendly UI state derived from [SetupViewModel]. */
