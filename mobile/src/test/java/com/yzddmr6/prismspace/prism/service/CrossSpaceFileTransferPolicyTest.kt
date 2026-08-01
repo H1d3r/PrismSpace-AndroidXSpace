@@ -137,7 +137,9 @@ class CrossSpaceFileTransferPolicyTest {
 
     @Test fun unknownSizeDoesNotInventPercentage() {
         assertNull(transferProgressPercent(null, 1_024L))
-        assertEquals(100, transferProgressPercent(0L, 0L))
+        assertNull(transferProgressPercent(-1L, 1_024L))
+        assertNull(transferProgressPercent(0L, 0L))
+        assertNull(transferProgressPercent(0L, 1_024L))
         assertEquals(50, transferProgressPercent(200L, 100L))
     }
 }

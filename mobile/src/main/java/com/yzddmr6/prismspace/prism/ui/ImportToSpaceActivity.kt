@@ -374,8 +374,7 @@ internal fun <T> runCancellableTransferQueue(
 }
 
 internal fun transferProgressPercent(declaredSize: Long?, written: Long): Int? = when {
-    declaredSize == null || declaredSize < 0L -> null
-    declaredSize == 0L -> 100
+    declaredSize == null || declaredSize <= 0L -> null
     else -> ((written.toDouble() / declaredSize) * 100).toInt().coerceIn(0, 100)
 }
 
