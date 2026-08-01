@@ -24,8 +24,7 @@ const val EXTRA_PROFILE_USER_ID = "com.yzddmr6.prismspace.extra.PROFILE_USER_ID"
 internal object CoreBridgeOperations {
     fun queryProfileProvisioningFacts(context: Context) = ProfileProvisioningFactsDto(
         profileOwner = DevicePolicies(context).isProfileOwner,
-        provisionComplete = PreferenceManager.getDefaultSharedPreferences(context)
-            .getInt(PROVISION_STATE_KEY, 0) > PROVISION_STATE_STARTED,
+        provisionComplete = isProfileProvisioningComplete(context),
     )
 
     fun triggerIncrementalProvisioning(context: Context): Boolean {
@@ -101,6 +100,10 @@ internal object CoreBridgeOperations {
         is LaunchResult.Unknown -> LaunchOutcomeDto(LaunchOutcomeKind.Unknown, reason)
     }
 }
+
+fun isProfileProvisioningComplete(context: Context): Boolean =
+    PreferenceManager.getDefaultSharedPreferences(context)
+        .getInt(PROVISION_STATE_KEY, 0) > PROVISION_STATE_STARTED
 
 /** The only irreversible profile-local data erasure primitive. */
 object ProfileWipe {

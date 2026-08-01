@@ -35,9 +35,15 @@ object BridgeTargets {
         val valid = if (handle == Users.current()) {
             !Users.isParentProfile() && DevicePolicies(context).isProfileOwner
         } else {
-            Users.isParentProfile() && runCatching { Users.isProfileManagedByPrism(context, handle) }.getOrDefault(false)
+            Users.isParentProfile() && isManagedProfileCurrent(context, handle)
         }
         return handle.takeIf { valid }?.let(ProfileTarget::validated)
+    }
+
+    private fun isManagedProfileCurrent(context: Context, handle: UserHandle): Boolean {
+        if (runCatching { Users.isProfileManagedByPrism(context, handle) }.getOrDefault(false)) return true
+        runCatching { Users.refreshUsers(context) }.getOrElse { return false }
+        return runCatching { Users.isProfileManagedByPrism(context, handle) }.getOrDefault(false)
     }
 
     fun parent(context: Context): ParentTarget? {

@@ -2,6 +2,7 @@ package com.yzddmr6.prismspace.bridge
 
 import android.content.Context
 import android.content.Intent
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -67,6 +68,15 @@ class BridgeProtocolContractTest {
         assertTrue(accumulator.accept(ProfileAppPage(listOf(first), hasMore = true)))
         assertTrue(!accumulator.accept(ProfileAppPage(listOf(second), hasMore = false)))
         assertEquals(listOf(first, second), accumulator.entries)
+    }
+
+    @Test fun profileTargetRechecksARejectedCacheEntryAgainstCurrentUsers() {
+        val source = File("src/main/java/com/yzddmr6/prismspace/bridge/BridgeTargets.kt").readText()
+        val helper = source.substringAfter("private fun isManagedProfileCurrent")
+            .substringBefore("fun parent")
+
+        assertTrue(helper.indexOf("Users.isProfileManagedByPrism") < helper.indexOf("Users.refreshUsers"))
+        assertTrue(helper.lastIndexOf("Users.isProfileManagedByPrism") > helper.indexOf("Users.refreshUsers"))
     }
 
     private object FakeAppControlPort : AppControlPort {

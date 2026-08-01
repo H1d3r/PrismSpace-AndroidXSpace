@@ -53,6 +53,7 @@ import android.widget.Toast;
 import androidx.annotation.Nullable;
 import androidx.annotation.WorkerThread;
 
+import com.yzddmr6.prismspace.PrismNameManager;
 import com.yzddmr6.prismspace.util.Dialogs;
 import com.yzddmr6.prismspace.analytics.Analytics;
 import com.yzddmr6.prismspace.api.Api;
@@ -179,6 +180,8 @@ public class PrismProvisioning extends IntentService {
 			Log.d(TAG, "Enable profile now.");
 			policies.execute(DevicePolicyManager::setProfileEnabled);
 		}
+		if (! PrismNameManager.syncNameToParentProfile(context))
+			Log.w(TAG, "Failed to synchronize the profile name after provisioning.");
 		Analytics.$().event("profile_post_provision_done").send();
 
 		prefs.edit().putInt(PREF_KEY_PROVISION_STATE, POST_PROVISION_REV).apply();

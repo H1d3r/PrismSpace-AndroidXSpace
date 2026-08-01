@@ -62,14 +62,20 @@ object PrismNameManager {
 		return if (user != null) "$key.${user.toId()}" else key
 	}
 
-	@ProfileUser fun setName(context: Context, name: String) {  // Extra spaces for better readability in system UI (e.g. app Uninstall confirmation dialog)
+	@ProfileUser fun setName(context: Context, name: String) = applyName(context, name, syncToParent = true)
+
+	// Extra spaces improve readability in system UI (for example, app uninstall confirmation).
+	@ProfileUser private fun applyName(context: Context, name: String, syncToParent: Boolean) {
 		DevicePolicies(context).invoke(DevicePolicyManager::setProfileName, " $name ")
 		saveProfileName(context, null, name)
 		sendProtectedBroadcastInternally(context, Intent(ACTION_USER_INFO_CHANGED).putExtra(EXTRA_USER_HANDLE, Users.currentId()))
-		syncNameToParentProfile(context, name)
+		if (syncToParent) syncNameToParentProfile(context, name)
 	}
 
-	@ProfileUser fun syncNameToParentProfile(context: Context, name: String = getName(context)): Boolean {
+	@ProfileUser @JvmStatic @JvmOverloads fun syncNameToParentProfile(
+		context: Context,
+		name: String = getName(context),
+	): Boolean {
 		val profile = Users.current()
 		val target = com.yzddmr6.prismspace.bridge.BridgeTargets.parent(context) ?: return false
 		return com.yzddmr6.prismspace.bridge.Bridge.inParent(context, target)
@@ -80,7 +86,8 @@ object PrismNameManager {
 	class NameInitializer: BroadcastReceiver() {
 
 		override fun onReceive(context: Context, intent: Intent?) {
-			if (intent?.action == Intent.ACTION_USER_INITIALIZE) setName(context, getDefaultName(context))
+			if (intent?.action == Intent.ACTION_USER_INITIALIZE)
+				applyName(context, getDefaultName(context), syncToParent = false)
 		}
 	}
 }

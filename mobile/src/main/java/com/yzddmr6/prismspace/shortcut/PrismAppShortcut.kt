@@ -60,6 +60,7 @@ import com.yzddmr6.prismspace.bridge.RefreshShortcutInParent
 import com.yzddmr6.prismspace.bridge.RemoveShortcutsInParent
 import com.yzddmr6.prismspace.bridge.ShortcutPort
 import com.yzddmr6.prismspace.bridge.UpdateAllShortcutsInProfile
+import com.yzddmr6.prismspace.bridge.isProfileProvisioningComplete
 import com.yzddmr6.prismspace.settings.PrismSettings
 import com.yzddmr6.prismspace.util.DevicePolicies
 import com.yzddmr6.prismspace.util.LifecycleActivity
@@ -228,6 +229,9 @@ object PrismAppShortcut {
 	@ProfileUser @RequiresApi(O) class ShortcutSyncService: Service() {
 
 		private val mPackageObserver = object: BroadcastReceiver() { override fun onReceive(context: Context, intent: Intent) {
+			// A new profile cannot have pinned shortcuts yet. Package broadcasts emitted while Android
+			// is still provisioning it also arrive before the parent can resolve this profile.
+			if (! isProfileProvisioningComplete(context)) return
 			val pkg = intent.data?.schemeSpecificPart ?: return
 			if (intent.getBooleanExtra(EXTRA_REPLACING, false)) return  // Ignore package removal during replacing
 			Log.d(TAG, "Package event: $intent")
