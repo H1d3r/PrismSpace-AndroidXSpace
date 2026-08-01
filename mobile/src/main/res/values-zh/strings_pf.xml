@@ -5,7 +5,7 @@
     <string name="lz_pf_entry_hero_body_warn">本工作资料未授予 PrismSpace 管理权限，请在主空间重新配置。</string>
     <string name="lz_pf_entry_hero_tag_warn">异常</string>
     <string name="lz_pf_entry_export_title">把文件传到主空间</string>
-    <string name="lz_pf_entry_export_summary">在应用里点「分享」→ 切「个人」标签 → 选「导入到此空间 PrismSpace」</string>
+    <string name="lz_pf_entry_export_summary">点「分享」→ 选「导入到此空间 PrismSpace」→ 在 PrismSpace 内选「发送到另一空间」</string>
     <string name="lz_pf_entry_footer">管理与设置请在主空间 PrismSpace 应用中进行。</string>
     <string name="lz_pf_entry_topbar">双开空间</string>
     <string name="lz_pf_entry_back_hint">想回到主空间？用系统的「最近任务」或桌面的个人 / 工作切换器切回即可。</string>
@@ -18,10 +18,10 @@
     <string name="lz_pf_direction_to_main">传到主空间</string>
     <string name="lz_pf_direction_to_profile">传到双开空间</string>
     <string name="lz_pf_files_step1">在任意应用里选中文件，点系统的「分享」。</string>
-    <string name="lz_pf_files_step2">在分享面板切换「个人 / 工作」标签，选择目标空间。</string>
-    <string name="lz_pf_files_step3">选择「导入到此空间 PrismSpace」。</string>
-    <string name="lz_pf_files_step4">选择要保存到的文件夹，完成。</string>
-    <string name="lz_pf_files_tab_hint">「个人」标签 = 存到主空间；「工作」标签 = 存到双开空间。两个方向都用这一种方式。</string>
+    <string name="lz_pf_files_step2">在分享面板选择「导入到此空间 PrismSpace」；找不到时再切换「个人 / 工作」标签。</string>
+    <string name="lz_pf_files_step3">在 PrismSpace 内选择「保存到本空间」或「发送到另一空间」。</string>
+    <string name="lz_pf_files_step4">等待明确的成功或分类失败结果。</string>
+    <string name="lz_pf_files_tab_hint">最终保存空间以 PrismSpace 内的选择为准。部分系统打开接收入口时不会保留分享面板的「个人 / 工作」标签。</string>
     <string name="lz_pf_files_history_title">传输记录</string>
     <string name="lz_pf_files_clear">清空</string>
     <string name="lz_pf_files_clear_confirm_title">清空传输记录？</string>

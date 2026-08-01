@@ -4,4 +4,9 @@
     <string name="lz_pf_files_send_other_summary">可一次選擇多個檔案，PrismSpace 將透過空間橋依序傳輸。</string>
     <string name="lz_pf_direction_to_main">傳到主空間</string>
     <string name="lz_pf_direction_to_profile">傳到雙開空間</string>
+    <string name="lz_pf_entry_export_summary">點「分享」→ 選「匯入到此空間 PrismSpace」→ 在 PrismSpace 內選「傳送到另一空間」</string>
+    <string name="lz_pf_files_step2">在分享面板選擇「匯入到此空間 PrismSpace」；找不到時再切換「個人 / 工作」標籤。</string>
+    <string name="lz_pf_files_step3">在 PrismSpace 內選擇「儲存到本空間」或「傳送到另一空間」。</string>
+    <string name="lz_pf_files_step4">等待明確的成功或分類失敗結果。</string>
+    <string name="lz_pf_files_tab_hint">最終儲存空間以 PrismSpace 內的選擇為準。部分系統開啟接收入口時不會保留分享面板的「個人 / 工作」標籤。</string>
 </resources>

@@ -25,6 +25,23 @@ class FileTransferResourceContractTest {
         }
     }
 
+    @Test
+    fun `share guidance makes the in-app choice authoritative`() {
+        val root = findProjectRoot()
+        listOf(
+            "mobile/src/main/res/values/strings_pf.xml",
+            "mobile/src/main/res/values-zh/strings_pf.xml",
+            "mobile/src/main/res/values-zh-rTW/strings_pf_transfer.xml",
+        ).forEach { relativePath ->
+            val path = root.resolve(relativePath)
+            val targetHint = readString(path, "lz_pf_files_tab_hint")
+            val targetStep = readString(path, "lz_pf_files_step3")
+            assertTrue("target hint should name PrismSpace as the authority in $relativePath", targetHint.contains("PrismSpace"))
+            assertTrue("target step should expose the other-space choice in $relativePath", targetStep.contains("另一") || targetStep.contains("other space"))
+            assertFalse("share tabs must not be described as a target-space equality in $relativePath", targetHint.contains("tab =") || targetHint.contains("标签 =") || targetHint.contains("標籤 ="))
+        }
+    }
+
     private fun readString(path: Path, name: String): String {
         assertTrue("resource file exists: $path", Files.exists(path))
         val nodes = DocumentBuilderFactory.newInstance()
