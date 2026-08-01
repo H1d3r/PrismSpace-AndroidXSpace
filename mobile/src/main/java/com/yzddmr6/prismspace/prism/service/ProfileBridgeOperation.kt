@@ -1,8 +1,14 @@
+@file:Suppress("DEPRECATION_ERROR")
+
 package com.yzddmr6.prismspace.prism.service
 
 import android.content.Context
 import android.os.UserHandle
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
+import com.yzddmr6.prismspace.bridge.Bridge
+import com.yzddmr6.prismspace.bridge.BridgeTargets
+import com.yzddmr6.prismspace.bridge.ProfileCommand
+import com.yzddmr6.prismspace.bridge.ProfileTarget
 import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.shuttle.Shuttle
 import com.yzddmr6.prismspace.shuttle.ShuttleNotReadyCause
@@ -11,6 +17,29 @@ import com.yzddmr6.prismspace.shuttle.ShuttleProvider
 import com.yzddmr6.prismspace.util.PrismLocale
 import com.yzddmr6.prismspace.util.Users
 import com.yzddmr6.prismspace.util.Users.Companion.toId
+
+internal fun <R> runProfileBridgeOperation(
+    context: Context,
+    tag: String,
+    operation: String,
+    target: ProfileTarget? = BridgeTargets.profile(context),
+    timeoutMs: Long? = null,
+    command: ProfileCommand<R>,
+): ProfileBridgeResult<R> {
+    val profileTarget = target ?: return ProfileBridgeResult.SpaceMissing
+    val profile = com.yzddmr6.prismspace.util.UserHandles.of(profileTarget.userId)
+    if (profile == Users.current()) {
+        DiagnosticLog.i(tag, "$operation local profile=${profileTarget.userId}")
+        return ProfileBridgeResult.from(Bridge.inProfile(context, profileTarget).execute(command, timeoutMs))
+    }
+    val health = ShuttleProvider.health(context, profile)
+    DiagnosticLog.i(
+        tag,
+        "$operation preflight profile=${profileTarget.userId} ${health.diagnosticLine()}",
+    )
+    if (!health.available) return ProfileBridgeResult.from(health.ping).asFailureResult()
+    return ProfileBridgeResult.from(Bridge.inProfile(context, profileTarget).execute(command, timeoutMs))
+}
 
 internal sealed class ProfileBridgeResult<out R> {
     data class Value<out R>(val value: R?) : ProfileBridgeResult<R>()

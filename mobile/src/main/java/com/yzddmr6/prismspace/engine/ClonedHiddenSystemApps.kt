@@ -10,10 +10,12 @@ import android.os.UserHandle
 import android.os.UserManager
 import android.util.Log
 import androidx.annotation.WorkerThread
-import com.yzddmr6.prismspace.controller.PrismAppControl
+import com.yzddmr6.prismspace.bridge.BridgeTargets
+import com.yzddmr6.prismspace.bridge.SetPackagesSuspended
 import com.yzddmr6.prismspace.data.helper.hidden
 import com.yzddmr6.prismspace.data.helper.suspended
-import com.yzddmr6.prismspace.shuttle.Shuttle
+import com.yzddmr6.prismspace.prism.service.ProfileBridgeResult
+import com.yzddmr6.prismspace.prism.service.runProfileBridgeOperation
 import com.yzddmr6.prismspace.util.DevicePolicies
 import com.yzddmr6.prismspace.util.LauncherAppsCompat
 import com.yzddmr6.prismspace.util.OwnerUser
@@ -39,10 +41,19 @@ import kotlinx.coroutines.launch
 		}.toTypedArray()
 		if (pkgsToSuspend.isEmpty()) return
 
-		Shuttle(context, to = profile).launch {
-			PrismAppControl.setPackagesSuspended(this, pkgsToSuspend, true).apply {
+		when (val result = runProfileBridgeOperation(
+			context,
+			TAG,
+			"migrate hidden system apps count=${pkgsToSuspend.size}",
+			target = BridgeTargets.profile(context, profile.hashCode()),
+			command = SetPackagesSuspended(pkgsToSuspend.toList(), true),
+		)) {
+			is ProfileBridgeResult.Value -> result.value.orEmpty().apply {
 				if (isEmpty()) Log.i(TAG, "Migration finished")
-				else Log.w(TAG, "${pkgsToSuspend.size - size} migrated but $size failed: $this") }}
+				else Log.w(TAG, "${pkgsToSuspend.size - size} migrated but $size failed: ${contentToString()}")
+			}
+			else -> Log.w(TAG, "Migration skipped: $result")
+		}
 	}
 
 	private val mLauncherApps by lazy { LauncherAppsCompat(context) }

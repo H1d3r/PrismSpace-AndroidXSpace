@@ -10,6 +10,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
+@Deprecated("Use the typed Bridge command protocol", level = DeprecationLevel.ERROR)
 class Shuttle(val context: Context, val to: UserHandle) {
 
 	/** @return Job if launched in coroutine, otherwise null. */

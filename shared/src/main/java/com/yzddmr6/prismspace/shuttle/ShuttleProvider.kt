@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION_ERROR")
+
 package com.yzddmr6.prismspace.shuttle
 
 import android.app.Activity
@@ -12,6 +14,11 @@ import android.util.Log
 import android.util.Size
 import android.util.SizeF
 import android.util.SparseArray
+import com.yzddmr6.prismspace.bridge.BridgeCommand
+import com.yzddmr6.prismspace.bridge.BridgeDispatcher
+import com.yzddmr6.prismspace.bridge.BridgeTargets
+import com.yzddmr6.prismspace.bridge.BridgeWire
+import com.yzddmr6.prismspace.bridge.Ping
 import com.yzddmr6.prismspace.util.UserHandles
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
 import com.yzddmr6.prismspace.analytics.analytics
@@ -25,6 +32,43 @@ import java.io.Serializable
 class ShuttleProvider: ContentProvider() {
 
 	companion object {
+
+		fun <R> call(context: Context, target: UserHandle, command: BridgeCommand<R>): ShuttleOutcome<R> {
+			val targetUser = target.toId()
+			if (!isReady(context, target)) {
+				DiagnosticLog.w(
+					TAG,
+					"Bridge call skipped operation=${command.id} targetUser=$targetUser cause=${ShuttleNotReadyCause.PermissionDenied}",
+				)
+				return ShuttleOutcome.NotReady(ShuttleNotReadyCause.PermissionDenied)
+			}
+			val uri = buildCrossProfileUri(targetUser)
+			return try {
+				val response = requireNotNull(
+					context.contentResolver.call(uri, BridgeWire.methodName(command), null, BridgeWire.request(command)),
+				) { "Missing bridge response for ${command.id}" }
+				ShuttleOutcome.Value(BridgeWire.decode(command, response))
+			} catch (error: RuntimeException) {
+				val permissionGranted = isReady(context, target)
+				val cause = classifyShuttleNotReadyCause(error, permissionGranted)
+				if (cause != null) {
+					DiagnosticLog.w(
+						TAG,
+						"Bridge call failed operation=${command.id} targetUser=$targetUser " +
+							"exception=${error.javaClass.name} cause=$cause permissionGranted=$permissionGranted",
+						error,
+					)
+					ShuttleOutcome.NotReady(cause)
+				} else {
+					DiagnosticLog.w(
+						TAG,
+						"Bridge execution failed operation=${command.id} targetUser=$targetUser exception=${error.javaClass.name}",
+						error,
+					)
+					ShuttleOutcome.Failed(error)
+				}
+			}
+		}
 
 		fun <R> call(context: Context, profile: UserHandle, function: ContextFun<R>): ShuttleResult<R> {
 			val functionFqn = function.javaClass.name
@@ -89,7 +133,9 @@ class ShuttleProvider: ContentProvider() {
 					!running -> ShuttleOutcome.Skipped("profile_not_running")
 					!unlocked -> ShuttleOutcome.Skipped("profile_locked")
 					!forwardGrant -> ShuttleOutcome.NotReady(ShuttleNotReadyCause.PermissionDenied)
-					else -> Shuttle(context, to = profile).invokeOutcomeWithin(timeoutMs) { true }
+					else -> BridgeTargets.profile(context, profile.toId())
+						?.let { com.yzddmr6.prismspace.bridge.Bridge.inProfile(context, it).execute(Ping, timeoutMs) }
+						?: ShuttleOutcome.Skipped("profile_missing")
 				}
 				return ShuttleHealth(
 					profile.toId(),
@@ -178,6 +224,21 @@ class ShuttleProvider: ContentProvider() {
 	}
 
 	override fun call(method: String, arg: String?, extras: Bundle?): Bundle? {
+		if (extras?.containsKey(BridgeWire.KEY_COMMAND) == true) {
+			val command = requireNotNull(BridgeWire.readCommand(extras)) { "Missing bridge command" }
+			if (method != command.id) {
+				return com.yzddmr6.prismspace.bridge.BridgeWire.invalidRequest(
+					command.id,
+					"method=$method",
+				)
+			}
+			val token = Binder.clearCallingIdentity()
+			return try {
+				BridgeDispatcher.dispatch(context, command)
+			} finally {
+				Binder.restoreCallingIdentity(token)
+			}
+		}
 		val closure = requireNotNull(extras?.apply { classLoader = Closure::class.java.classLoader }?.getParcelable<Closure>(null)) { "Missing extra" }
 		val token = Binder.clearCallingIdentity()
 		val result = try {

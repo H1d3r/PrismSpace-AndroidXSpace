@@ -15,6 +15,8 @@ import android.os.Build.VERSION.SDK_INT
 import android.os.Build.VERSION_CODES
 import android.os.Build.VERSION_CODES.P
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
+import com.yzddmr6.prismspace.bridge.BridgeTargets
+import com.yzddmr6.prismspace.bridge.EnableSystemApp
 import androidx.annotation.IntDef
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -228,8 +230,9 @@ class PrismAppClones(val activity: FragmentActivity, val vm: AndroidViewModel, v
 						context,
 						TAG,
 						"enable system app pkg=$pkg",
-						target = target,
-					) { DevicePolicies(this).enableSystemApp(pkg) }) {
+						target = BridgeTargets.profile(context, target.toId()),
+						command = EnableSystemApp(pkg),
+					)) {
 						is ProfileBridgeResult.Value -> result.value == true
 						else -> {
 							feedback(

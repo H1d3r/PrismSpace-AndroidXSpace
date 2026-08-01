@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION_ERROR")
+
 package com.yzddmr6.prismspace.prism.compose.space
 
 import android.content.Context

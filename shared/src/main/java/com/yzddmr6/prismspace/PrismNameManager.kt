@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION_ERROR")
+
 package com.yzddmr6.prismspace
 
 import android.app.admin.DevicePolicyManager

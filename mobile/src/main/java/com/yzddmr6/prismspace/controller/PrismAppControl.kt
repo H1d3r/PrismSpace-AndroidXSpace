@@ -15,6 +15,15 @@ import com.yzddmr6.prismspace.util.Apps
 import com.yzddmr6.prismspace.analytics.Analytics.Param.ITEM_CATEGORY
 import com.yzddmr6.prismspace.analytics.Analytics.Param.ITEM_ID
 import com.yzddmr6.prismspace.analytics.analytics
+import com.yzddmr6.prismspace.bridge.BridgeTargets
+import com.yzddmr6.prismspace.bridge.EnsureAppFreeToLaunch
+import com.yzddmr6.prismspace.bridge.EnsureAppHiddenState
+import com.yzddmr6.prismspace.bridge.MarkClonedSystemApp
+import com.yzddmr6.prismspace.bridge.ProfileCommand
+import com.yzddmr6.prismspace.bridge.SetAppFrozen
+import com.yzddmr6.prismspace.bridge.SetPackageSuspended
+import com.yzddmr6.prismspace.bridge.SetPackagesFrozen
+import com.yzddmr6.prismspace.bridge.SetPackagesSuspended
 import com.yzddmr6.prismspace.data.PrismAppInfo
 import com.yzddmr6.prismspace.data.helper.AppStateTrackingHelper
 import com.yzddmr6.prismspace.engine.ClonedHiddenSystemApps
@@ -35,6 +44,7 @@ import com.yzddmr6.prismspace.util.OwnerUser
 import com.yzddmr6.prismspace.util.ProfileUser
 import com.yzddmr6.prismspace.util.Toasts
 import com.yzddmr6.prismspace.util.Users
+import com.yzddmr6.prismspace.util.Users.Companion.toId
 import org.jetbrains.annotations.NotNull
 
 object PrismAppControl {
@@ -71,9 +81,10 @@ object PrismAppControl {
 			context,
 			TAG,
 			"unfreeze before launch pkg=$pkg",
-			target = app.user,
+			target = BridgeTargets.profile(context, app.user.toId()),
 			timeoutMs = DEFAULT_SYNC_TIMEOUT_MS,
-		) { PrismManager.ensureAppFreeToLaunch(this, pkg) }) {
+			command = EnsureAppFreeToLaunch(pkg),
+		)) {
 			is ProfileBridgeResult.Value -> result.value
 			else -> return toastBridgeFailure(context, result)
 		}
@@ -114,18 +125,16 @@ object PrismAppControl {
 
 	@JvmStatic fun freeze(app: PrismAppInfo): Boolean {
 		val pkg = app.packageName
-		val frozen = runAppControl(app.context(), app.user, "freeze pkg=$pkg") {
-			ensureAppHiddenState(this, pkg, true)
-		} ?: false
+		val frozen = runAppControl(app.context(), app.user, "freeze pkg=$pkg", SetAppFrozen(pkg, true)) ?: false
 		if (frozen && app.isSystem) stopTreatingHiddenSysAppAsDisabled(app)
 		return frozen
 	}
 
 	@JvmStatic fun unfreeze(app: PrismAppInfo) = unfreeze(app.context(), app.user, app.packageName)
 	private fun unfreeze(context: Context, profile: UserHandle, pkg: String) =
-		runAppControl(context, profile, "unfreeze pkg=$pkg") { ensureAppHiddenState(this, pkg, false) }
+		runAppControl(context, profile, "unfreeze pkg=$pkg", SetAppFrozen(pkg, false))
 
-	@OwnerUser @ProfileUser private fun ensureAppHiddenState(context: Context, pkg: String, hidden: Boolean): Boolean {
+	@OwnerUser @ProfileUser internal fun setAppFrozenLocally(context: Context, pkg: String, hidden: Boolean): Boolean {
 		val policies = DevicePolicies(context)
 		// Same hide+suspend hybrid as the whole-space freeze. Only toast on genuine failure.
 		if (applyFrozenWithFallback(policies, pkg, hidden)) return true
@@ -138,12 +147,11 @@ object PrismAppControl {
 
 	@JvmStatic fun setSuspended(app: PrismAppInfo, suspended: Boolean): Boolean {
 		val pkg = app.packageName
-		return runAppControl(app.context(), app.user, "set suspended pkg=$pkg suspended=$suspended") {
-			setPackageSuspended(this, pkg, suspended)
-		} == true
+		return runAppControl(
+			app.context(), app.user, "set suspended pkg=$pkg suspended=$suspended",
+			SetPackageSuspended(pkg, suspended),
+		) == true
 	}
-	private fun setPackageSuspended(context: Context, pkg: String, suspended: Boolean)
-			= setPackagesSuspended(context, arrayOf(pkg), suspended).isEmpty()
 	fun setPackagesSuspended(context: Context, pkgs: Array<String>, suspended: Boolean): Array<String>
 			= DevicePolicies(context).invoke(DevicePolicyManager::setPackagesSuspended, pkgs, suspended)
 
@@ -154,9 +162,11 @@ object PrismAppControl {
 	@JvmStatic fun setSpaceSuspended(apps: List<PrismAppInfo>, suspended: Boolean): Array<String>? {
 		if (apps.isEmpty()) return emptyArray()
 		val pkgs = apps.map { it.packageName }.toTypedArray()
-		return runAppControl(apps.first().context(), apps.first().user, "set space suspended count=${pkgs.size} suspended=$suspended") {
-			setPackagesSuspended(this, pkgs, suspended)
-		}
+		return runAppControl(
+			apps.first().context(), apps.first().user,
+			"set space suspended count=${pkgs.size} suspended=$suspended",
+			SetPackagesSuspended(pkgs.toList(), suspended),
+		)
 	}
 
 	/** Whole-space freeze: hide every user clone of one dual space, routed through
@@ -167,10 +177,11 @@ object PrismAppControl {
 	@JvmStatic fun setSpaceFrozen(apps: List<PrismAppInfo>, frozen: Boolean): Array<String>? {
 		if (apps.isEmpty()) return emptyArray()
 		val pkgs = apps.map { it.packageName }.toTypedArray()
-		return runAppControl(apps.first().context(), apps.first().user, "set space frozen count=${pkgs.size} frozen=$frozen") {
-			val policies = DevicePolicies(this)
-			pkgs.filter { pkg -> ! applyFrozenWithFallback(policies, pkg, frozen) }.toTypedArray()
-		}
+		return runAppControl(
+			apps.first().context(), apps.first().user,
+			"set space frozen count=${pkgs.size} frozen=$frozen",
+			SetPackagesFrozen(pkgs.toList(), frozen),
+		)
 	}
 
 	/** Freeze/unfreeze [pkg] resiliently across OEM quirks.
@@ -192,23 +203,44 @@ object PrismAppControl {
 		}
 	}
 
+	@OwnerUser @ProfileUser internal fun setPackagesFrozenLocally(
+		context: Context,
+		packageNames: List<String>,
+		frozen: Boolean,
+	): Array<String> {
+		val policies = DevicePolicies(context)
+		return packageNames.filter { pkg -> !applyFrozenWithFallback(policies, pkg, frozen) }.toTypedArray()
+	}
+
 	@JvmStatic fun unfreezeInitiallyFrozenSystemApp(app: PrismAppInfo): Boolean? {
 		val pkg = app.packageName
-		return runAppControl(app.context(), app.user, "unfreeze initial system pkg=$pkg") {
-			PrismManager.ensureAppHiddenState(this, pkg, false)
-		}
+		return runAppControl(
+			app.context(), app.user, "unfreeze initial system pkg=$pkg",
+			EnsureAppHiddenState(pkg, false),
+		)
 			?.also { if (it) stopTreatingHiddenSysAppAsDisabled(app) }
 	}
 
 	private fun stopTreatingHiddenSysAppAsDisabled(app: PrismAppInfo): Boolean? {
 		val pkg = app.packageName
-		return runAppControl(app.context(), app.user, "mark hidden system cloned pkg=$pkg") {
-			ClonedHiddenSystemApps.setCloned(this, pkg)
-		}
+		return runAppControl(
+			app.context(), app.user, "mark hidden system cloned pkg=$pkg",
+			MarkClonedSystemApp(pkg),
+		)
 	}
 
-	private fun <T> runAppControl(context: Context, profile: UserHandle, operation: String, block: Context.() -> T): T? =
-		when (val result = runProfileBridgeOperation(context, TAG, operation, target = profile, block = block)) {
+	private fun <T> runAppControl(
+		context: Context,
+		profile: UserHandle,
+		operation: String,
+		command: ProfileCommand<T>,
+	): T? = when (val result = runProfileBridgeOperation(
+		context,
+		TAG,
+		operation,
+		target = BridgeTargets.profile(context, profile.toId()),
+		command = command,
+	)) {
 			is ProfileBridgeResult.Value -> result.value
 			else -> null.also { toastBridgeFailure(context, result) }
 		}
