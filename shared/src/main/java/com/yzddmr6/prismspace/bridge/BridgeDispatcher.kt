@@ -114,6 +114,18 @@ internal object BridgeDispatcher {
                 command,
                 CoreBridgeOperations.openAppDetails(context, command.packageName),
             )
+            OpenDiagnosticsSnapshot -> success(
+                OpenDiagnosticsSnapshot,
+                CoreBridgeOperations.openDiagnosticsSnapshot(context),
+            )
+            is ReadDiagnosticsChunk -> success(
+                command,
+                CoreBridgeOperations.readDiagnosticsChunk(context, command.token, command.offset),
+            )
+            is CloseDiagnosticsSnapshot -> success(
+                command,
+                CoreBridgeOperations.closeDiagnosticsSnapshot(context, command.token),
+            )
         }
     } catch (error: Throwable) {
         failure(command.id, BridgeErrorCategory.ExecutionFailed, error.javaClass.name + ": " + error.message.orEmpty())

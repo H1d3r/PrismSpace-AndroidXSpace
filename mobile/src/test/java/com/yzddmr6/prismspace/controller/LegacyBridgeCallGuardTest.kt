@@ -58,8 +58,6 @@ class LegacyBridgeCallGuardTest {
     private companion object {
         val MODULES = listOf("shared", "mobile", "installer", "open", "watcher")
         val DIRECT_SHUTTLE_WHITELIST = mapOf(
-            // Diagnostics migrates directly to chunk commands in diagnostics-chunked-transfer.
-            "mobile/src/main/java/com/yzddmr6/prismspace/prism/compose/vm/SettingsViewModel.kt" to 1,
             "mobile/src/main/java/com/yzddmr6/prismspace/prism/service/ProfileBridgeOperation.kt" to 3,
         )
         val PROFILE_BRIDGE_CLOSURE_WHITELIST = emptyMap<String, Int>()

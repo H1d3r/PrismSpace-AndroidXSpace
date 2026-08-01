@@ -84,6 +84,17 @@ class BridgeCommandParcelTest {
             )
             assertRoundTrip(LaunchAppInProfile("pkg", true), true)
             assertRoundTrip(OpenAppDetailsInProfile("pkg"), Unit)
+            val diagnosticToken = "00000000-0000-0000-0000-000000000000"
+            assertRoundTrip(
+                OpenDiagnosticsSnapshot,
+                DiagnosticsSnapshotSessionDto(diagnosticToken, 512L),
+            )
+            assertRoundTrip(
+                ReadDiagnosticsChunk(diagnosticToken, 256L),
+                DiagnosticsChunkDto(byteArrayOf(1, 2, 3), eof = true),
+            )
+            assertRoundTrip(ReadDiagnosticsChunk(diagnosticToken, 512L), DiagnosticsSnapshotInvalid)
+            assertRoundTrip(CloseDiagnosticsSnapshot(diagnosticToken), Unit)
         } finally {
             writePipe.forEach(ParcelFileDescriptor::close)
             readPipe.forEach(ParcelFileDescriptor::close)
@@ -135,6 +146,10 @@ class BridgeCommandParcelTest {
             expected is SelfTestResultDto && actual is SelfTestResultDto -> {
                 assertArrayEquals(expected.bytes, actual.bytes)
                 assertEquals(expected.location, actual.location)
+            }
+            expected is DiagnosticsChunkDto && actual is DiagnosticsChunkDto -> {
+                assertArrayEquals(expected.bytes, actual.bytes)
+                assertEquals(expected.eof, actual.eof)
             }
             expected is WriteSessionDto && actual is WriteSessionDto -> {
                 assertEquals(expected.uri, actual.uri)

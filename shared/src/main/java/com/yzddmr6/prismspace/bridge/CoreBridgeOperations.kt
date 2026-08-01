@@ -10,6 +10,7 @@ import android.preference.PreferenceManager
 import android.provider.Settings
 import com.yzddmr6.prismspace.PrismNameManager
 import com.yzddmr6.prismspace.appops.AppOpsHelper
+import com.yzddmr6.prismspace.analytics.DiagnosticLog
 import com.yzddmr6.prismspace.engine.LaunchResult
 import com.yzddmr6.prismspace.engine.PrismManager
 import com.yzddmr6.prismspace.shuttle.ShuttleProvider
@@ -88,6 +89,19 @@ internal object CoreBridgeOperations {
         ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
     }
+
+    fun openDiagnosticsSnapshot(context: Context): DiagnosticsSnapshotSessionDto =
+        DiagnosticLog.openChunkedSnapshot(context).let { session ->
+            DiagnosticsSnapshotSessionDto(session.token, session.totalLength)
+        }
+
+    fun readDiagnosticsChunk(context: Context, token: String, offset: Long): DiagnosticsChunkResultDto =
+        DiagnosticLog.readChunkedSnapshot(context, token, offset, DIAGNOSTICS_CHUNK_BYTES)
+            ?.let { DiagnosticsChunkDto(it.bytes, it.eof) }
+            ?: DiagnosticsSnapshotInvalid
+
+    fun closeDiagnosticsSnapshot(context: Context, token: String) =
+        DiagnosticLog.closeChunkedSnapshot(context, token)
 
     private fun LaunchResult.toDto() = when (this) {
         LaunchResult.Ok -> LaunchOutcomeDto(LaunchOutcomeKind.Ok)

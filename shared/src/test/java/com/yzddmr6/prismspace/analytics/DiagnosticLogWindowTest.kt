@@ -1,11 +1,34 @@
 package com.yzddmr6.prismspace.analytics
 
+import com.yzddmr6.prismspace.bridge.DIAGNOSTICS_CHUNK_BYTES
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 class DiagnosticLogWindowTest {
+
+    @Test fun snapshotChunksUseBoundedReadsAndExactBoundaryEof() {
+        val input = ByteArray(DIAGNOSTICS_CHUNK_BYTES + 17) { (it % 251).toByte() }
+        val file = File.createTempFile("diagnostic-snapshot", ".tmp")
+        try {
+            file.writeBytes(input)
+            val first = DiagnosticLog.readSnapshotChunk(file, 0, DIAGNOSTICS_CHUNK_BYTES)
+            assertEquals(DIAGNOSTICS_CHUNK_BYTES, first.bytes.size)
+            assertFalse(first.eof)
+            val second = DiagnosticLog.readSnapshotChunk(file, first.bytes.size.toLong(), DIAGNOSTICS_CHUNK_BYTES)
+            assertArrayEquals(input.copyOfRange(DIAGNOSTICS_CHUNK_BYTES, input.size), second.bytes)
+            assertTrue(second.eof)
+            val boundary = DiagnosticLog.readSnapshotChunk(file, input.size.toLong(), DIAGNOSTICS_CHUNK_BYTES)
+            assertEquals(0, boundary.bytes.size)
+            assertTrue(boundary.eof)
+        } finally {
+            file.delete()
+        }
+    }
 
     @Test fun trimKeepsInputWhenAlreadyUnderLimit() {
         val input = ByteArray(128) { it.toByte() }

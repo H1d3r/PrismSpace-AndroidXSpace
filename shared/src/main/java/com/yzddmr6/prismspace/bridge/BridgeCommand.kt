@@ -99,7 +99,7 @@ object BridgeCommandCatalog {
         EnsureAppFreeToLaunch("example"),
         MarkClonedSystemApp("example"),
         EnableSystemApp("example"),
-    ) + FILE_BRIDGE_COMMAND_SAMPLES + SPACE_AND_SHORTCUT_COMMAND_SAMPLES
+    ) + FILE_BRIDGE_COMMAND_SAMPLES + SPACE_AND_SHORTCUT_COMMAND_SAMPLES + DIAGNOSTICS_COMMAND_SAMPLES
 }
 
 internal const val RESULT = "result"

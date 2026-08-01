@@ -47,6 +47,15 @@ class BridgeProtocolContractTest {
         assertEquals(MAX_PROFILE_APP_PAGE_SIZE, clampProfileAppPageSize(Int.MAX_VALUE))
     }
 
+    @Test fun diagnosticsChunkSizeCannotBeSelectedByCaller() {
+        val payloadFields = ReadDiagnosticsChunk::class.java.declaredFields
+            .filterNot { java.lang.reflect.Modifier.isStatic(it.modifiers) }
+            .map { it.name }
+        assertEquals(setOf("token", "offset"), payloadFields.toSet())
+        assertEquals(2, payloadFields.size)
+        assertTrue(DIAGNOSTICS_CHUNK_BYTES < 1024 * 1024)
+    }
+
     @Test fun profileAppPageAccumulatorStopsAtBoundaryPage() {
         val first = sampleProfileApp("first")
         val second = sampleProfileApp("second")

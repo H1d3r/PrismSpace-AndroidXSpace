@@ -1,5 +1,3 @@
-@file:Suppress("DEPRECATION_ERROR")
-
 package com.yzddmr6.prismspace.prism.compose.vm
 
 import android.app.Application
@@ -12,6 +10,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
 import com.yzddmr6.prismspace.analytics.DiagnosticSection
+import com.yzddmr6.prismspace.bridge.BridgeTargets
 import com.yzddmr6.prismspace.controller.PrismAppControl
 import com.yzddmr6.prismspace.controller.UserCloneRegistry
 import com.yzddmr6.prismspace.mobile.R
@@ -41,8 +40,6 @@ import com.yzddmr6.prismspace.prism.service.ProfileRecoveryService
 import com.yzddmr6.prismspace.setup.PrismSetup
 import com.yzddmr6.prismspace.setup.DestroyProfileResult
 import com.yzddmr6.prismspace.setup.SetupFlow
-import com.yzddmr6.prismspace.shuttle.Shuttle
-import com.yzddmr6.prismspace.shuttle.ShuttleOutcome
 import com.yzddmr6.prismspace.shuttle.ShuttleProvider
 import com.yzddmr6.prismspace.util.PrismLocale
 import com.yzddmr6.prismspace.util.Users
@@ -50,7 +47,6 @@ import com.yzddmr6.prismspace.util.Users.Companion.toId
 import com.yzddmr6.prismspace.util.UserHandles
 import com.yzddmr6.prismspace.space.SpaceState
 import eu.chainfire.libsuperuser.Shell
-import java.io.FileInputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -711,33 +707,35 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             body = health.diagnosticLine(),
         )
         return try {
-            val descriptorOutcome = Shuttle(context, to = profile).invokeOutcomeWithin(timeoutMs = 4_500L) {
-                DiagnosticLog.openSnapshotSession(this)
+            DiagnosticLog.i(TAG, "dual-space diagnostic chunk collection start user=${profile.toId()}")
+            val target = BridgeTargets.profile(context, profile.toId())
+            val result = if (target == null) {
+                DiagnosticsCollectionResult.Failure(
+                    "Dual-space diagnostic snapshot unavailable: managed profile target is invalid.",
+                    openAttempts = 0,
+                )
+            } else {
+                collectDiagnosticsSnapshot(BridgeDiagnosticsSnapshotTransport(context, target))
             }
-            val body = when (descriptorOutcome) {
-                is ShuttleOutcome.Value -> descriptorOutcome.value?.let { session ->
-                    val expectedLength = DiagnosticLog.snapshotLength(session)
-                    val pfd = DiagnosticLog.snapshotDescriptor(session)
-                        ?: return@let "Dual-space diagnostic snapshot transport lost descriptor " +
-                            "(profileBytes=$expectedLength)."
-                    pfd.use {
-                        val text = FileInputStream(it.fileDescriptor).use { input ->
-                            input.readBytes().toString(Charsets.UTF_8)
-                        }
-                        text.ifBlank {
-                            "Dual-space diagnostic snapshot was empty (profileBytes=$expectedLength)."
-                        }
+            val body = when (result) {
+                is DiagnosticsCollectionResult.Success -> {
+                    DiagnosticLog.i(
+                        TAG,
+                        "dual-space diagnostic chunk collection success user=${profile.toId()} " +
+                            "bytes=${result.bytes.size} attempts=${result.openAttempts}",
+                    )
+                    result.bytes.toString(Charsets.UTF_8).ifBlank {
+                        "Dual-space diagnostic snapshot was empty (profileBytes=${result.expectedLength})."
                     }
-                } ?: "Dual-space diagnostic snapshot transport returned no session."
-                is ShuttleOutcome.NotReady ->
-                    "Dual-space diagnostic snapshot unavailable: shuttle is not ready (${descriptorOutcome.cause})."
-                ShuttleOutcome.TimedOut ->
-                    "Dual-space diagnostic snapshot unavailable: shuttle timed out while opening the profile file."
-                is ShuttleOutcome.Failed ->
-                    "Failed to open dual-space diagnostic snapshot: " +
-                        "${descriptorOutcome.error.javaClass.name}: ${descriptorOutcome.error.message.orEmpty()}"
-                is ShuttleOutcome.Skipped ->
-                    "Dual-space diagnostic snapshot skipped: ${descriptorOutcome.reason}"
+                }
+                is DiagnosticsCollectionResult.Failure -> {
+                    DiagnosticLog.w(
+                        TAG,
+                        "dual-space diagnostic chunk collection failed user=${profile.toId()} " +
+                            "attempts=${result.openAttempts} reason=${result.reason}",
+                    )
+                    result.reason
+                }
             }
             listOf(healthSection, DiagnosticSection(
                 title = "Dual-space diagnostic snapshot user=${profile.toId()}",
