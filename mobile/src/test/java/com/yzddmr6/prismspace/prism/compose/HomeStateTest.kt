@@ -22,7 +22,7 @@ class HomeStateTest {
         assertTrue(SpaceStateRepository.shouldOpenSetup(SpaceState.NoProfile))
         assertFalse(SpaceStateRepository.shouldOpenSetup(null))
         assertFalse(SpaceStateRepository.shouldOpenSetup(SpaceState.OrphanProfile(22)))
-        assertFalse(SpaceStateRepository.shouldOpenSetup(SpaceState.HalfProvisioned(22, bridgeReady = true)))
+        assertFalse(SpaceStateRepository.shouldOpenSetup(SpaceState.HalfProvisioned(22, resumable = true)))
     }
 
     @Test fun `canonical space states map to truthful home health`() {
