@@ -1,5 +1,3 @@
-@file:Suppress("DEPRECATION_ERROR")
-
 package com.yzddmr6.prismspace.data
 
 import android.content.BroadcastReceiver
@@ -10,18 +8,28 @@ import android.content.IntentFilter
 import android.content.pm.ApplicationInfo
 import android.content.pm.LauncherApps
 import android.content.pm.PackageManager.MATCH_UNINSTALLED_PACKAGES
+import android.content.pm.PackageManager.MATCH_DISABLED_COMPONENTS
 import android.os.Handler
 import android.os.Looper
 import android.os.UserHandle
 import android.util.ArrayMap
 import android.util.Log
 import com.yzddmr6.prismspace.util.LauncherAppsCompat
+import com.yzddmr6.prismspace.bridge.AppListPort
+import com.yzddmr6.prismspace.bridge.Bridge
+import com.yzddmr6.prismspace.bridge.BridgeTargets
+import com.yzddmr6.prismspace.bridge.DEFAULT_PROFILE_APP_PAGE_SIZE
+import com.yzddmr6.prismspace.bridge.ProfileAppEntry
+import com.yzddmr6.prismspace.bridge.ProfileAppPage
+import com.yzddmr6.prismspace.bridge.ProfileAppPageAccumulator
+import com.yzddmr6.prismspace.bridge.QueryProfileAppsPage
+import com.yzddmr6.prismspace.bridge.clampProfileAppPageSize
+import com.yzddmr6.prismspace.common.app.AppInfo
 import com.yzddmr6.prismspace.util.UserHandles
 import com.yzddmr6.prismspace.common.app.AppListProvider
 import com.yzddmr6.prismspace.data.helper.installed
 import com.yzddmr6.prismspace.engine.ClonedHiddenSystemApps
 import com.yzddmr6.prismspace.provisioning.SystemAppsManager
-import com.yzddmr6.prismspace.shuttle.Shuttle
 import com.yzddmr6.prismspace.shuttle.ShuttleOutcome
 import com.yzddmr6.prismspace.util.Users
 import com.yzddmr6.prismspace.util.Users.Companion.isParentProfile
@@ -112,13 +120,12 @@ class PrismAppListProvider : AppListProvider<PrismAppInfo>() {
 		Log.d(TAG, "Refresh apps in PrismSpace ${profile.toId()}")
 		// On recent Android builds, MATCH_UNINSTALLED_PACKAGES or MATCH_ALL in the parent user
 		// no longer returns frozen apps in PrismSpace.
+		var snapshotsByPackage: Map<String, ProfileAppEntry> = emptyMap()
 		val appsInProfile = if (profile != Users.current()) {
-			when (val outcome = Shuttle(context(), to = profile).invokeOutcomeWithin {
-				val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-				packageManager.getInstalledApplications(PM_FLAGS_APP_INFO) +
-					packageManager.queryIntentActivities(launcher, 0).mapNotNull { it.activityInfo?.applicationInfo }
-			}) {
-				is ShuttleOutcome.Value -> outcome.value?.asSequence()
+			when (val outcome = queryProfileApps(profile)) {
+				is ShuttleOutcome.Value -> outcome.value?.also { entries ->
+					snapshotsByPackage = entries.associateBy(ProfileAppEntry::packageName)
+				}?.asSequence()?.map(ProfileAppEntry::toApplicationInfo)
 				is ShuttleOutcome.NotReady -> null.also {
 					Log.w(TAG, "Unable to refresh profile apps user=${profile.toId()}: shuttle not ready ${outcome.cause}")
 				}
@@ -142,7 +149,38 @@ class PrismAppListProvider : AppListProvider<PrismAppInfo>() {
 		val appsInProfileList = appsInProfile?.toList().orEmpty()
 		val visibleOrKnownAppList = visibleOrKnownApps.toList()
 		val apps = mergeAppsByPackage(appsInProfileList.asSequence(), visibleOrKnownAppList.asSequence())
-		return apps.associateByTo(ArrayMap(), ApplicationInfo::packageName) { PrismAppInfo(this, profile, it, null) }
+		return apps.associateByTo(ArrayMap(), ApplicationInfo::packageName) { info ->
+			PrismAppInfo(this, profile, info, null).also { app ->
+				snapshotsByPackage[info.packageName]?.let { snapshot ->
+					app.setHidden(snapshot.hidden)
+				}
+			}
+		}
+	}
+
+	private fun queryProfileApps(profile: UserHandle): ShuttleOutcome<List<ProfileAppEntry>> {
+		val target = BridgeTargets.profile(context(), profile.toId())
+			?: return ShuttleOutcome.Skipped("profile_missing")
+		val accumulator = ProfileAppPageAccumulator()
+		var pageIndex = 0
+		do {
+			when (val outcome = Bridge.inProfile(context(), target).execute(
+				QueryProfileAppsPage(pageIndex, DEFAULT_PROFILE_APP_PAGE_SIZE),
+			)) {
+				is ShuttleOutcome.Value -> {
+					val page = outcome.value ?: return ShuttleOutcome.Failed(
+						IllegalStateException("Profile app page returned null"),
+					)
+					if (!accumulator.accept(page)) return ShuttleOutcome.Value(accumulator.entries)
+					pageIndex++
+				}
+				is ShuttleOutcome.NotReady -> return outcome
+				ShuttleOutcome.TimedOut -> return ShuttleOutcome.TimedOut
+				is ShuttleOutcome.Failed -> return outcome
+				is ShuttleOutcome.Skipped -> return outcome
+			}
+		} while (pageIndex < MAX_PROFILE_APP_PAGES)
+		return ShuttleOutcome.Failed(IllegalStateException("Profile app pagination exceeded $MAX_PROFILE_APP_PAGES pages"))
 	}
 
 	private fun getAppInfo(pkg: String, profile: UserHandle): ApplicationInfo? {
@@ -229,7 +267,61 @@ class PrismAppListProvider : AppListProvider<PrismAppInfo>() {
 		@JvmStatic fun getInstance(context: Context): PrismAppListProvider = AppListProvider.getInstance(context)
 		@JvmStatic fun excludeSelf(context: Context) = exclude(context.packageName)
 		private fun exclude(pkg: String) = Predicate { app: PrismAppInfo -> pkg != app.packageName }
+		private const val MAX_PROFILE_APP_PAGES = 1_000
 	}
+}
+
+internal object MobileAppListPort : AppListPort {
+    override fun queryProfileApps(context: Context, pageIndex: Int, pageSize: Int): ProfileAppPage {
+        val effectiveSize = clampProfileAppPageSize(pageSize)
+        val effectiveIndex = pageIndex.coerceAtLeast(0)
+        val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val apps = (context.packageManager.getInstalledApplications(MATCH_UNINSTALLED_PACKAGES or MATCH_DISABLED_COMPONENTS) +
+            context.packageManager.queryIntentActivities(launcher, 0).mapNotNull { it.activityInfo?.applicationInfo })
+            .associateBy { it.packageName }
+            .values
+            .sortedBy { it.packageName }
+        val startLong = effectiveIndex.toLong() * effectiveSize
+        if (startLong >= apps.size) return ProfileAppPage(emptyList(), false)
+        val start = startLong.toInt()
+        val end = minOf(start + effectiveSize, apps.size)
+        return ProfileAppPage(
+            apps.subList(start, end).map { it.toProfileAppEntry(context) },
+            hasMore = end < apps.size,
+        )
+    }
+
+    private fun ApplicationInfo.toProfileAppEntry(context: Context): ProfileAppEntry {
+        val hidden = AppInfo.isHidden(this) ?: runCatching {
+            !context.getSystemService(LauncherApps::class.java).isPackageEnabled(packageName, Users.current())
+        }.getOrDefault(false)
+        return ProfileAppEntry(
+            packageName = packageName,
+            uid = uid,
+            flags = flags,
+            hidden = hidden,
+            enabled = enabled,
+            targetSdkVersion = targetSdkVersion,
+            label = runCatching { loadLabel(context.packageManager).toString() }.getOrDefault(packageName),
+            iconResource = icon,
+            sourceDir = sourceDir,
+            publicSourceDir = publicSourceDir,
+            splitSourceDirs = splitSourceDirs?.toList().orEmpty(),
+        )
+    }
+}
+
+private fun ProfileAppEntry.toApplicationInfo() = ApplicationInfo().also { info ->
+    info.packageName = packageName
+    info.uid = uid
+    info.flags = flags
+    info.enabled = enabled
+    info.targetSdkVersion = targetSdkVersion
+    info.nonLocalizedLabel = label
+    info.icon = iconResource
+    info.sourceDir = sourceDir
+    info.publicSourceDir = publicSourceDir
+    info.splitSourceDirs = splitSourceDirs.toTypedArray().takeIf { it.isNotEmpty() }
 }
 
 private const val TAG = "Prism.ALP"

@@ -16,21 +16,74 @@ interface AppControlPort {
     fun enableSystemApp(context: Context, packageName: String): Boolean
 }
 
-data class BridgeHandlers(val appControl: AppControlPort?) {
+interface FileBridgePort {
+    fun openWriteSession(
+        context: Context,
+        store: BridgeFileStore,
+        safeName: String,
+        mimeType: String,
+        relativePath: String,
+    ): WriteSessionDto
+    fun finishWriteSession(
+        context: Context,
+        store: BridgeFileStore,
+        targetUri: String,
+        history: TransferHistoryDto?,
+    ): String
+    fun abortWriteSession(context: Context, store: BridgeFileStore, targetUri: String)
+    fun importApkSet(
+        context: Context,
+        paths: List<String>,
+        label: String,
+        packageName: String,
+        cloneLocation: String,
+    ): String?
+    fun queryLatestVisibleImage(context: Context): ProfileMediaEntryDto?
+    fun openImagePicker(context: Context): Boolean
+    fun openLatestForRead(context: Context, store: BridgeFileStore): ReadSessionDto?
+    fun writePerAppShareMarker(context: Context, packageName: String): String
+    fun deletePerAppShareMarker(context: Context, packageName: String): Boolean
+    fun runSelfTest(context: Context, marker: ByteArray): SelfTestResultDto?
+    fun installCrossProfileForwarding(context: Context, kind: CrossProfileForwardingKind): Boolean
+}
+
+interface AppListPort {
+    fun queryProfileApps(context: Context, pageIndex: Int, pageSize: Int): ProfileAppPage
+}
+
+data class BridgeHandlers(
+    val appControl: AppControlPort?,
+    val fileBridge: FileBridgePort?,
+    val appList: AppListPort?,
+) {
     fun missing(): List<String> = buildList {
         if (appControl == null) add("app_control")
+        if (fileBridge == null) add("file_bridge")
+        if (appList == null) add("app_list")
     }
 }
 
 class BridgeHandlersBuilder internal constructor() {
     private var appControl: AppControlPort? = null
+    private var fileBridge: FileBridgePort? = null
+    private var appList: AppListPort? = null
 
     fun appControl(port: AppControlPort) {
         check(appControl == null) { "AppControlPort already contributed" }
         appControl = port
     }
 
-    internal fun build() = BridgeHandlers(appControl)
+    fun fileBridge(port: FileBridgePort) {
+        check(fileBridge == null) { "FileBridgePort already contributed" }
+        fileBridge = port
+    }
+
+    fun appList(port: AppListPort) {
+        check(appList == null) { "AppListPort already contributed" }
+        appList = port
+    }
+
+    internal fun build() = BridgeHandlers(appControl, fileBridge, appList)
 }
 
 fun interface BridgePortsContributor {

@@ -28,6 +28,30 @@ internal object BridgeDispatcher {
             is EnsureAppFreeToLaunch -> appControl(command) { ensureAppFreeToLaunch(context, command.packageName) }
             is MarkClonedSystemApp -> appControl(command) { markClonedSystemApp(context, command.packageName) }
             is EnableSystemApp -> appControl(command) { enableSystemApp(context, command.packageName) }
+            is OpenWriteSession -> fileBridge(command) {
+                openWriteSession(context, command.store, command.safeName, command.mimeType, command.relativePath)
+            }
+            is FinishWriteSession -> fileBridge(command) {
+                finishWriteSession(context, command.store, command.targetUri, command.history)
+            }
+            is AbortWriteSession -> fileBridge(command) {
+                abortWriteSession(context, command.store, command.targetUri)
+            }
+            is ImportApkSet -> fileBridge(command) {
+                importApkSet(context, command.paths, command.label, command.packageName, command.cloneLocation)
+            }
+            QueryLatestVisibleImage -> fileBridge(QueryLatestVisibleImage) { queryLatestVisibleImage(context) }
+            OpenImagePickerInProfile -> fileBridge(OpenImagePickerInProfile) { openImagePicker(context) }
+            is OpenLatestForRead -> fileBridge(command) { openLatestForRead(context, command.store) }
+            is WritePerAppShareMarker -> fileBridge(command) { writePerAppShareMarker(context, command.packageName) }
+            is DeletePerAppShareMarker -> fileBridge(command) { deletePerAppShareMarker(context, command.packageName) }
+            is RunBridgeSelfTest -> fileBridge(command) { runSelfTest(context, command.marker) }
+            is InstallCrossProfileForwarding -> fileBridge(command) {
+                installCrossProfileForwarding(context, command.kind)
+            }
+            is QueryProfileAppsPage -> appList(command) {
+                queryProfileApps(context, command.pageIndex, command.pageSize)
+            }
         }
     } catch (error: Throwable) {
         failure(command.id, BridgeErrorCategory.ExecutionFailed, error.javaClass.name + ": " + error.message.orEmpty())
@@ -36,6 +60,18 @@ internal object BridgeDispatcher {
     private fun <R> appControl(command: BridgeCommand<R>, block: AppControlPort.() -> R): Bundle {
         val port = BridgePorts.handlers()?.appControl
             ?: return failure(command.id, BridgeErrorCategory.HandlerUnavailable, "AppControlPort")
+        return success(command, port.block())
+    }
+
+    private fun <R> fileBridge(command: BridgeCommand<R>, block: FileBridgePort.() -> R): Bundle {
+        val port = BridgePorts.handlers()?.fileBridge
+            ?: return failure(command.id, BridgeErrorCategory.HandlerUnavailable, "FileBridgePort")
+        return success(command, port.block())
+    }
+
+    private fun <R> appList(command: BridgeCommand<R>, block: AppListPort.() -> R): Bundle {
+        val port = BridgePorts.handlers()?.appList
+            ?: return failure(command.id, BridgeErrorCategory.HandlerUnavailable, "AppListPort")
         return success(command, port.block())
     }
 

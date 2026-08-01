@@ -15,9 +15,25 @@ class BridgeProtocolContractTest {
     }
 
     @Test fun assembledHandlersExposeNoMissingPorts() {
-        val handlers = BridgeHandlers(FakeAppControlPort)
+        val handlers = BridgeHandlers(FakeAppControlPort, FakeFileBridgePort, FakeAppListPort)
 
         assertTrue(handlers.missing().isEmpty())
+    }
+
+    @Test fun profileAppPageSizeIsServerBounded() {
+        assertEquals(1, clampProfileAppPageSize(-1))
+        assertEquals(50, clampProfileAppPageSize(50))
+        assertEquals(MAX_PROFILE_APP_PAGE_SIZE, clampProfileAppPageSize(Int.MAX_VALUE))
+    }
+
+    @Test fun profileAppPageAccumulatorStopsAtBoundaryPage() {
+        val first = sampleProfileApp("first")
+        val second = sampleProfileApp("second")
+        val accumulator = ProfileAppPageAccumulator()
+
+        assertTrue(accumulator.accept(ProfileAppPage(listOf(first), hasMore = true)))
+        assertTrue(!accumulator.accept(ProfileAppPage(listOf(second), hasMore = false)))
+        assertEquals(listOf(first, second), accumulator.entries)
     }
 
     private object FakeAppControlPort : AppControlPort {
@@ -38,4 +54,54 @@ class BridgeProtocolContractTest {
         override fun markClonedSystemApp(context: Context, packageName: String) = true
         override fun enableSystemApp(context: Context, packageName: String) = true
     }
+
+    private object FakeFileBridgePort : FileBridgePort {
+        override fun openWriteSession(
+            context: Context,
+            store: BridgeFileStore,
+            safeName: String,
+            mimeType: String,
+            relativePath: String,
+        ): WriteSessionDto = error("unused")
+        override fun finishWriteSession(
+            context: Context,
+            store: BridgeFileStore,
+            targetUri: String,
+            history: TransferHistoryDto?,
+        ) = targetUri
+        override fun abortWriteSession(context: Context, store: BridgeFileStore, targetUri: String) = Unit
+        override fun importApkSet(
+            context: Context,
+            paths: List<String>,
+            label: String,
+            packageName: String,
+            cloneLocation: String,
+        ): String? = null
+        override fun queryLatestVisibleImage(context: Context): ProfileMediaEntryDto? = null
+        override fun openImagePicker(context: Context) = true
+        override fun openLatestForRead(context: Context, store: BridgeFileStore): ReadSessionDto? = null
+        override fun writePerAppShareMarker(context: Context, packageName: String) = "marker"
+        override fun deletePerAppShareMarker(context: Context, packageName: String) = true
+        override fun runSelfTest(context: Context, marker: ByteArray): SelfTestResultDto? = null
+        override fun installCrossProfileForwarding(context: Context, kind: CrossProfileForwardingKind) = true
+    }
+
+    private object FakeAppListPort : AppListPort {
+        override fun queryProfileApps(context: Context, pageIndex: Int, pageSize: Int) =
+            ProfileAppPage(emptyList(), false)
+    }
+
+    private fun sampleProfileApp(packageName: String) = ProfileAppEntry(
+        packageName,
+        uid = 1,
+        flags = 0,
+        hidden = false,
+        enabled = true,
+        targetSdkVersion = 35,
+        label = packageName,
+        iconResource = 0,
+        sourceDir = null,
+        publicSourceDir = null,
+        splitSourceDirs = emptyList(),
+    )
 }

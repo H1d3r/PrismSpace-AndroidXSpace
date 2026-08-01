@@ -60,7 +60,6 @@ class LegacyBridgeCallGuardTest {
         val DIRECT_SHUTTLE_WHITELIST = mapOf(
             "shared/src/main/java/com/yzddmr6/prismspace/PrismNameManager.kt" to 1,
             "shared/src/main/java/com/yzddmr6/prismspace/shuttle/ShuttleProvider.kt" to 1,
-            "mobile/src/main/java/com/yzddmr6/prismspace/data/PrismAppListProvider.kt" to 1,
             "mobile/src/main/java/com/yzddmr6/prismspace/prism/compose/space/SpaceStateRepository.kt" to 1,
             "mobile/src/main/java/com/yzddmr6/prismspace/prism/compose/vm/SettingsViewModel.kt" to 1,
             "mobile/src/main/java/com/yzddmr6/prismspace/prism/service/ProfileBridgeOperation.kt" to 3,
@@ -73,8 +72,6 @@ class LegacyBridgeCallGuardTest {
         )
         val PROFILE_BRIDGE_CLOSURE_WHITELIST = mapOf(
             "mobile/src/main/java/com/yzddmr6/prismspace/action/FeatureAction.kt" to 1,
-            "mobile/src/main/java/com/yzddmr6/prismspace/prism/service/FileBridgeService.kt" to 14,
-            "mobile/src/main/java/com/yzddmr6/prismspace/prism/service/ProfileDownloadsLauncher.kt" to 1,
             "mobile/src/main/java/com/yzddmr6/prismspace/prism/service/ProfileRecoveryService.kt" to 2,
             "mobile/src/main/java/com/yzddmr6/prismspace/shortcut/PrismAppShortcut.kt" to 1,
         )

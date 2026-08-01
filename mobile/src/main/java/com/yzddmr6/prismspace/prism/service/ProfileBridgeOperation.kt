@@ -7,6 +7,8 @@ import android.os.UserHandle
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
 import com.yzddmr6.prismspace.bridge.Bridge
 import com.yzddmr6.prismspace.bridge.BridgeTargets
+import com.yzddmr6.prismspace.bridge.BridgeTarget
+import com.yzddmr6.prismspace.bridge.DestinationCommand
 import com.yzddmr6.prismspace.bridge.ProfileCommand
 import com.yzddmr6.prismspace.bridge.ProfileTarget
 import com.yzddmr6.prismspace.mobile.R
@@ -39,6 +41,28 @@ internal fun <R> runProfileBridgeOperation(
     )
     if (!health.available) return ProfileBridgeResult.from(health.ping).asFailureResult()
     return ProfileBridgeResult.from(Bridge.inProfile(context, profileTarget).execute(command, timeoutMs))
+}
+
+internal fun <R> runDestinationBridgeOperation(
+    context: Context,
+    tag: String,
+    operation: String,
+    target: BridgeTarget?,
+    timeoutMs: Long? = null,
+    command: DestinationCommand<R>,
+): ProfileBridgeResult<R> {
+    val destination = target ?: return ProfileBridgeResult.SpaceMissing
+    val user = com.yzddmr6.prismspace.util.UserHandles.of(destination.userId)
+    if (user == Users.current()) {
+        DiagnosticLog.i(tag, "$operation local target=${destination.userId}")
+        return ProfileBridgeResult.from(Bridge.at(context, destination).execute(command, timeoutMs))
+    }
+    if (destination is ProfileTarget) {
+        val health = ShuttleProvider.health(context, user)
+        DiagnosticLog.i(tag, "$operation preflight target=${destination.userId} ${health.diagnosticLine()}")
+        if (!health.available) return ProfileBridgeResult.from(health.ping).asFailureResult()
+    }
+    return ProfileBridgeResult.from(Bridge.at(context, destination).execute(command, timeoutMs))
 }
 
 internal sealed class ProfileBridgeResult<out R> {

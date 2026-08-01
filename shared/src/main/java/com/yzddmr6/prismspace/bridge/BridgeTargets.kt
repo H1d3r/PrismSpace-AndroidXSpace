@@ -7,14 +7,18 @@ import com.yzddmr6.prismspace.util.UserHandles
 import com.yzddmr6.prismspace.util.Users
 import com.yzddmr6.prismspace.util.Users.Companion.toId
 
-@JvmInline
-value class ProfileTarget internal constructor(internal val handle: UserHandle) {
-    val userId: Int get() = handle.toId()
+sealed interface BridgeTarget {
+    val userId: Int
 }
 
 @JvmInline
-value class ParentTarget internal constructor(internal val handle: UserHandle) {
-    val userId: Int get() = handle.toId()
+value class ProfileTarget internal constructor(internal val handle: UserHandle) : BridgeTarget {
+    override val userId: Int get() = handle.toId()
+}
+
+@JvmInline
+value class ParentTarget internal constructor(internal val handle: UserHandle) : BridgeTarget {
+    override val userId: Int get() = handle.toId()
 }
 
 object BridgeTargets {

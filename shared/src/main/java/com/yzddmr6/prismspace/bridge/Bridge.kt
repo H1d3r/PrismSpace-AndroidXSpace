@@ -13,6 +13,10 @@ object Bridge {
     fun inParent(context: Context, target: ParentTarget) = ParentBridgeEndpoint(context, target)
     fun at(context: Context, target: ProfileTarget) = DestinationBridgeEndpoint(context, target.handle)
     fun at(context: Context, target: ParentTarget) = DestinationBridgeEndpoint(context, target.handle)
+    fun at(context: Context, target: BridgeTarget) = when (target) {
+        is ProfileTarget -> at(context, target)
+        is ParentTarget -> at(context, target)
+    }
 }
 
 class ProfileBridgeEndpoint internal constructor(

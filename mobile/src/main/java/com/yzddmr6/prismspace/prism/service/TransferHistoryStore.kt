@@ -71,9 +71,9 @@ object TransferHistoryStore {
         // newest first, capped
         val out = JSONArray().apply { put(entry) }
         for (i in 0 until minOf(arr.length(), MAX - 1)) out.put(arr.get(i))
-        // commit() (synchronous), NOT apply(): the dual-space record is written inside a Shuttle
-        // closure running in the profile process, which can be torn down immediately after the
-        // closure returns — an async apply() may never flush, so the record silently vanishes.
+        // commit() (synchronous), NOT apply(): the dual-space record is written inside a bridge
+        // command handler in the profile process, which can be torn down immediately after the
+        // command returns — an async apply() may never flush, so the record silently vanishes.
         prefs.edit().putString(KEY, out.toString()).commit()
         DiagnosticLog.i(TAG, "transfer recorded name=$name pkg=${packageName ?: ""} location=$location isImage=$isImage direction=${direction?.wireValue}")
     }
