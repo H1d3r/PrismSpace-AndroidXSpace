@@ -170,4 +170,38 @@ class SpaceStateStoreTest {
         assertFalse(machine.isActive())
         assertTrue(timedOut)
     }
+
+    @Test fun lateEndSignalsCannotBypassTheProvisioningDeadline() {
+        ProvisioningEndSignal.entries.forEach { signal ->
+            var now = 0L
+            var timeoutCount = 0
+            val machine = ProvisioningStateMachine(
+                nowMs = { now },
+                timeoutMs = 100L,
+                onTimeout = { timeoutCount++ },
+            )
+            machine.start()
+            now = 100L
+
+            assertFalse(machine.finish(signal))
+            assertEquals(1, timeoutCount)
+            assertFalse(machine.isActive())
+        }
+    }
+
+    @Test fun lateCancellationCannotBypassTheProvisioningDeadline() {
+        var now = 0L
+        var timeoutCount = 0
+        val machine = ProvisioningStateMachine(
+            nowMs = { now },
+            timeoutMs = 100L,
+            onTimeout = { timeoutCount++ },
+        )
+        machine.start()
+        now = 100L
+
+        assertFalse(machine.clear())
+        assertEquals(1, timeoutCount)
+        assertFalse(machine.isActive())
+    }
 }

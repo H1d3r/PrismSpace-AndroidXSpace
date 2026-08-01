@@ -29,7 +29,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
@@ -337,22 +336,29 @@ internal class ProvisioningStateMachine(
 
     @Synchronized fun finish(@Suppress("UNUSED_PARAMETER") signal: ProvisioningEndSignal): Boolean {
         if (deadlineMs == 0L) return false
+        if (expireIfNeeded()) return false
         deadlineMs = 0L
         return true
     }
 
     @Synchronized fun clear(): Boolean {
         if (deadlineMs == 0L) return false
+        if (expireIfNeeded()) return false
         deadlineMs = 0L
         return true
     }
 
     @Synchronized fun isActive(): Boolean {
         if (deadlineMs == 0L) return false
-        if (nowMs() < deadlineMs) return true
+        if (!expireIfNeeded()) return true
+        return false
+    }
+
+    private fun expireIfNeeded(): Boolean {
+        if (nowMs() < deadlineMs) return false
         deadlineMs = 0L
         onTimeout()
-        return false
+        return true
     }
 }
 
@@ -360,7 +366,6 @@ internal class ProvisioningStateMachine(
 object SpaceProvisioningTracker {
     private const val TIMEOUT_MS = 10 * 60_000L
     private const val TAG = "Prism.SpaceProvisioning"
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val listeners = CopyOnWriteArraySet<(String) -> Unit>()
     private val state = ProvisioningStateMachine(
         nowMs = android.os.SystemClock::elapsedRealtime,
@@ -370,15 +375,9 @@ object SpaceProvisioningTracker {
             notifyChanged("provisioning_timeout")
         },
     )
-    @Volatile private var timeoutJob: Job? = null
 
     @JvmStatic fun markStarted() {
         state.start()
-        timeoutJob?.cancel()
-        timeoutJob = scope.launch {
-            delay(TIMEOUT_MS)
-            state.isActive()
-        }
         notifyChanged("provisioning_started")
     }
 
@@ -386,14 +385,12 @@ object SpaceProvisioningTracker {
 
     @JvmStatic fun clear() {
         if (state.clear()) {
-            timeoutJob?.cancel()
             notifyChanged("provisioning_cleared")
         }
     }
 
     internal fun finished(signal: ProvisioningEndSignal) {
         if (state.finish(signal)) {
-            timeoutJob?.cancel()
             notifyChanged("provisioning_finished:${signal.name}")
         }
     }
