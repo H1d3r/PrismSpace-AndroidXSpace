@@ -324,7 +324,9 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             setFeedback(str(R.string.lz_setvm_shizuku_connected), isError = false)
             refreshCapabilities()
         } else {
-            setFeedback(str(R.string.lz_setvm_shizuku_not_ready), isError = true)
+            // The mode sheet is the user-facing Shizuku setup entry. Merely re-checking
+            // permission here leaves the documented authorization flow unreachable.
+            handleShizukuAction()
         }
         return authorized
     }
