@@ -13,14 +13,15 @@ class ProvisioningPathConsolidationTest {
     @Test fun `verifier restoration covers every original state on success and failure`() {
         listOf(null, "0", "1").forEach { original ->
             val command = command(verifierOriginal = original, maxUsersOriginal = "4")
-            assertTrue(command.contains("trap restore_prism_side_effects EXIT HUP INT TERM"))
+            assertTrue(command.contains("trap handle_prism_unexpected_exit EXIT"))
+            assertTrue(command.contains("trap 'fail_prism_provisioning 70 interrupted' HUP INT TERM"))
             assertTrue(command.contains("pm install -r --user \"${'$'}PROFILE_ID\""))
             assertTrue(command.contains("fail_prism_provisioning 30 install"))
             assertTrue(command.contains("am start-user \"${'$'}PROFILE_ID\" || fail_prism_provisioning 50 start"))
             assertTrue(command.contains("echo \"PRISM_PROVISION_FAILED stage=${'$'}PRISM_FAILURE_STAGE\""))
             assertTrue(command.contains("PRISM_PROVISION_SUCCESS user=${'$'}PROFILE_ID"))
             assertTrue(command.contains("fail_prism_provisioning()"))
-            assertTrue(command.contains("restore_prism_side_effects\n  echo \"PRISM_PROVISION_FAILED stage=${'$'}PRISM_FAILURE_STAGE\"\n  exit \"${'$'}PRISM_FAILURE_STATUS\""))
+            assertTrue(command.contains("finish_prism_transaction\n  echo \"PRISM_PROVISION_FAILED stage=${'$'}PRISM_FAILURE_STAGE\"\n  exit \"${'$'}PRISM_FAILURE_STATUS\""))
             assertTrue(command.contains("fail_prism_provisioning 30 install\nrestore_prism_side_effects\ndpm set-profile-owner"))
             val expectedRestore = if (original == null) {
                 "settings delete global $VERIFIER_SETTING"
@@ -29,6 +30,17 @@ class ProvisioningPathConsolidationTest {
             }
             assertTrue(command.contains(expectedRestore))
         }
+    }
+
+    @Test fun `failed or interrupted transaction rolls back only its newly created profile`() {
+        val command = command()
+        assertTrue(command.contains("PROFILE_ID=\"\""))
+        assertTrue(command.contains("PRISM_PROVISION_SUCCEEDED=0"))
+        assertTrue(command.contains("[ -n \"${'$'}PROFILE_ID\" ]"))
+        assertTrue(command.contains("pm remove-user \"${'$'}PROFILE_ID\""))
+        assertTrue(command.contains("PRISM_PROVISION_ROLLBACK user=${'$'}PROFILE_ID result=success"))
+        assertTrue(command.contains("PRISM_PROVISION_SUCCEEDED=1\nfinish_prism_transaction\necho \"PRISM_PROVISION_SUCCESS"))
+        assertTrue(command.indexOf("restore_prism_side_effects\n  if [") < command.indexOf("pm remove-user"))
     }
 
     @Test fun `verifier is only changed when its original state requires it`() {
@@ -130,6 +142,22 @@ class ProvisioningPathConsolidationTest {
         assertFalse(pendingRecordOwned("attempt-a", "attempt-b"))
         assertFalse(pendingRecordOwned("attempt-a", null))
         assertTrue(pendingRecordOwned(LEGACY_PENDING_TOKEN, null))
+    }
+
+    @Test fun `pending recovery requests privilege only when the setting differs`() {
+        assertEquals(PendingRestoreAction.ClearRecord, pendingRestoreAction(original = null, current = null))
+        assertEquals(PendingRestoreAction.ClearRecord, pendingRestoreAction(original = "1", current = "1"))
+        assertEquals(PendingRestoreAction.RequirePrivilege, pendingRestoreAction(original = "1", current = "0"))
+        assertEquals(PendingRestoreAction.RequirePrivilege, pendingRestoreAction(original = null, current = "0"))
+    }
+
+    @Test fun `provider initialization never performs provisioning recovery or root`() {
+        val provider = File("src/main/java/com/yzddmr6/prismspace/bridge/MobileBridgePorts.kt").readText()
+        assertFalse(provider.contains("restorePending"))
+        assertFalse(provider.contains("Shell.SU"))
+        val activity = File("src/main/java/com/yzddmr6/prismspace/MainActivity.java").readText()
+        assertTrue(activity.contains("ProvisioningSideEffects.hasPendingRestore"))
+        assertTrue(activity.contains("ProvisioningSideEffects.restorePendingAfterUserApproval"))
     }
 
     private fun command(

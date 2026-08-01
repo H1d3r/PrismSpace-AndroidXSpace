@@ -4,7 +4,6 @@ import android.content.Context
 import android.provider.Settings
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
 import eu.chainfire.libsuperuser.Shell
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.UUID
 
 internal const val VERIFIER_SETTING = "verifier_verify_adb_installs"
@@ -37,21 +36,41 @@ internal fun buildRootProvisioningCommand(input: RootProvisioningCommandInput): 
     }
     val debugFlag = if (input.debugBuild) " -t" else ""
     return """
+        PROFILE_ID=""
+        PRISM_PROVISION_SUCCEEDED=0
         restore_prism_side_effects() {
-          trap - EXIT HUP INT TERM
           $verifierRestore
           echo ${shellQuote("PRISM_SIDE_EFFECT_RESTORE verifier original=${input.verifierOriginal ?: "<unset>"}")}
           $maxUsersRestore
           echo ${shellQuote("PRISM_SIDE_EFFECT_RESTORE max_users original=${input.maxUsersOriginal ?: "<unset>"}")}
         }
+        finish_prism_transaction() {
+          trap - EXIT HUP INT TERM
+          restore_prism_side_effects
+          if [ "${'$'}PRISM_PROVISION_SUCCEEDED" -ne 1 ] && [ -n "${'$'}PROFILE_ID" ]; then
+            PRISM_ROLLBACK_OUTPUT="$(pm remove-user "${'$'}PROFILE_ID" 2>&1)"
+            PRISM_ROLLBACK_STATUS="${'$'}?"
+            printf '%s\n' "${'$'}PRISM_ROLLBACK_OUTPUT"
+            if [ "${'$'}PRISM_ROLLBACK_STATUS" -eq 0 ]; then
+              echo "PRISM_PROVISION_ROLLBACK user=${'$'}PROFILE_ID result=success"
+            else
+              echo "PRISM_PROVISION_ROLLBACK user=${'$'}PROFILE_ID result=failed status=${'$'}PRISM_ROLLBACK_STATUS"
+            fi
+          fi
+        }
         fail_prism_provisioning() {
           PRISM_FAILURE_STATUS="${'$'}1"
           PRISM_FAILURE_STAGE="${'$'}2"
-          restore_prism_side_effects
+          finish_prism_transaction
           echo "PRISM_PROVISION_FAILED stage=${'$'}PRISM_FAILURE_STAGE"
           exit "${'$'}PRISM_FAILURE_STATUS"
         }
-        trap restore_prism_side_effects EXIT HUP INT TERM
+        handle_prism_unexpected_exit() {
+          finish_prism_transaction
+          [ "${'$'}PRISM_PROVISION_SUCCEEDED" -eq 1 ] || echo "PRISM_PROVISION_FAILED stage=unexpected_exit"
+        }
+        trap handle_prism_unexpected_exit EXIT
+        trap 'fail_prism_provisioning 70 interrupted' HUP INT TERM
         $verifierWrite
         $maxUsersWrite
         CREATE_OUTPUT="$(pm create-user --profileOf ${input.parentUserId} --managed PrismSpace 2>&1)"
@@ -64,6 +83,8 @@ internal fun buildRootProvisioningCommand(input: RootProvisioningCommandInput): 
         restore_prism_side_effects
         dpm set-profile-owner --user "${'$'}PROFILE_ID" ${shellQuote(input.adminComponent)} || fail_prism_provisioning 40 owner
         am start-user "${'$'}PROFILE_ID" || fail_prism_provisioning 50 start
+        PRISM_PROVISION_SUCCEEDED=1
+        finish_prism_transaction
         echo "PRISM_PROVISION_SUCCESS user=${'$'}PROFILE_ID"
     """.trimIndent()
 }
@@ -86,6 +107,11 @@ internal fun provisioningCompleted(lines: List<String>?, userId: Int): Boolean =
 internal fun provisioningFailure(lines: List<String>?): String? =
     lines?.firstOrNull { it.startsWith("PRISM_PROVISION_FAILED ") }
 
+internal enum class PendingRestoreAction { ClearRecord, RequirePrivilege }
+
+internal fun pendingRestoreAction(original: String?, current: String?): PendingRestoreAction =
+    if (current == original) PendingRestoreAction.ClearRecord else PendingRestoreAction.RequirePrivilege
+
 internal object ProvisioningSideEffects {
     private const val PREFS = "root_provisioning_side_effects"
     private const val KEY_PENDING = "verifier_restore_pending"
@@ -93,7 +119,6 @@ internal object ProvisioningSideEffects {
     private const val KEY_ORIGINAL_VALUE = "verifier_original_value"
     private const val KEY_ATTEMPT_TOKEN = "attempt_token"
     private const val TAG = "Prism.SpaceProvision"
-    private val recoveryStarted = AtomicBoolean(false)
 
     fun verifierOriginal(context: Context): String? =
         Settings.Global.getString(context.contentResolver, VERIFIER_SETTING)
@@ -136,34 +161,46 @@ internal object ProvisioningSideEffects {
         )
     }
 
-    fun restorePendingOnStartup(context: Context) {
-        if (!recoveryStarted.compareAndSet(false, true)) return
-        val pending = synchronized(this) { readPending(context) } ?: return
-        Thread {
-            synchronized(this) {
-                if (!pendingRecordOwned(pending.token, prefs(context).getString(KEY_ATTEMPT_TOKEN, null))) {
-                    DiagnosticLog.i(TAG, "side_effect startup recovery superseded")
-                    return@synchronized
-                }
-                if (verifierOriginal(context) == pending.original) {
-                    clearPendingIfOwned(context, pending.token)
-                    DiagnosticLog.i(
-                        TAG,
-                        "side_effect startup verification already_restored original=${pending.original ?: "<unset>"}",
-                    )
-                    return@synchronized
-                }
-                DiagnosticLog.w(TAG, "side_effect startup recovery pending original=${pending.original ?: "<unset>"}")
-                Shell.SU.run(verifierRestoreCommand(pending.original))
-                val restored = verifierOriginal(context) == pending.original
-                if (restored) clearPendingIfOwned(context, pending.token)
+    /** Worker-thread preflight. It never calls su. */
+    @JvmStatic @Synchronized
+    fun hasPendingRestore(context: Context): Boolean {
+        val pending = readPending(context) ?: return false
+        if (!pendingRecordOwned(pending.token, prefs(context).getString(KEY_ATTEMPT_TOKEN, null))) return false
+        return when (pendingRestoreAction(pending.original, verifierOriginal(context))) {
+            PendingRestoreAction.ClearRecord -> {
+                val cleared = clearPendingIfOwned(context, pending.token)
                 DiagnosticLog.i(
                     TAG,
-                    "side_effect restore key=$VERIFIER_SETTING original=${pending.original ?: "<unset>"} " +
-                        "startup=true restored=$restored",
+                    "side_effect startup verification already_restored original=${pending.original ?: "<unset>"} " +
+                        "record_cleared=$cleared",
                 )
+                false
             }
-        }.apply { name = "Prism-verifier-restore" }.start()
+            PendingRestoreAction.RequirePrivilege -> {
+                DiagnosticLog.w(TAG, "side_effect startup recovery pending original=${pending.original ?: "<unset>"}")
+                true
+            }
+        }
+    }
+
+    /** Invoke only after an explicit foreground user confirmation. */
+    @JvmStatic @Synchronized
+    fun restorePendingAfterUserApproval(context: Context): Boolean {
+        val pending = readPending(context) ?: return true
+        if (!pendingRecordOwned(pending.token, prefs(context).getString(KEY_ATTEMPT_TOKEN, null))) return false
+        return runCatching {
+            Shell.SU.run(verifierRestoreCommand(pending.original))
+            val restored = verifierOriginal(context) == pending.original
+            val cleared = restored && clearPendingIfOwned(context, pending.token)
+            DiagnosticLog.i(
+                TAG,
+                "side_effect restore key=$VERIFIER_SETTING original=${pending.original ?: "<unset>"} " +
+                    "user_approved=true restored=$restored record_cleared=$cleared",
+            )
+            restored && cleared
+        }.onFailure {
+            DiagnosticLog.e(TAG, "side_effect user-approved recovery failed", it)
+        }.getOrDefault(false)
     }
 
     private fun readPending(context: Context): PendingRestore? {

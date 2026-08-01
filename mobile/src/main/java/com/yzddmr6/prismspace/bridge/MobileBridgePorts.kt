@@ -6,7 +6,6 @@ import com.yzddmr6.prismspace.engine.ClonedHiddenSystemApps
 import com.yzddmr6.prismspace.engine.PrismManager
 import com.yzddmr6.prismspace.data.MobileAppListPort
 import com.yzddmr6.prismspace.prism.service.MobileFileBridgePort
-import com.yzddmr6.prismspace.prism.compose.space.ProvisioningSideEffects
 import com.yzddmr6.prismspace.shortcut.MobileShortcutPort
 import com.yzddmr6.prismspace.util.DevicePolicies
 import com.yzddmr6.prismspace.util.PseudoContentProvider
@@ -45,7 +44,6 @@ internal object MobileAppControlPort : AppControlPort {
 
 class MobileBridgePortsProvider : PseudoContentProvider() {
     override fun onCreate(): Boolean {
-        ProvisioningSideEffects.restorePendingOnStartup(context())
         BridgePortsContributors.register { builder ->
             builder.appControl(MobileAppControlPort)
             builder.fileBridge(MobileFileBridgePort)

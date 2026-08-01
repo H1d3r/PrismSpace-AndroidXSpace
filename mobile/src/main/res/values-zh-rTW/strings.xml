@@ -66,6 +66,12 @@
     <string name="dialog_cannot_destroy_message">如果要刪除整個雙開空間，請打開系統設定 -（帳戶和）帳號，點選「移除工作資料」。</string>
     <string name="dialog_critical_app_warning">這個應用程式（或服務）可能對於 Android 系統或其它應用程式的正常運作至關重要。如果繼續此操作，部分應用程式甚至整個系統可能因此變得不穩定或無法正常運作。\n\n確認繼續？</string>
     <string name="dialog_space_setup_failed">抱歉，建立雙開空間時出現了異常。（階段 %1$d）</string>
+    <string name="provisioning_recovery_title">完成上次中斷的 Root 建立</string>
+    <string name="provisioning_recovery_message">上次 Root 建立在 Android 安裝驗證還原前中斷。繼續使用前需將系統設定還原為原值。只有點選「立即還原」後才會請求 Root 權限。</string>
+    <string name="provisioning_recovery_failed">無法還原 Android 安裝驗證的原始設定，可能是 Root 權限被拒絕。請重試或離開稜鏡空間；復原完成前不會進入正常畫面。</string>
+    <string name="provisioning_recovery_action">立即還原</string>
+    <string name="provisioning_recovery_retry">重試</string>
+    <string name="provisioning_recovery_exit">離開</string>
 
     <string name="action_continue">繼續</string>
     <string name="action_destroy">刪除</string>
