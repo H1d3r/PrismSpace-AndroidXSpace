@@ -14,13 +14,23 @@ class NonRootShizukuProvider: ShizukuProvider() {
             .onFailure { DiagnosticLog.w(TAG, "Sui initialization failed package=$packageName", it) }
             .getOrDefault(false)
         val created = super.onCreate()
+        logTransport(packageName, initialized, phase = "provider_created")
+        Shizuku.addBinderReceivedListenerSticky {
+            logTransport(packageName, initialized, phase = "binder_received")
+        }
+        return created
+    }
+
+    private fun logTransport(packageName: String, initialized: Boolean, phase: String) {
         val transport = when {
             runCatching { Sui.isSui() }.getOrDefault(false) -> "sui"
             runCatching { Shizuku.getVersion() >= 11 }.getOrDefault(false) -> "shizuku"
             else -> "none"
         }
-        DiagnosticLog.i(TAG, "privileged transport=$transport suiInitialized=$initialized package=$packageName")
-        return created
+        DiagnosticLog.i(
+            TAG,
+            "privileged transport=$transport phase=$phase suiInitialized=$initialized package=$packageName",
+        )
     }
 
     private companion object { const val TAG = "Prism.ShizukuProvider" }

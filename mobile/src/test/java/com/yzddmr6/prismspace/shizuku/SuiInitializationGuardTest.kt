@@ -11,6 +11,8 @@ class SuiInitializationGuardTest {
         assertTrue(source.indexOf("disableAutomaticSuiInitialization()") < source.indexOf("Sui.init(packageName)"))
         assertTrue(source.indexOf("Sui.init(packageName)") < source.indexOf("super.onCreate()"))
         assertTrue(source.contains("requireNotNull(context).packageName"))
+        assertTrue(source.contains("Shizuku.addBinderReceivedListenerSticky"))
+        assertTrue(source.contains("phase = \"binder_received\""))
         assertFalse(source.contains("BuildConfig.APPLICATION_ID"))
     }
 
