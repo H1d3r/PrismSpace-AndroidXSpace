@@ -2,6 +2,7 @@ package com.yzddmr6.prismspace.prism.compose
 
 import com.yzddmr6.prismspace.prism.compose.space.SpaceCapProbe
 import com.yzddmr6.prismspace.prism.compose.space.computeCap
+import com.yzddmr6.prismspace.prism.compose.space.effectiveMaxUsers
 import com.yzddmr6.prismspace.prism.compose.space.isRootOutput
 import com.yzddmr6.prismspace.prism.compose.space.parsePmCreateOutput
 import com.yzddmr6.prismspace.prism.compose.space.parsePmRemoveOutput
@@ -50,6 +51,13 @@ class SpaceProvisioningParsersTest {
         assertEquals(SpaceCapProbe.Known(max = 4, current = 2), computeCap(maxUsers = 4, currentManaged = 1))
         assertEquals(SpaceCapProbe.Unknown, computeCap(maxUsers = null, currentManaged = 1))
         assertEquals(SpaceCapProbe.Known(max = 4, current = 1), computeCap(maxUsers = 4, currentManaged = 0))
+    }
+
+    @Test fun `effective max users permits temporary vendor property lift without lowering a higher cap`() {
+        assertEquals(4, effectiveMaxUsers(property = 1, resource = 4))
+        assertEquals(10, effectiveMaxUsers(property = 10, resource = 4))
+        assertEquals(4, effectiveMaxUsers(property = null, resource = 4))
+        assertEquals(null, effectiveMaxUsers(property = null, resource = null))
     }
     @Test fun `parsePmCreateOutput - managed-profile limit classified`() {
         assertEquals(PmCreateOutcome.ManagedProfileLimit,

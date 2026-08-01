@@ -39,7 +39,6 @@ import com.yzddmr6.prismspace.prism.service.ProfileEntryLauncher
 import com.yzddmr6.prismspace.prism.service.ProfileBridgeResult
 import com.yzddmr6.prismspace.prism.service.ProfileRecoveryService
 import com.yzddmr6.prismspace.setup.PrismSetup
-import com.yzddmr6.prismspace.setup.DestroyProfileResult
 import com.yzddmr6.prismspace.setup.SetupFlow
 import com.yzddmr6.prismspace.shuttle.ShuttleProvider
 import com.yzddmr6.prismspace.util.PrismLocale
@@ -544,9 +543,9 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             setFeedback(res(R.string.lz_vm_deleting_space, emptyArray()), isError = false)
             stateRepo.refresh("settings_delete_preflight")
-            val stateAndSpace = withContext(Dispatchers.IO) {
+            val space = withContext(Dispatchers.IO) {
                 val state = (stateRepo.state.value as SpaceSnapshot.Loaded).state
-                val space = state.userId?.let { userId ->
+                state.userId?.let { userId ->
                     spaceRepo.dualSpace() ?: PrismSpace(
                         id = "space_$userId",
                         userId = userId,
@@ -554,33 +553,19 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                         displayName = res(R.string.lz_vm_default_space_name, emptyArray()),
                     )
                 }
-                state to space
-            }
-            val (state, space) = stateAndSpace
-            if (state is SpaceState.OrphanProfile) {
-                val manager = stateRepo.profileOwnerPackage(state.userId)
-                    ?: str(R.string.lz_setvm_orphan_manager_unknown)
-                setFeedback(str(R.string.lz_setvm_orphan_profile, manager), isError = true)
-                PrismSetup.promptManualRemoval(activity)
-                refreshCapabilities()
-                return@launch
             }
             if (space == null) {
                 setFeedback(res(R.string.lz_space_delete_target_missing, emptyArray()), isError = true)
                 refreshCapabilities()
                 return@launch
             }
-            val result: DeleteSpaceResult =
-                if (space.userId == Users.currentId())
-                    DeleteSpaceResult.FellBackToSelfDestroy(PrismSetup.destroyProfileDirect(activity))
-                else SpaceDeletionCoordinator.delete(
-                    getApplication(),
-                    space,
-                    useRoot = capRepo.selectedMode.value == PrismMode.Root,
-                )
+            val result = SpaceDeletionCoordinator.delete(
+                getApplication(),
+                space,
+                useRoot = capRepo.selectedMode.value == PrismMode.Root,
+            )
             val fb = provisioningFeedback(result, res)
-            if (result == DeleteSpaceResult.Success ||
-                (result is DeleteSpaceResult.FellBackToSelfDestroy && result.inner == DestroyProfileResult.Success)) {
+            if (result == DeleteSpaceResult.Success) {
                 UserCloneRegistry.clear(getApplication())
             }
             setFeedback(fb.message, isError = fb.isError)

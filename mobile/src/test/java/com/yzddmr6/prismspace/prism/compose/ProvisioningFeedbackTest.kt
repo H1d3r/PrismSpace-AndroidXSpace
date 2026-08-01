@@ -3,7 +3,6 @@ package com.yzddmr6.prismspace.prism.compose
 import com.yzddmr6.prismspace.prism.compose.space.CreateSpaceResult
 import com.yzddmr6.prismspace.prism.compose.space.DeleteSpaceResult
 import com.yzddmr6.prismspace.prism.compose.vm.provisioningFeedback
-import com.yzddmr6.prismspace.setup.DestroyProfileResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -41,18 +40,13 @@ class ProvisioningFeedbackTest {
         assertEquals("删除空间失败：未知错误，空间未被破坏，可重试",
             provisioningFeedback(DeleteSpaceResult.Failed("   ")).message)
     }
-    @Test fun `delete fell back to self-destroy composes P0-3 feedback`() {
-        val f = provisioningFeedback(DeleteSpaceResult.FellBackToSelfDestroy(DestroyProfileResult.Success))
-        assertEquals("正在删除双开空间…", f.message); assertFalse(f.isError)
-        val g = provisioningFeedback(DeleteSpaceResult.FellBackToSelfDestroy(DestroyProfileResult.Failed("z")))
-        assertEquals("删除失败：z，空间未被破坏，可重试", g.message); assertTrue(g.isError)
-    }
     @Test fun `create failed with blank reason falls back`() {
         assertEquals("创建空间失败：未知错误，可重试", provisioningFeedback(CreateSpaceResult.Failed("   ")).message)
     }
-    @Test fun `delete fell back self-destroy not-profile-owner routes to system removal`() {
-        val f = provisioningFeedback(DeleteSpaceResult.FellBackToSelfDestroy(DestroyProfileResult.NotProfileOwner))
-        assertTrue(f.isError); assertTrue(f.routeToSystemRemoval)
+    @Test fun `delete manual removal result routes to system removal`() {
+        val f = provisioningFeedback(DeleteSpaceResult.ManualRemovalRequired("not owner"))
+        assertTrue(f.isError)
+        assertTrue(f.routeToSystemRemoval)
     }
     @Test fun `managed-profile limit feedback honest`() {
         val f = provisioningFeedback(CreateSpaceResult.ManagedProfileLimitReached)

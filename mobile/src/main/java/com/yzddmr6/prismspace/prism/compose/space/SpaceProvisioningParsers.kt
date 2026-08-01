@@ -40,3 +40,7 @@ fun parsePmRemoveOutput(lines: List<String>?): PmRemoveOutcome {
 fun computeCap(maxUsers: Int?, currentManaged: Int): SpaceCapProbe =
     if (maxUsers == null) SpaceCapProbe.Unknown
     else SpaceCapProbe.Known(max = maxUsers, current = 1 + currentManaged)
+
+/** A low vendor property is precisely what the root flow temporarily raises. */
+internal fun effectiveMaxUsers(property: Int?, resource: Int?): Int? =
+    listOfNotNull(property?.takeIf { it > 0 }, resource?.takeIf { it > 0 }).maxOrNull()

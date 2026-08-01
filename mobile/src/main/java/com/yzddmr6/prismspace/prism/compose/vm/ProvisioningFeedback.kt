@@ -33,7 +33,6 @@ fun provisioningFeedback(result: DeleteSpaceResult, res: StringResolver = zhFall
         DestroyFeedback(res(R.string.lz_vm_delete_success, emptyArray()), isError = false, routeToSystemRemoval = false)
     DeleteSpaceResult.RootUnavailable ->
         DestroyFeedback(res(R.string.lz_vm_delete_root_unavailable, emptyArray()), isError = true, routeToSystemRemoval = true)
-    is DeleteSpaceResult.FellBackToSelfDestroy -> destroyProfileFeedback(result.inner, res)
     is DeleteSpaceResult.ManualRemovalRequired ->
         DestroyFeedback(res(R.string.lz_vm_delete_manual_required, emptyArray()), isError = true, routeToSystemRemoval = true)
     is DeleteSpaceResult.Failed ->

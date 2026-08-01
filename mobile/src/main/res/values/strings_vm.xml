@@ -68,7 +68,7 @@
     <string name="lz_vm_mode_shizuku_summary_not_running">Start Shizuku or wireless debugging to enable enhanced capabilities.</string>
     <string name="lz_vm_mode_shizuku_summary_not_installed">Shizuku was not detected; standard dual-open features still work.</string>
     <string name="lz_vm_mode_root_title">Root mode</string>
-    <string name="lz_vm_mode_root_summary">Root is only used for advanced diagnostics and fallback maintenance; it is not required for standard dual-open features.</string>
+    <string name="lz_vm_mode_root_summary">Root is only used for advanced diagnostics and fallback maintenance. Root setup temporarily adjusts the system user limit and ADB install verification, then restores both.</string>
 
     <!-- PrismShizukuAdbStatus labels -->
     <string name="lz_vm_shizuku_status_not_installed">Not installed</string>

@@ -37,12 +37,7 @@ internal object CoreBridgeOperations {
         return true
     }
 
-    fun wipeProfile(context: Context): Boolean {
-        val policies = DevicePolicies(context)
-        if (!policies.isProfileOwner) return false
-        policies.manager.wipeData(0)
-        return true
-    }
+    fun wipeProfile(context: Context): Boolean = ProfileWipe.wipeSelf(context)
 
     fun queryIsProfileOwner(context: Context) = DevicePolicies(context).isProfileOwner
 
@@ -109,6 +104,16 @@ internal object CoreBridgeOperations {
         LaunchResult.Denied -> LaunchOutcomeDto(LaunchOutcomeKind.Denied)
         LaunchResult.SpaceNotReady -> LaunchOutcomeDto(LaunchOutcomeKind.Unknown, "space_not_ready")
         is LaunchResult.Unknown -> LaunchOutcomeDto(LaunchOutcomeKind.Unknown, reason)
+    }
+}
+
+/** The only irreversible profile-local data erasure primitive. */
+object ProfileWipe {
+    fun wipeSelf(context: Context): Boolean {
+        val policies = DevicePolicies(context)
+        if (!policies.isProfileOwner) return false
+        policies.manager.wipeData(0)
+        return true
     }
 }
 

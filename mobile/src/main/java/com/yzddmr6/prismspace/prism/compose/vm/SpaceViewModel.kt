@@ -32,7 +32,6 @@ import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository
 import com.yzddmr6.prismspace.prism.compose.space.SpaceUsability
 import com.yzddmr6.prismspace.prism.compose.space.experimentalBlockInfo
 import com.yzddmr6.prismspace.setup.PrismSetup
-import com.yzddmr6.prismspace.setup.DestroyProfileResult
 import com.yzddmr6.prismspace.util.Users
 import com.yzddmr6.prismspace.util.Users.Companion.toId
 import com.yzddmr6.prismspace.data.PrismAppInfo
@@ -391,17 +390,13 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
         val res: StringResolver = prismResolver(getApplication())
         viewModelScope.launch {
             setFeedback(res(R.string.lz_vm_deleting_space, emptyArray()), isError = false)
-            val result: DeleteSpaceResult =
-                if (space.userId == Users.currentId())
-                    DeleteSpaceResult.FellBackToSelfDestroy(PrismSetup.destroyProfileDirect(activity))
-                else SpaceDeletionCoordinator.delete(
-                    getApplication(),
-                    space,
-                    useRoot = capabilityRepo.selectedMode.value == PrismMode.Root,
-                )
+            val result = SpaceDeletionCoordinator.delete(
+                getApplication(),
+                space,
+                useRoot = capabilityRepo.selectedMode.value == PrismMode.Root,
+            )
             val fb = provisioningFeedback(result, res)
-            if (result == DeleteSpaceResult.Success ||
-                (result is DeleteSpaceResult.FellBackToSelfDestroy && result.inner == DestroyProfileResult.Success)) {
+            if (result == DeleteSpaceResult.Success) {
                 UserCloneRegistry.clear(getApplication())
             }
             setFeedback(fb.message, isError = fb.isError)
