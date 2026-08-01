@@ -14,7 +14,7 @@
     <string name="lz_pf_files_title">Files</string>
     <string name="lz_pf_files_transfer_heading">Move files between spaces</string>
     <string name="lz_pf_files_send_other">Send files to the other space</string>
-    <string name="lz_pf_files_send_other_summary">Choose up to 20 files. PrismSpace transfers them serially through the profile bridge.</string>
+    <string name="lz_pf_files_send_other_summary">Choose multiple files. PrismSpace transfers them serially through the profile bridge.</string>
     <string name="lz_pf_direction_to_main">To main space</string>
     <string name="lz_pf_direction_to_profile">To dual space</string>
     <string name="lz_pf_files_step1">In any app, select the file and tap the system “Share”.</string>

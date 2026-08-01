@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="lz_pf_files_send_other">傳送檔案到另一空間</string>
-    <string name="lz_pf_files_send_other_summary">一次選擇最多 20 個檔案，PrismSpace 將透過空間橋依序傳輸。</string>
+    <string name="lz_pf_files_send_other_summary">可一次選擇多個檔案，PrismSpace 將透過空間橋依序傳輸。</string>
     <string name="lz_pf_direction_to_main">傳到主空間</string>
     <string name="lz_pf_direction_to_profile">傳到雙開空間</string>
 </resources>
