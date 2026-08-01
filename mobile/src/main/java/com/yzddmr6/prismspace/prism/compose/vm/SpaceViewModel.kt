@@ -22,6 +22,7 @@ import com.yzddmr6.prismspace.prism.compose.space.DeleteSpaceResult
 import com.yzddmr6.prismspace.prism.compose.space.ExperimentalBlockInfo
 import com.yzddmr6.prismspace.prism.compose.space.PrismSpace
 import com.yzddmr6.prismspace.prism.compose.space.PrismSpaceKind
+import com.yzddmr6.prismspace.prism.compose.space.resolveSpaceSelection
 import com.yzddmr6.prismspace.prism.compose.space.SpaceCapProbe
 import com.yzddmr6.prismspace.prism.compose.space.SpaceProvisioningEngine
 import com.yzddmr6.prismspace.prism.compose.space.SpaceDeletionCoordinator
@@ -366,6 +367,12 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
             }
             val fb = provisioningFeedback(r, res)
             setFeedback(fb.message, isError = fb.isError)
+            if (r is CreateSpaceResult.Success) {
+                _uiState.value = _uiState.value.copy(
+                    segment = SpaceSegment.Dual,
+                    selectedDualSpaceId = null,
+                )
+            }
             refresh()
         }
     }
@@ -437,7 +444,14 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
                 ?.let { spaceRepo.usabilityOf(it) } ?: SpaceUsability.NotProvisioned
             Triple(segments, spaces, usability)
         }
+        val selection = resolveSpaceSelection(
+            requestedSegment = _uiState.value.segment,
+            selectedDualSpaceId = selectedDualId,
+            spaces = allSpaces,
+        )
         _uiState.value = _uiState.value.copy(
+            segment = selection.segment,
+            selectedDualSpaceId = selection.selectedDualSpaceId,
             dual = pair.dual.toSegmentState(),
             main = pair.main.toSegmentState(),
             systemApps = pair.systemApps.toSegmentState(),

@@ -1,8 +1,12 @@
 package com.yzddmr6.prismspace.prism.compose
 
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceAppInput4
+import com.yzddmr6.prismspace.prism.compose.vm.SpaceSegment
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceUiState
 import com.yzddmr6.prismspace.prism.compose.vm.mapSpaceRows
+import com.yzddmr6.prismspace.prism.compose.space.PrismSpace
+import com.yzddmr6.prismspace.prism.compose.space.PrismSpaceKind
+import com.yzddmr6.prismspace.prism.compose.space.resolveSpaceSelection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -13,12 +17,47 @@ import org.junit.Test
  */
 class SpaceUiStateTest {
 
+    private val main = PrismSpace("main", 0, PrismSpaceKind.Main, "主空间")
+    private val dual = PrismSpace("space_22", 22, PrismSpaceKind.Dual, "双开空间")
+
     @Test
     fun `main and dual spaces show system apps by default`() {
         val state = SpaceUiState()
 
         assertTrue(state.showSystem)
         assertTrue(state.showSystemDual)
+    }
+
+    @Test
+    fun `dual segment falls back to main when no dual space exists`() {
+        val selection = resolveSpaceSelection(SpaceSegment.Dual, "space_22", listOf(main))
+
+        assertEquals(SpaceSegment.Main, selection.segment)
+        assertEquals(null, selection.selectedDualSpaceId)
+    }
+
+    @Test
+    fun `dual segment remains selected when its space exists`() {
+        val selection = resolveSpaceSelection(SpaceSegment.Dual, "space_22", listOf(main, dual))
+
+        assertEquals(SpaceSegment.Dual, selection.segment)
+        assertEquals("space_22", selection.selectedDualSpaceId)
+    }
+
+    @Test
+    fun `main segment preserves a valid dual selection for later`() {
+        val selection = resolveSpaceSelection(SpaceSegment.Main, "space_22", listOf(main, dual))
+
+        assertEquals(SpaceSegment.Main, selection.segment)
+        assertEquals("space_22", selection.selectedDualSpaceId)
+    }
+
+    @Test
+    fun `stale dual selection resolves to the first real dual space`() {
+        val selection = resolveSpaceSelection(SpaceSegment.Dual, "space_99", listOf(main, dual))
+
+        assertEquals(SpaceSegment.Dual, selection.segment)
+        assertEquals("space_22", selection.selectedDualSpaceId)
     }
 
     @Test

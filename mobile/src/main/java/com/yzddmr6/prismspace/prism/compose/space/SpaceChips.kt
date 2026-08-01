@@ -18,6 +18,24 @@ const val CREATE_CHIP_ID = "__create__"
 fun pickDefaultDualSpaceId(spaces: List<PrismSpace>): String? =
     spaces.firstOrNull { it.kind == PrismSpaceKind.Dual }?.id
 
+data class ResolvedSpaceSelection(
+    val segment: SpaceSegment,
+    val selectedDualSpaceId: String?,
+)
+
+/** A Dual segment is valid only while at least one real dual space exists. */
+fun resolveSpaceSelection(
+    requestedSegment: SpaceSegment,
+    selectedDualSpaceId: String?,
+    spaces: List<PrismSpace>,
+): ResolvedSpaceSelection {
+    val duals = spaces.filter { it.kind == PrismSpaceKind.Dual }
+    if (duals.isEmpty()) return ResolvedSpaceSelection(SpaceSegment.Main, null)
+    val resolvedDualId = selectedDualSpaceId?.takeIf { selected -> duals.any { it.id == selected } }
+        ?: duals.first().id
+    return ResolvedSpaceSelection(requestedSegment, resolvedDualId)
+}
+
 /** Mutual-exclusion gate: a dual chip may be highlighted ONLY when the Dual
  *  segment is active; on Main no dual chip is selected. Preserves last-selected
  *  dual (selectedDualSpaceId untouched; restored when segment returns to Dual). */
