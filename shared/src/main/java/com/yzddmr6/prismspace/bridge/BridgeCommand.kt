@@ -52,7 +52,8 @@ data class SetPackagesSuspended(val packageNames: List<String>, val suspended: B
     @IgnoredOnParcel
     override val id = "app.set_many_suspended"
     override fun encodeResult(result: Array<String>, out: Bundle) = out.putStringArray(RESULT, result)
-    override fun decodeResult(src: Bundle): Array<String> = src.getStringArray(RESULT) ?: emptyArray()
+    override fun decodeResult(src: Bundle): Array<String> =
+        requireNotNull(src.getStringArray(RESULT)) { "Missing failed-package result for $id" }
 }
 
 @Parcelize
@@ -60,7 +61,8 @@ data class SetPackagesFrozen(val packageNames: List<String>, val frozen: Boolean
     @IgnoredOnParcel
     override val id = "app.set_many_frozen"
     override fun encodeResult(result: Array<String>, out: Bundle) = out.putStringArray(RESULT, result)
-    override fun decodeResult(src: Bundle): Array<String> = src.getStringArray(RESULT) ?: emptyArray()
+    override fun decodeResult(src: Bundle): Array<String> =
+        requireNotNull(src.getStringArray(RESULT)) { "Missing failed-package result for $id" }
 }
 
 @Parcelize
@@ -68,7 +70,8 @@ data class EnsureAppFreeToLaunch(val packageName: String) : ProfileCommand<Strin
     @IgnoredOnParcel
     override val id = "app.ensure_free_to_launch"
     override fun encodeResult(result: String, out: Bundle) = out.putString(RESULT, result)
-    override fun decodeResult(src: Bundle): String = src.getString(RESULT).orEmpty()
+    override fun decodeResult(src: Bundle): String =
+        requireNotNull(src.getString(RESULT)) { "Missing launch-readiness result for $id" }
 }
 
 @Parcelize

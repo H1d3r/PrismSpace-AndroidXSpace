@@ -51,6 +51,8 @@ import com.yzddmr6.prismspace.prism.service.profileBridgeFailureMessage
 import com.yzddmr6.prismspace.bridge.Bridge
 import com.yzddmr6.prismspace.bridge.BridgeTargets
 import com.yzddmr6.prismspace.bridge.LaunchAppInProfile
+import com.yzddmr6.prismspace.bridge.LaunchDeepLinkInProfile
+import com.yzddmr6.prismspace.bridge.ProfileCommand
 import com.yzddmr6.prismspace.bridge.QueryDynamicShortcutLabelEnabled
 import com.yzddmr6.prismspace.bridge.RefreshShortcutInParent
 import com.yzddmr6.prismspace.bridge.RemoveShortcutsInParent
@@ -299,10 +301,18 @@ object PrismAppShortcut {
 						).show()
 						return
 					}
-					if (intent != null) Log.w(TAG, "Legacy deep-link shortcut reduced to package launch pkg=$pkg")
 					val target = BridgeTargets.profile(context, profile.toId())
+					val command: ProfileCommand<Boolean> = if (intent == null) LaunchAppInProfile(pkg, frozen) else {
+						LaunchDeepLinkInProfile(
+							pkg,
+							intent.action,
+							intent.dataString,
+							intent.categories.orEmpty().toList(),
+							frozen,
+						)
+					}
 					val result = if (target == null) ProfileBridgeResult.SpaceMissing else
-						ProfileBridgeResult.from(Bridge.inProfile(context, target).execute(LaunchAppInProfile(pkg, frozen)))
+						ProfileBridgeResult.from(Bridge.inProfile(context, target).execute(command))
 					when (result) {
 						is ProfileBridgeResult.Value -> {
 							if (result.value != true) Toast.makeText(

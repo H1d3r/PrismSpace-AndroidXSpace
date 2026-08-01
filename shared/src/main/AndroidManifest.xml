@@ -36,7 +36,7 @@
 
         <provider android:authorities="${applicationId}.shuttle" android:exported="false"
                   android:name="com.yzddmr6.prismspace.shuttle.ShuttleProvider" android:grantUriPermissions="true"
-                  android:directBootAware="true" />
+                  android:directBootAware="true" android:initOrder="100" />
 
     </application>
 

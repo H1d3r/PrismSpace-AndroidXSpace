@@ -10,7 +10,9 @@
         <provider
             android:name=".InstallerBridgePortsProvider"
             android:authorities="${applicationId}.installer.bridge-ports"
-            android:exported="false" />
+            android:directBootAware="true"
+            android:exported="false"
+            android:initOrder="800" />
 
         <activity android:name=".AppInstallerActivity"
                   android:label="@string/app_installer_label"

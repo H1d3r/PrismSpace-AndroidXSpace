@@ -152,6 +152,20 @@ data class LaunchAppInProfile(
     override fun decodeResult(src: Bundle) = src.getBoolean(RESULT)
 }
 
+/** Reconstructs a bounded deep-link intent in the target profile; no Intent or component crosses IPC. */
+@Parcelize
+data class LaunchDeepLinkInProfile(
+    val packageName: String,
+    val action: String?,
+    val dataUri: String?,
+    val categories: List<String>,
+    val unfreezeFirst: Boolean,
+) : ProfileCommand<Boolean> {
+    override val id get() = "app.launch_deep_link_in_profile"
+    override fun encodeResult(result: Boolean, out: Bundle) = out.putBoolean(RESULT, result)
+    override fun decodeResult(src: Bundle) = src.getBoolean(RESULT)
+}
+
 @Parcelize
 data class OpenAppDetailsInProfile(val packageName: String) : ProfileCommand<Unit> {
     override val id get() = "app.open_details_in_profile"
@@ -176,6 +190,7 @@ internal val SPACE_AND_SHORTCUT_COMMAND_SAMPLES: List<BridgeCommand<*>> = listOf
     StartProfileDeactivation(10),
     UnfreezeAndLaunchApp("pkg"),
     LaunchAppInProfile("pkg", true),
+    LaunchDeepLinkInProfile("pkg", "android.intent.action.VIEW", "https://example.test/path", listOf("cat"), true),
     OpenAppDetailsInProfile("pkg"),
 )
 

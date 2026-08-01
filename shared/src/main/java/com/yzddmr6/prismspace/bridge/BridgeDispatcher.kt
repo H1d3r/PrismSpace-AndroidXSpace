@@ -110,6 +110,17 @@ internal object BridgeDispatcher {
                 command,
                 CoreBridgeOperations.launchApp(context, command.packageName, command.unfreezeFirst),
             )
+            is LaunchDeepLinkInProfile -> success(
+                command,
+                CoreBridgeOperations.launchDeepLink(
+                    context,
+                    command.packageName,
+                    command.action,
+                    command.dataUri,
+                    command.categories,
+                    command.unfreezeFirst,
+                ),
+            )
             is OpenAppDetailsInProfile -> success(
                 command,
                 CoreBridgeOperations.openAppDetails(context, command.packageName),

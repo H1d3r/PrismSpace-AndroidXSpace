@@ -6,7 +6,9 @@ import android.os.ParcelFileDescriptor
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.yzddmr6.prismspace.shuttle.ShuttleProvider
 
 class BridgeCommandParcelTest {
 
@@ -83,6 +85,16 @@ class BridgeCommandParcelTest {
                 LaunchOutcomeDto(LaunchOutcomeKind.Unknown, "reason"),
             )
             assertRoundTrip(LaunchAppInProfile("pkg", true), true)
+            assertRoundTrip(
+                LaunchDeepLinkInProfile(
+                    "pkg",
+                    "android.intent.action.VIEW",
+                    "https://example.test/path#fragment",
+                    listOf("android.intent.category.BROWSABLE"),
+                    true,
+                ),
+                true,
+            )
             assertRoundTrip(OpenAppDetailsInProfile("pkg"), Unit)
             val diagnosticToken = "00000000-0000-0000-0000-000000000000"
             assertRoundTrip(
@@ -98,6 +110,34 @@ class BridgeCommandParcelTest {
         } finally {
             writePipe.forEach(ParcelFileDescriptor::close)
             readPipe.forEach(ParcelFileDescriptor::close)
+        }
+    }
+
+    @Test fun providerSetsCommandClassLoaderBeforeFirstBundleRead() {
+        val request = roundTripBundleWithoutClassLoader(BridgeWire.request(Ping))
+        val response = requireNotNull(ShuttleProvider().call("wrong.method", null, request))
+        val error = runCatching { BridgeWire.decode(Ping, response) }.exceptionOrNull()
+
+        assertTrue(error is BridgeExecutionException)
+        assertEquals(BridgeErrorCategory.InvalidRequest, (error as BridgeExecutionException).bridgeError.category)
+        assertEquals("method=wrong.method", error.bridgeError.message)
+    }
+
+    @Test fun missingCommandIsAnInvalidRequest() {
+        val response = requireNotNull(ShuttleProvider().call(Ping.id, null, null))
+        val error = runCatching { BridgeWire.decode(Ping, response) }.exceptionOrNull()
+
+        assertTrue(error is BridgeExecutionException)
+        assertEquals(BridgeErrorCategory.InvalidRequest, (error as BridgeExecutionException).bridgeError.category)
+    }
+
+    @Test fun requiredResultsFailClosedWhenMissing() {
+        listOf<BridgeCommand<*>>(
+            SetPackagesSuspended(emptyList(), true),
+            SetPackagesFrozen(emptyList(), true),
+            EnsureAppFreeToLaunch("pkg"),
+        ).forEach { command ->
+            assertTrue(runCatching { command.decodeResult(Bundle()) }.exceptionOrNull() is IllegalArgumentException)
         }
     }
 
@@ -135,6 +175,18 @@ class BridgeCommandParcelTest {
             parcel.setDataPosition(0)
             @Suppress("DEPRECATION")
             requireNotNull(parcel.readBundle(BridgeCommand::class.java.classLoader))
+        } finally {
+            parcel.recycle()
+        }
+    }
+
+    private fun roundTripBundleWithoutClassLoader(value: Bundle): Bundle {
+        val parcel = Parcel.obtain()
+        return try {
+            parcel.writeBundle(value)
+            parcel.setDataPosition(0)
+            @Suppress("DEPRECATION")
+            requireNotNull(parcel.readBundle())
         } finally {
             parcel.recycle()
         }

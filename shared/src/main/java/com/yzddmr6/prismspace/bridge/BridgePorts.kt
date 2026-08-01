@@ -70,12 +70,12 @@ data class BridgeHandlers(
     val shortcut: ShortcutPort?,
     val installer: InstallerPort?,
 ) {
-    fun missing(): List<String> = buildList {
+    fun missing(requireInstaller: Boolean = false): List<String> = buildList {
         if (appControl == null) add("app_control")
         if (fileBridge == null) add("file_bridge")
         if (appList == null) add("app_list")
         if (shortcut == null) add("shortcut")
-        if (installer == null) add("installer")
+        if (requireInstaller && installer == null) add("installer")
     }
 }
 
@@ -135,6 +135,7 @@ object BridgePortsContributors {
 object BridgePorts {
     @Volatile private var installed: BridgeHandlers? = null
 
+    @Synchronized
     fun install(handlers: BridgeHandlers) {
         if (installed != null) {
             val message = "bridge_ports_duplicate_install"
@@ -143,6 +144,13 @@ object BridgePorts {
             return
         }
         installed = handlers
+    }
+
+    /** The command provider owns assembly, after higher-initOrder contributors have registered. */
+    fun installRegistered() {
+        if (!BridgePortsContributors.hasContributors()) return
+        install(BridgePortsContributors.assemble())
+        verifyInstalled()
     }
 
     fun verifyInstalled() {

@@ -39,11 +39,7 @@ fun classifyShuttleNotReadyCause(error: RuntimeException, permissionGranted: Boo
 		is IllegalArgumentException ->
 			if (error.message?.contains("Unknown authority", ignoreCase = true) == true) {
 				ShuttleNotReadyCause.UnknownAuthority
-			} else if (permissionGranted) {
-				ShuttleNotReadyCause.PermissionPresentCallFailed
-			} else {
-				ShuttleNotReadyCause.PermissionDenied
-			}
+			} else null
 		else -> null
 	}
 

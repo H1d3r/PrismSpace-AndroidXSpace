@@ -13,6 +13,7 @@ import com.yzddmr6.prismspace.bridge.BridgeCommand
 import com.yzddmr6.prismspace.bridge.Bridge
 import com.yzddmr6.prismspace.bridge.BridgeDispatcher
 import com.yzddmr6.prismspace.bridge.BridgeTargets
+import com.yzddmr6.prismspace.bridge.BridgePorts
 import com.yzddmr6.prismspace.bridge.BridgeWire
 import com.yzddmr6.prismspace.bridge.Ping
 import com.yzddmr6.prismspace.bridge.EstablishBackwardGrant
@@ -192,10 +193,10 @@ class ShuttleProvider: ContentProvider() {
 	}
 
 	override fun call(method: String, arg: String?, extras: Bundle?): Bundle? {
-		if (extras?.containsKey(BridgeWire.KEY_COMMAND) != true) {
+		val command = extras?.let(BridgeWire::readCommand)
+		if (command == null) {
 			return BridgeWire.invalidRequest(method, "missing typed bridge command")
 		}
-		val command = requireNotNull(BridgeWire.readCommand(extras)) { "Missing bridge command" }
 		if (method != command.id) return BridgeWire.invalidRequest(command.id, "method=$method")
 		val token = Binder.clearCallingIdentity()
 		return try {
@@ -205,7 +206,10 @@ class ShuttleProvider: ContentProvider() {
 		}
 	}
 
-	override fun onCreate() = true.also { initialize(context) }
+	override fun onCreate() = true.also {
+		BridgePorts.installRegistered()
+		initialize(context)
+	}
 
 	override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): Cursor? = null
 	override fun getType(uri: Uri): String? = null

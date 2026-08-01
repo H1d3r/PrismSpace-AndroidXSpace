@@ -25,6 +25,9 @@ class BridgeProtocolContractTest {
         )
 
         assertTrue(handlers.missing().isEmpty())
+        assertTrue(handlers.missing(requireInstaller = true).isEmpty())
+        assertTrue(handlers.copy(installer = null).missing().isEmpty())
+        assertEquals(listOf("installer"), handlers.copy(installer = null).missing(requireInstaller = true))
     }
 
     @Test fun commandPayloadsCannotCarryExecutableOrIntentTargets() {
