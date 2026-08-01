@@ -83,10 +83,26 @@ class SpaceStateStoreTest {
         val second = async { store.refresh("second") }
         delay(20L)
         release.complete(Unit)
-        first.await()
-        second.await()
+        assertTrue(first.await())
+        assertTrue(second.await())
 
         assertEquals(1, calls.get())
+    }
+
+    @Test fun explicitRefreshReportsFailureWithoutReplacingLastSnapshot() = runBlocking {
+        val calls = AtomicInteger()
+        val store = SpaceStateStore(
+            collector = {
+                if (calls.incrementAndGet() == 1) SpaceState.NoProfile else error("unavailable")
+            },
+            scope = scope,
+            onCollectionFailure = { _, _ -> },
+        )
+
+        assertTrue(store.refresh("first"))
+        assertEquals(SpaceSnapshot.Loaded(SpaceState.NoProfile), store.state.value)
+        assertFalse(store.refresh("second"))
+        assertEquals(SpaceSnapshot.Loaded(SpaceState.NoProfile), store.state.value)
     }
 
     @Test fun invalidationWhileUnobservedRefreshesWhenSubscriberReturns() = runBlocking {

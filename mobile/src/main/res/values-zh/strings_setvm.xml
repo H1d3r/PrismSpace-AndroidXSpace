@@ -43,6 +43,7 @@
     <string name="lz_setvm_orphan_profile">该工作资料由 %1$s 管理，而非 PrismSpace。请在 Android 系统设置中移除；PrismSpace 不会删除其他管理器的资料。</string>
     <string name="lz_setvm_orphan_manager_unknown">未知设备策略控制器</string>
     <string name="lz_setvm_provisioning_active">双开空间仍在配置中，请保持 Android 创建界面开启。</string>
+    <string name="lz_setvm_state_refresh_failed">无法确认双开空间的最新状态，请稍后重试。未执行任何更改。</string>
 
     <!-- SettingsViewModel: diagnostic report export -->
     <string name="lz_setvm_report_subject">PrismSpace 诊断报告</string>

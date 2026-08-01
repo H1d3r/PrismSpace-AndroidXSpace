@@ -446,17 +446,25 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     fun repairSpace(context: Context) {
         viewModelScope.launch {
             val appContext = context.applicationContext
-            stateRepo.refresh("settings_repair")
+            if (!stateRepo.refresh("settings_repair")) {
+                setFeedback(str(R.string.lz_setvm_state_refresh_failed), isError = true)
+                return@launch
+            }
             val plan = withContext(Dispatchers.IO) {
-                val initial = (stateRepo.state.value as SpaceSnapshot.Loaded).state
+                val initial = (stateRepo.state.value as? SpaceSnapshot.Loaded)?.state
+                    ?: return@withContext null
                 if (initial is SpaceState.HalfProvisioned || initial is SpaceState.BridgeDown) {
                     initial.userId?.let(UserHandles::of)?.let { profile ->
                         runCatching { bridgeHealthRepo.refreshHealth(profile) }
                             .onFailure { DiagnosticLog.w(TAG, "refresh bridge health before repair failed", it) }
                     }
                 }
-                stateRepo.refresh("settings_repair_health")
-                recoveryPlan((stateRepo.state.value as SpaceSnapshot.Loaded).state)
+                if (!stateRepo.refresh("settings_repair_health")) return@withContext null
+                (stateRepo.state.value as? SpaceSnapshot.Loaded)?.state?.let(::recoveryPlan)
+            }
+            if (plan == null) {
+                setFeedback(str(R.string.lz_setvm_state_refresh_failed), isError = true)
+                return@launch
             }
             when (plan) {
                 SpaceRecoveryPlan.StartSetup -> {
@@ -542,9 +550,13 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         val res: StringResolver = prismResolver(getApplication())
         viewModelScope.launch {
             setFeedback(res(R.string.lz_vm_deleting_space, emptyArray()), isError = false)
-            stateRepo.refresh("settings_delete_preflight")
+            if (!stateRepo.refresh("settings_delete_preflight")) {
+                setFeedback(str(R.string.lz_setvm_state_refresh_failed), isError = true)
+                return@launch
+            }
             val space = withContext(Dispatchers.IO) {
-                val state = (stateRepo.state.value as SpaceSnapshot.Loaded).state
+                val state = (stateRepo.state.value as? SpaceSnapshot.Loaded)?.state
+                    ?: return@withContext null
                 state.userId?.let { userId ->
                     spaceRepo.dualSpace() ?: PrismSpace(
                         id = "space_$userId",

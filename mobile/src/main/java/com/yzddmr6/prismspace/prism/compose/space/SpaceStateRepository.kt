@@ -61,7 +61,7 @@ class SpaceStateRepository(context: Context) {
 
     val state: StateFlow<SpaceSnapshot> get() = store.state
 
-    suspend fun refresh(reason: String) = store.refresh(reason)
+    suspend fun refresh(reason: String): Boolean = store.refresh(reason)
 
     /** Creation is the only read path allowed to wait for initial fact collection. */
     suspend fun preflightCreate(): SpaceState {
@@ -135,9 +135,7 @@ internal class SpaceStateStore(
         }
     }
 
-    suspend fun refresh(reason: String) {
-        refreshOnce(reason)
-    }
+    suspend fun refresh(reason: String): Boolean = refreshOnce(reason)
 
     private suspend fun refreshOnce(reason: String): Boolean {
         val work = refreshMutex.withLock {

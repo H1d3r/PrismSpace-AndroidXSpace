@@ -43,6 +43,7 @@
     <string name="lz_setvm_orphan_profile">This work profile is managed by %1$s, not PrismSpace. Remove it from Android system settings; PrismSpace will not delete another manager’s profile.</string>
     <string name="lz_setvm_orphan_manager_unknown">an unknown device-policy controller</string>
     <string name="lz_setvm_provisioning_active">Dual-space setup is still in progress. Keep the Android setup screen open.</string>
+    <string name="lz_setvm_state_refresh_failed">Could not confirm the latest dual-space state. Try again; no changes were made.</string>
 
     <!-- SettingsViewModel: diagnostic report export -->
     <string name="lz_setvm_report_subject">PrismSpace diagnostic report</string>
