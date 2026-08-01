@@ -46,6 +46,7 @@ private fun zhTemplate(id: Int): String = when (id) {
     R.string.lz_vm_batch_freeze_partial -> "冻结完成: 成功 %1\$d, 失败 %2\$d"
     R.string.lz_vm_batch_uninstall_ok -> "正在卸载 %1\$d 个应用"
     R.string.lz_vm_batch_uninstall_partial -> "卸载发起: 成功 %1\$d, 失败 %2\$d"
+    R.string.lz_vm_uninstall_queue_summary -> "卸载完成：已卸载 %1\$d 个，未卸载 %2\$d 个，未能确认 %3\$d 个。"
     R.string.lz_vm_batch_clone_ok -> "正在克隆 %1\$d 个应用到双开空间"
     R.string.lz_vm_batch_clone_partial -> "克隆发起: 成功 %1\$d, 失败 %2\$d"
     R.string.lz_vm_create_success -> "已创建新的双开空间"
@@ -123,3 +124,16 @@ fun batchActionFeedback(action: BatchAction, succeeded: Int, failed: Int, res: S
     }
     return ActionFeedback(msg, isError = failed > 0)
 }
+
+/** Pure, truthful summary for the system-uninstaller queue. */
+internal fun uninstallQueueFeedback(
+    summary: UninstallSummary,
+    skipped: Int = 0,
+    res: StringResolver = zhFallback,
+): ActionFeedback = ActionFeedback(
+    res(
+        R.string.lz_vm_uninstall_queue_summary,
+        arrayOf(summary.succeeded, summary.cancelled, summary.timedOut + skipped),
+    ),
+    isError = summary.cancelled > 0 || summary.timedOut > 0 || skipped > 0,
+)

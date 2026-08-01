@@ -62,4 +62,19 @@
     <string name="lz_space_exp_title">Multi-profile is experimental</string>
     <string name="lz_space_exp_dismiss">Got it</string>
     <string name="lz_space_exp_body">Current: %1$s (user %2$d) · dual spaces %3$d/1\n\nThis device caps work/clone profiles at 1 per primary user — hardwired in the system; neither Root nor enterprise policy can lift it. Multi-profile only works on custom ROMs that remove that cap, so it is experimental.\n\nYou can still run more different apps inside your existing dual space.</string>
+    <string name="lz_space_main_copy_lost_title">Main-space app is no longer installed</string>
+    <string name="lz_space_main_copy_lost_body">After the system uninstall flow for %1$s, its main-space copy is no longer present. This is the state reported by Android. Restore the app and its data from your backup if needed.</string>
+
+    <!-- Dual-space system apps: search-first to avoid exposing a destructive bulk list. -->
+    <string name="lz_system_apps_title">System apps</string>
+    <string name="lz_system_apps_entry">Manage system apps</string>
+    <string name="lz_system_apps_back">Back</string>
+    <string name="lz_system_apps_search">Search system app name or package</string>
+    <string name="lz_system_apps_empty_search_title">Find a system app</string>
+    <string name="lz_system_apps_empty_search_hint">Enter an app name or package name. Only system packages actually installed in the dual space are searched.</string>
+    <string name="lz_system_apps_empty_result_title">No matching system apps</string>
+    <string name="lz_system_apps_empty_result_hint">Try a different name or package fragment.</string>
+    <string name="lz_system_app_freeze_critical_title">Freeze a critical system app?</string>
+    <string name="lz_system_app_freeze_critical_body">%1$s (%2$s) is required by Android or other apps. Freezing it may break the dual space, including setup, input, installation, or connectivity. Continue only if you know how to undo this change.</string>
+    <string name="lz_system_app_freeze_critical_confirm">Freeze anyway</string>
 </resources>

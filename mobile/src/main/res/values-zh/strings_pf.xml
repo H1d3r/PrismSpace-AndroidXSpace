@@ -13,6 +13,10 @@
     <!-- FilesScreen -->
     <string name="lz_pf_files_title">文件</string>
     <string name="lz_pf_files_transfer_heading">在空间之间传文件</string>
+    <string name="lz_pf_files_send_other">发送文件到另一空间</string>
+    <string name="lz_pf_files_send_other_summary">一次选择最多 20 个文件，PrismSpace 将通过空间桥串行传输。</string>
+    <string name="lz_pf_direction_to_main">传到主空间</string>
+    <string name="lz_pf_direction_to_profile">传到双开空间</string>
     <string name="lz_pf_files_step1">在任意应用里选中文件，点系统的「分享」。</string>
     <string name="lz_pf_files_step2">在分享面板切换「个人 / 工作」标签，选择目标空间。</string>
     <string name="lz_pf_files_step3">选择「导入到此空间 PrismSpace」。</string>

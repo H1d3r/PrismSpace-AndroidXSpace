@@ -152,12 +152,11 @@ public final class Apps {
 	}
 
 	public @Nullable ApplicationInfo getAppInfo(final String pkg) {
+		final int flags = getFlagsMatchKnownPackages(mContext);
 		try {
-			@SuppressLint("WrongConstant") final ApplicationInfo info =
-					mContext.getPackageManager().getApplicationInfo(pkg, getFlagsMatchKnownPackages(mContext));
-			return info;
+			return getApplicationInfoRetryingWithoutAnyUser(pkg, flags);
 		} catch (final NameNotFoundException e) {
-			@SuppressLint("WrongConstant") final List<ResolveInfo> resolves = mContext.getPackageManager().queryIntentActivities(
+			@SuppressLint("WrongConstant") final List<ResolveInfo> resolves = queryIntentActivitiesRetryingWithoutAnyUser(
 					new Intent(Intent.ACTION_MAIN).addCategory(CATEGORY_LAUNCHER).setPackage(pkg),
 					MATCH_ANY_USER | GET_UNINSTALLED_PACKAGES | GET_DISABLED_COMPONENTS);
 			if (resolves != null && ! resolves.isEmpty()) return resolves.get(0).activityInfo.applicationInfo;
@@ -167,11 +166,50 @@ public final class Apps {
 
 	public @Nullable PackageInfo getPackageInfo(final String pkg, final int flags) {
 		try {
-			@SuppressLint("WrongConstant") final PackageInfo info =
-					mContext.getPackageManager().getPackageInfo(pkg, flags | getFlagsMatchKnownPackages(mContext));
-			return info;
+			return getPackageInfoRetryingWithoutAnyUser(pkg, flags | getFlagsMatchKnownPackages(mContext));
 		} catch (final NameNotFoundException e) {
 			return null;
+		}
+	}
+
+	@SuppressLint("WrongConstant") private ApplicationInfo getApplicationInfoRetryingWithoutAnyUser(
+			final String pkg, final int flags) throws NameNotFoundException {
+		try {
+			return mContext.getPackageManager().getApplicationInfo(pkg, flags);
+		} catch (final SecurityException e) {
+			if ((flags & MATCH_ANY_USER) == 0) throw e;
+			logSecurityFallback("getApplicationInfo", pkg, e);
+			return mContext.getPackageManager().getApplicationInfo(pkg, flags & ~MATCH_ANY_USER);
+		}
+	}
+
+	@SuppressLint("WrongConstant") private PackageInfo getPackageInfoRetryingWithoutAnyUser(
+			final String pkg, final int flags) throws NameNotFoundException {
+		try {
+			return mContext.getPackageManager().getPackageInfo(pkg, flags);
+		} catch (final SecurityException e) {
+			if ((flags & MATCH_ANY_USER) == 0) throw e;
+			logSecurityFallback("getPackageInfo", pkg, e);
+			return mContext.getPackageManager().getPackageInfo(pkg, flags & ~MATCH_ANY_USER);
+		}
+	}
+
+	@SuppressLint("WrongConstant") private List<ResolveInfo> queryIntentActivitiesRetryingWithoutAnyUser(
+			final Intent intent, final int flags) {
+		try {
+			return mContext.getPackageManager().queryIntentActivities(intent, flags);
+		} catch (final SecurityException e) {
+			if ((flags & MATCH_ANY_USER) == 0) throw e;
+			logSecurityFallback("queryIntentActivities", intent.getPackage(), e);
+			return mContext.getPackageManager().queryIntentActivities(intent, flags & ~MATCH_ANY_USER);
+		}
+	}
+
+	private static void logSecurityFallback(final String operation, final @Nullable String pkg, final SecurityException error) {
+		try {
+			Log.w(TAG, operation + " denied MATCH_ANY_USER for " + pkg + "; retrying current user", error);
+		} catch (final RuntimeException ignoredInLocalJvmTests) {
+			// android.util.Log is a throwing stub in local JVM tests; logging must never break the fallback.
 		}
 	}
 

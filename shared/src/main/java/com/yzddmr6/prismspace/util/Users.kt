@@ -67,21 +67,25 @@ class Users : PseudoContentProvider() {
 		@JvmStatic fun refreshUsers(context: Context) {
 			mDebugBuild = context.applicationInfo.flags and FLAG_DEBUGGABLE != 0
 			val um = context.getSystemService<UserManager>()!!
-			val profiles = um.userProfiles.filter { profile -> (profile.toId() < 100).also {	// "Secure Folder" on Samsung devices uses user ID 150.
-				if (! it) Log.w(TAG, "Skip profile ${profile.toId()} (most probably not normal profile)") }}
+			// User ids are opaque Android identifiers. Profiles such as Samsung Secure Folder and
+			// vendor clone users legitimately use ids >= 100, so classification must use evidence.
+			val profiles = um.userProfiles.orEmpty()
 			sProfileCount = profiles.size
-			val profilesByPrism = ArrayList<UserHandle>(profiles.size - 1)
-			parentProfile = profiles[0]
+			val profilesByPrism = ArrayList<UserHandle>(profiles.size)
+			parentProfile = profiles.firstOrNull() ?: CURRENT
 			if (parentProfile == CURRENT) {      // Running in parent profile
 				val uiModule = Modules.getMainLaunchActivity(context).packageName
 				val la = context.getSystemService<LauncherApps>()!!
-				val activityInOwner = la.getActivityList(uiModule, CURRENT)[0].name
-				for (profile in profiles.drop(1)/* skip parent */)
-					for (activity in la.getActivityList(uiModule, profile))
-						// Separate "PrismSpace Settings" launcher activity is enabled, only if profile is managed by PrismSpace.
-						if (activity.name == activityInOwner) Log.i(TAG, "Profile not managed by PrismSpace: ${profile.toId()}")
-						else profilesByPrism.add(profile).also { Log.i(TAG, "Profile managed by PrismSpace: ${profile.toId()}") }
-			} else for (user in profiles.drop(1)/* skip parent */)
+				val activityInOwner = la.getActivityList(uiModule, CURRENT).firstOrNull()?.name
+				if (activityInOwner == null) Log.w(TAG, "Main launcher activity is unavailable; ownership marker cannot be read")
+				for (profile in profiles.filterNot { it == parentProfile }) {
+					val marked = activityInOwner != null && la.getActivityList(uiModule, profile).orEmpty()
+						.any { activity -> activity.name != activityInOwner }
+					if (marked) profilesByPrism.add(profile).also {
+						Log.i(TAG, "Profile managed by PrismSpace: ${profile.toId()}")
+					} else Log.i(TAG, "Profile not managed by PrismSpace: ${profile.toId()}")
+				}
+			} else for (user in profiles.filterNot { it == parentProfile })
 				if (user != CURRENT) Log.w(TAG, "Skip sibling profile (may not managed by PrismSpace): ${user.toId()}")
 				else profilesByPrism.add(user).also { Log.i(TAG, "Profile managed by PrismSpace: ${user.toId()}") }
 
@@ -168,7 +172,7 @@ class Users : PseudoContentProvider() {
 
 		private var mDebugBuild = false
 		private var sProfileCount: Int = 0
-		private lateinit var sProfilesManagedByPrism: List<UserHandle> //  class is accidentally used in other process.
+		private var sProfilesManagedByPrism: List<UserHandle> = emptyList() // Also safe if initialized in another process.
 		private const val PER_USER_RANGE = 100000
 		private const val TAG = "Prism.Users"
 	}

@@ -12,6 +12,10 @@ import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.setup.PrismSetup
 import com.yzddmr6.prismspace.setup.SetupViewModel
 import com.yzddmr6.prismspace.util.Activities
+import com.yzddmr6.prismspace.prism.compose.settings.ExperimentalFlags
+import com.yzddmr6.prismspace.prism.compose.space.SpaceProvisioningTracker
+import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository
+import com.yzddmr6.prismspace.space.SpaceState
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -34,6 +38,27 @@ class SetupController(
 
     /** Primary CTA tapped (welcome state or retry-from-error). */
     fun onPrimaryCta() {
+        if (!ExperimentalFlags.isMultiProfileEnabled(activity)) {
+            when (SpaceStateRepository(activity.applicationContext).preflightCreate()) {
+                SpaceState.NoProfile -> Unit
+                is SpaceState.OrphanProfile -> {
+                    stateVm.setUiState(SetupUiState.Error(
+                        messageRes = R.string.setup_error_orphan_profile,
+                        messageParams = null,
+                        extraActionRes = R.string.button_setup_help,
+                    ))
+                    return
+                }
+                else -> {
+                    stateVm.setUiState(SetupUiState.Error(
+                        messageRes = R.string.setup_error_existing_space_state,
+                        messageParams = null,
+                        extraActionRes = R.string.button_setup_help,
+                    ))
+                    return
+                }
+            }
+        }
         val errorVm = SetupViewModel.checkManagedProvisioningPrerequisites(activity, stateVm.incompleteSetupAcked)
         if (errorVm != null) {
             stateVm.setUiState(errorVm.toErrorState())
@@ -70,8 +95,10 @@ class SetupController(
     private fun launchManagedProvisioning() {
         val intent = SetupViewModel.buildManagedProfileProvisioningIntentPublic(activity)
         try {
+            SpaceProvisioningTracker.markStarted()
             provisionLauncher.launch(intent)
         } catch (e: ActivityNotFoundException) {
+            SpaceProvisioningTracker.clear()
             Log.w(TAG, "Managed provisioning activity not found", e)
             stateVm.setUiState(SetupUiState.Error(
                 messageRes = R.string.setup_error_missing_managed_provisioning,
@@ -92,10 +119,12 @@ class SetupController(
         @JvmStatic fun handleProvisionResult(activity: Activity, vm: SetupStateViewModel, resultCode: Int) {
             when (resultCode) {
                 Activity.RESULT_OK -> {
+                    SpaceProvisioningTracker.markReturnedSuccess()
                     Log.i(TAG, "Managed provisioning finished — closing setup activity.")
                     activity.finish()
                 }
                 Activity.RESULT_CANCELED -> {
+                    SpaceProvisioningTracker.clear()
                     Log.i(TAG, "Managed provisioning was cancelled — show cancel recovery options.")
                     vm.setUiState(SetupUiState.Error(
                         messageRes = R.string.setup_solution_for_cancelled_provision,
@@ -103,7 +132,10 @@ class SetupController(
                         extraActionRes = R.string.button_setup_space_with_root,
                     ))
                 }
-                else -> Log.w(TAG, "Unexpected provision resultCode=$resultCode")
+                else -> {
+                    SpaceProvisioningTracker.clear()
+                    Log.w(TAG, "Unexpected provision resultCode=$resultCode")
+                }
             }
         }
     }

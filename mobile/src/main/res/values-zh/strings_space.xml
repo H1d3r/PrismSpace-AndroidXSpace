@@ -62,4 +62,19 @@
     <string name="lz_space_exp_title">多 profile 是实验性功能</string>
     <string name="lz_space_exp_dismiss">我知道了</string>
     <string name="lz_space_exp_body">当前：%1$s（用户 %2$d） · 双开空间 %3$d/1\n\n本设备系统对每个主用户的工作/克隆资料配额为 1，写死于系统，Root 与企业策略均不能解除。多 profile 仅在解除该配额的定制 ROM 上可用，属实验性。\n\n你仍可在现有双开空间内继续双开更多不同的应用。</string>
+    <string name="lz_space_main_copy_lost_title">主空间应用已不存在</string>
+    <string name="lz_space_main_copy_lost_body">完成 %1$s 的系统卸载流程后，检测到它在主空间中的副本已不存在。这是 Android 当前返回的真实状态；如有需要，请从备份恢复应用及其数据。</string>
+
+    <!-- 双开空间系统应用：搜索优先，避免直接暴露可批量误操作的长列表。 -->
+    <string name="lz_system_apps_title">系统应用</string>
+    <string name="lz_system_apps_entry">管理系统应用</string>
+    <string name="lz_system_apps_back">返回</string>
+    <string name="lz_system_apps_search">搜索系统应用名称或包名</string>
+    <string name="lz_system_apps_empty_search_title">查找系统应用</string>
+    <string name="lz_system_apps_empty_search_hint">请输入应用名称或包名。这里只搜索实际安装在双开空间内的系统包。</string>
+    <string name="lz_system_apps_empty_result_title">没有匹配的系统应用</string>
+    <string name="lz_system_apps_empty_result_hint">请尝试其他名称或包名片段。</string>
+    <string name="lz_system_app_freeze_critical_title">冻结关键系统应用？</string>
+    <string name="lz_system_app_freeze_critical_body">%1$s（%2$s）是 Android 或其他应用所依赖的关键包。冻结它可能导致双开空间的配置、输入、安装或连接功能异常。仅在你明确知道如何撤销此操作时继续。</string>
+    <string name="lz_system_app_freeze_critical_confirm">仍要冻结</string>
 </resources>

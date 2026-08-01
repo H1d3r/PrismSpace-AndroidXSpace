@@ -1,6 +1,7 @@
 package com.yzddmr6.prismspace.prism.compose.space
 
 import com.yzddmr6.prismspace.data.PrismAppInfo
+import com.yzddmr6.prismspace.space.SpaceState
 
 enum class PrismSpaceKind { Main, Dual }
 
@@ -16,6 +17,8 @@ data class PrismSpace(
 /** Single source of truth for "which spaces exist" + per-space app listing.
  *  The ONLY abstraction VMs/clone-target-enum may depend on (no direct Users/AppListProvider elsewhere). */
 interface SpaceRepository {
+    /** Canonical state for the managed-profile space, including incomplete profiles. */
+    fun state(): SpaceState = dualSpace()?.let { SpaceState.Healthy(it.userId) } ?: SpaceState.NoProfile
     fun spaces(): List<PrismSpace>
     fun mainSpace(): PrismSpace
     fun dualSpace(): PrismSpace?

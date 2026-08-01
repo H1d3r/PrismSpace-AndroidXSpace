@@ -29,7 +29,7 @@
     <string name="lz_app_method_root_summary_not_enabled">Root mode off — enable it in Settings to auto-install</string>
     <string name="lz_app_filesync_open_install_entry">Open dual-space installer</string>
     <string name="lz_app_filesync_allow_file_manager">Allow file manager</string>
-    <string name="lz_app_clone_shizuku_failed">Clone via Shizuku failed. Open Shizuku and make sure PrismSpace is authorized, then try again.</string>
+    <string name="lz_app_clone_shizuku_failed">Clone via Shizuku failed (%1$s). Check Shizuku/Sui authorization, or use file-sync installation instead.</string>
 
     <!-- DeleteSpaceSheets -->
     <string name="lz_app_delete_dual_space">Delete dual space</string>

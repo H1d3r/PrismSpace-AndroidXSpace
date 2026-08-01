@@ -3,6 +3,7 @@ package com.yzddmr6.prismspace.analytics
 import android.content.Context
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.os.ParcelFileDescriptor
 import android.os.Process
 import android.util.Log
@@ -42,6 +43,8 @@ object DiagnosticLog {
     private const val TRIM_HEADROOM_BYTES = 128 * 1024
     private const val LOGCAT_MAX_BYTES = 1 * 1024 * 1024
     private const val LOGCAT_TIMEOUT_MS = 1_500L
+    private const val SNAPSHOT_DESCRIPTOR = "descriptor"
+    private const val SNAPSHOT_LENGTH = "length"
     private val executor = Executors.newSingleThreadExecutor { task ->
         Thread(task, "PrismDiagnosticLog").apply { isDaemon = true }
     }
@@ -116,6 +119,29 @@ object DiagnosticLog {
         val file = createExportFile(context, includeLogcat = true)
         return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
     }
+
+    /** Bundle-shaped descriptor session matching the already proven FileBridge PFD transport. */
+    fun openSnapshotSession(context: Context): Bundle {
+        i("Prism.Diag", "profile snapshot session open start")
+        return try {
+            val file = createExportFile(context, includeLogcat = true)
+            val descriptor = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+            Bundle(2).apply {
+                putParcelable(SNAPSHOT_DESCRIPTOR, descriptor)
+                putLong(SNAPSHOT_LENGTH, file.length())
+            }.also {
+                i("Prism.Diag", "profile snapshot session open success bytes=${file.length()}")
+            }
+        } catch (error: Throwable) {
+            e("Prism.Diag", "profile snapshot session open failed exception=${error.javaClass.name}", error)
+            throw error
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    fun snapshotDescriptor(session: Bundle): ParcelFileDescriptor? = session.getParcelable(SNAPSHOT_DESCRIPTOR)
+
+    fun snapshotLength(session: Bundle): Long = session.getLong(SNAPSHOT_LENGTH, -1L)
 
     fun shareUri(context: Context, file: File): Uri =
         FileProvider.getUriForFile(context, "${context.packageName}.diagnostics", file)

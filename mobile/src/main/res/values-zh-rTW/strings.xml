@@ -27,8 +27,11 @@
     <string name="setup_root_profile_progress">正在建立雙開空間…</string>
     <string name="setup_error_managed_profile_not_supported">抱歉，此裝置不支援必需的「Android 工作資料」特性。</string>
     <string name="setup_error_provisioning_incomplete">雙開空間的建立不完整，在此之前的建立嘗試可能並未成功。\n\n<b>如果您的裝置或其它三方工具施加了「自啟動」（或類似的）限制，請務必首先將應用雙開解除限制或加入白名單，然後再次建立雙開空間。</b></string>
-    <string name="setup_error_managed_device">抱歉，由於此裝置已被 <b>%1$s</b> 接管，雙開空間無法建立。</string>
+    <string name="setup_error_managed_device">Android 目前不允許裝置擁有者（Device Owner）與工作設定檔共存，而且互斥是雙向的；Root 或其他特權模式也無法繞過這項平台規則。\n\n目前接管裝置的應用程式：%1$s。\n\n如要建立雙開空間，請先停用該裝置管理應用程式（例如 Dhizuku），然後重試。雙開空間存在期間，也無法再啟用 Device Owner 類工具。</string>
+    <string name="setup_unknown_device_owner">未知裝置管理應用程式</string>
     <string name="setup_error_missing_managed_provisioning">抱歉，由於此裝置並未完整支援必需的「Android 工作資料」特性。</string>
+    <string name="setup_error_existing_space_state">裝置上已有尚未就緒的雙開資料。請返回設定修復，或刪除後再重新建立。</string>
+    <string name="setup_error_orphan_profile">Android 中已有不受 PrismSpace 管理的工作資料。請先在系統設定中確認並移除該資料。</string>
     <string name="setup_solution_for_cancelled_provision">建立雙開空間遇到了困難？\n\n如果建立過程被中斷，請重新進入系統建立流程，並確保棱鏡空間允許背景啟動。部分深度客製系統還需要先關閉電池最佳化或安全限制，然後再重試。\n\nRoot 建立只作為進階兜底路徑，普通使用者路徑不依賴 Root。</string>
 
 
@@ -72,6 +75,11 @@
 
     <string name="toast_successfully_cloned">%1$s 已完成分身</string>
     <string name="toast_cannot_clone">抱歉，無法為 %1$s 分身。</string>
+    <string name="lz_app_clone_shizuku_failed">Shizuku 克隆失敗（%1$s）。請檢查 Shizuku/Sui 授權，或改用檔案同步安裝。</string>
+    <string name="lz_home_status_needsrepair_body">雙開空間連線需要修復。點擊「修復」並完成可見的空間內步驟；即使拒絕通知權限，此入口仍可使用。</string>
+    <string name="lz_space_main_copy_lost_title">主空間應用程式已不存在</string>
+    <string name="lz_space_main_copy_lost_body">完成 %1$s 的系統解除安裝流程後，偵測到它在主空間中的副本已不存在。這是 Android 目前回傳的真實狀態；如有需要，請從備份還原應用程式及其資料。</string>
+    <string name="lz_vm_uninstall_queue_summary">解除安裝完成：已移除 %1$d 個、未移除 %2$d 個、無法確認 %3$d 個。</string>
     <string name="toast_shortcut_failed">快速啟動方式建立失敗</string>
     <string name="toast_error_freeze_failure">凍結失敗</string>
     <string name="toast_error_unfreeze_failure">解凍失敗</string>

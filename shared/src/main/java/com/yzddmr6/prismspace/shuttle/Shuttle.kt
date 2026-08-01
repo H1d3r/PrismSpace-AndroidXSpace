@@ -2,7 +2,9 @@ package com.yzddmr6.prismspace.shuttle
 
 import android.content.Context
 import android.os.UserHandle
+import com.yzddmr6.prismspace.analytics.DiagnosticLog
 import com.yzddmr6.prismspace.util.Users
+import com.yzddmr6.prismspace.util.Users.Companion.toId
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -64,9 +66,25 @@ class Shuttle(val context: Context, val to: UserHandle) {
 			invokeOutcome { this.function(with) }
 
 	fun <R> invokeOutcomeWithin(timeoutMs: Long = DEFAULT_SYNC_TIMEOUT_MS,
-			function: Context.() -> R): ShuttleOutcome<R> =
-			if (to == Users.current()) invokeOutcome(function)
-			else runBoundedOutcome(timeoutMs) { shuttleOutcome(function) }
+			function: Context.() -> R): ShuttleOutcome<R> {
+		if (to == Users.current()) return invokeOutcome(function)
+		val functionFqn = function.javaClass.name
+		val targetUser = to.toId()
+		return runBoundedOutcome(timeoutMs) { shuttleOutcome(function) }.also { outcome ->
+			when (outcome) {
+				ShuttleOutcome.TimedOut -> DiagnosticLog.w(
+					TAG,
+					"Shuttle timed out fqn=$functionFqn targetUser=$targetUser timeoutMs=$timeoutMs",
+				)
+				is ShuttleOutcome.Failed -> DiagnosticLog.w(
+					TAG,
+					"Shuttle failed fqn=$functionFqn targetUser=$targetUser exception=${outcome.error.javaClass.name}",
+					outcome.error,
+				)
+				else -> Unit
+			}
+		}
+	}
 
 	inline fun <A, R> invokeOutcomeWithin(timeoutMs: Long = DEFAULT_SYNC_TIMEOUT_MS,
 			with: A, crossinline function: Context.(A) -> R): ShuttleOutcome<R> =
@@ -77,6 +95,11 @@ class Shuttle(val context: Context, val to: UserHandle) {
 		if (result.isNotReady()) ShuttleOutcome.NotReady(result.notReadyCause!!)
 		else ShuttleOutcome.Value(result.getOrNull())
 	} catch (e: Throwable) {
+		DiagnosticLog.w(
+			TAG,
+			"Shuttle failed fqn=${function.javaClass.name} targetUser=${to.toId()} exception=${e.javaClass.name}",
+			e,
+		)
 		ShuttleOutcome.Failed(e)
 	}
 }
@@ -105,3 +128,5 @@ internal fun <R> runBounded(timeoutMs: Long, block: () -> R?): R? {
 	error.get()?.let { throw it }
 	return if (finished.get()) value.get() else null
 }
+
+private const val TAG = "Prism.Shuttle"

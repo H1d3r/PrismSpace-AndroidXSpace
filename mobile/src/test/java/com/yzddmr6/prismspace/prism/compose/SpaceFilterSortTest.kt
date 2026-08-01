@@ -6,6 +6,7 @@ import com.yzddmr6.prismspace.prism.compose.vm.SpaceAppInput
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceRow
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceSegment
 import com.yzddmr6.prismspace.prism.compose.vm.applyListTransform
+import com.yzddmr6.prismspace.prism.compose.vm.filterSystemAppRows
 import com.yzddmr6.prismspace.prism.compose.vm.mapRows
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -52,6 +53,19 @@ class SpaceFilterSortTest {
     private val dualX = makeRow("com.twitter.android", "X", segment = SpaceSegment.Dual, loadIndex = 0)
     private val dualTelegram = makeRow("org.telegram.messenger", "Telegram", segment = SpaceSegment.Dual, loadIndex = 1)
     private val dualRows = listOf(dualX, dualTelegram)
+
+    @Test
+    fun `system app search is empty until the user enters a query`() {
+        assertTrue(filterSystemAppRows(listOf(camera), "  ").isEmpty())
+    }
+
+    @Test
+    fun `system app search matches package and excludes non-system rows`() {
+        val nonSystem = makeRow("com.android.fake", "Fake", system = false)
+        val result = filterSystemAppRows(listOf(camera, nonSystem), "com.android")
+
+        assertEquals(listOf(camera), result)
+    }
 
     // -----------------------------------------------------------------------
     // Search / keyword matching

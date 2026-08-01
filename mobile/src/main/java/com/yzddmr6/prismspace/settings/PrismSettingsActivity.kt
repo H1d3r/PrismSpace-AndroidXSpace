@@ -10,6 +10,7 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import com.yzddmr6.prismspace.PrismNameManager
+import com.yzddmr6.prismspace.notification.NotificationPermissionPrompt
 import com.yzddmr6.prismspace.settings.profile.PrismProfileEntryScreen
 import com.yzddmr6.prismspace.shuttle.ShuttleProvider
 import com.yzddmr6.prismspace.util.DevicePolicies
@@ -41,6 +42,7 @@ class PrismSettingsActivity : ComponentActivity() {
         // Sync this profile's display name back to the parent so parent-side UI
         // shows the renamed value promptly.
         if (! Users.isParentProfile()) {
+			NotificationPermissionPrompt.requestOnce(this)
             runCatching { ShuttleProvider.initializeFromProfileForeground(this) }
                 .onFailure { Log.w(TAG, "Shuttle foreground initialize failed", it) }
             runCatching { PrismNameManager.syncNameToParentProfile(this) }

@@ -32,11 +32,11 @@
     <string name="lz_set_mode_normal_summary">无需额外授权，核心双开、启动、冻结、文件传输均可用</string>
     <string name="lz_set_mode_shizuku_summary">增强克隆与跨用户操作，需连接 Shizuku 服务</string>
     <string name="lz_set_mode_root_summary">高级修复与诊断，需授予 Root 权限</string>
-    <string name="lz_set_shizuku_intro">Shizuku 让 PrismSpace 以 ADB 权限增强克隆与跨用户操作。</string>
-    <string name="lz_set_shizuku_step1">第 1 步  安装并打开 Shizuku 应用。</string>
-    <string name="lz_set_shizuku_step2">第 2 步  用「无线调试」配对，或连接电脑执行 ADB 启动 Shizuku；有 Root 时可在 Shizuku 内一键启动。</string>
-    <string name="lz_set_shizuku_step3">第 3 步  回到本页，点下方按钮检查并授权连接。</string>
-    <string name="lz_set_shizuku_check_button">检查 Shizuku 连接</string>
+    <string name="lz_set_shizuku_intro">Shizuku 或 Sui 让 PrismSpace 使用特权系统 API 增强克隆与跨用户操作。</string>
+    <string name="lz_set_shizuku_step1">第 1 步  启动 Shizuku；或在受支持的 Root 环境安装并启用 Sui。</string>
+    <string name="lz_set_shizuku_step2">第 2 步  Shizuku 可用「无线调试」、ADB 或 Root 启动；Sui 启用后会被自动识别。</string>
+    <string name="lz_set_shizuku_step3">第 3 步  回到本页，点下方按钮检查通道，并在系统提示时授权。</string>
+    <string name="lz_set_shizuku_check_button">检查 Shizuku / Sui</string>
 
     <!-- AboutSheet.kt -->
     <string name="lz_set_about_intro">面向 Android 的双开空间管理器。在系统工作资料之上提供独立运行环境，让同一应用以多个账号并行存在，彼此数据互不干扰。</string>

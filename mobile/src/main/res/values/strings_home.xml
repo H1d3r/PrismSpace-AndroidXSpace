@@ -31,6 +31,11 @@
     <string name="lz_home_tag_notcreated">Not created</string>
     <string name="lz_home_label_create">Create dual space</string>
 
+    <string name="lz_home_status_provisioning_title">Dual space setup in progress</string>
+    <string name="lz_home_status_provisioning_body">Android and PrismSpace are finishing the managed-profile setup.</string>
+    <string name="lz_home_tag_provisioning">Setting up</string>
+    <string name="lz_home_label_provisioning">Open settings</string>
+
     <string name="lz_home_status_suspended_title">Dual space suspended</string>
     <string name="lz_home_status_suspended_body">Dual space is suspended; clone apps are temporarily unavailable.</string>
     <string name="lz_home_tag_suspended">Suspended</string>
@@ -47,7 +52,7 @@
     <string name="lz_home_label_checking">Open settings</string>
 
     <string name="lz_home_status_needsrepair_title">Dual space needs repair</string>
-    <string name="lz_home_status_needsrepair_body">A problem was found in the last check; go to Settings to repair it.</string>
+    <string name="lz_home_status_needsrepair_body">The profile connection needs repair. Tap Repair and complete the visible profile step; this path still works if notifications are denied.</string>
     <string name="lz_home_tag_needsrepair">Needs repair</string>
     <string name="lz_home_label_repair">Repair dual space</string>
 

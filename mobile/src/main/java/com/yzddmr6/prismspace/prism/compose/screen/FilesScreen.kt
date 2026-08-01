@@ -2,6 +2,8 @@
 package com.yzddmr6.prismspace.prism.compose.screen
 
 import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -46,8 +48,10 @@ import com.yzddmr6.prismspace.prism.compose.theme.PrismSpacing
 import com.yzddmr6.prismspace.prism.compose.vm.FilesViewModel
 import com.yzddmr6.prismspace.prism.service.FileBridgeService
 import com.yzddmr6.prismspace.prism.service.TransferRecordActions
+import com.yzddmr6.prismspace.prism.service.TransferDirection
 import com.yzddmr6.prismspace.prism.service.displayTitle
 import com.yzddmr6.prismspace.prism.service.openSystemFileManager
+import com.yzddmr6.prismspace.prism.ui.CrossSpaceTransferEntry
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -60,6 +64,9 @@ fun FilesScreen(nav: NavHostController) {
     val activity = context as? Activity
     val history by vm.history.collectAsState()
     var showClearConfirm by remember { mutableStateOf(false) }
+    val sendFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        CrossSpaceTransferEntry.launch(context, uris)
+    }
 
     // Refresh whenever the tab is shown (a transfer may have happened in another app meanwhile).
     LaunchedEffect(Unit) { vm.refresh() }
@@ -107,6 +114,12 @@ fun FilesScreen(nav: NavHostController) {
                 modifier = Modifier.padding(top = PrismSpacing.Xs, bottom = 10.dp),
             )
             GroupCard(title = null) {
+                ActionRow(
+                    title = stringResource(R.string.lz_pf_files_send_other),
+                    summary = stringResource(R.string.lz_pf_files_send_other_summary),
+                    leadingIcon = PrismIcons.File,
+                    onClick = { sendFiles.launch(arrayOf("*/*")) },
+                )
                 GuideStep(1, stringResource(R.string.lz_pf_files_step1))
                 GuideStep(2, stringResource(R.string.lz_pf_files_step2))
                 GuideStep(3, stringResource(R.string.lz_pf_files_step3))
@@ -146,7 +159,14 @@ fun FilesScreen(nav: NavHostController) {
                         val actions = TransferRecordActions.forRecord(item, installableInProfile)
                         ActionRow(
                             title = item.displayTitle(),
-                            summary = listOf(item.location.takeIf { it.isNotBlank() }, formatTime(item.timeMillis).takeIf { it.isNotBlank() })
+                            summary = listOf(
+                                item.direction?.let { direction -> stringResource(
+                                    if (direction == TransferDirection.ToMain) R.string.lz_pf_direction_to_main
+                                    else R.string.lz_pf_direction_to_profile,
+                                ) },
+                                item.location.takeIf { it.isNotBlank() },
+                                formatTime(item.timeMillis).takeIf { it.isNotBlank() },
+                            )
                                 .filterNotNull().joinToString(" · "),
                             leadingIcon = if (item.isImage) PrismIcons.Img else PrismIcons.File,
                             trailing = {

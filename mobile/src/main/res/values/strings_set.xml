@@ -32,11 +32,11 @@
     <string name="lz_set_mode_normal_summary">No extra authorization needed; core cloning, launch, freeze and file transfer all work</string>
     <string name="lz_set_mode_shizuku_summary">Enhances cloning and cross-user operations; requires a Shizuku service connection</string>
     <string name="lz_set_mode_root_summary">Advanced repair and diagnostics; requires Root permission</string>
-    <string name="lz_set_shizuku_intro">Shizuku lets PrismSpace use ADB privileges to enhance cloning and cross-user operations.</string>
-    <string name="lz_set_shizuku_step1">Step 1  Install and open the Shizuku app.</string>
-    <string name="lz_set_shizuku_step2">Step 2  Pair via Wireless debugging, or connect a computer and run ADB to start Shizuku; if you have Root you can start it from within Shizuku with one tap.</string>
-    <string name="lz_set_shizuku_step3">Step 3  Return to this page and tap the button below to check and authorize the connection.</string>
-    <string name="lz_set_shizuku_check_button">Check Shizuku connection</string>
+    <string name="lz_set_shizuku_intro">Shizuku or Sui lets PrismSpace use privileged system APIs to enhance cloning and cross-user operations.</string>
+    <string name="lz_set_shizuku_step1">Step 1  Start Shizuku, or install and enable Sui in a supported Root environment.</string>
+    <string name="lz_set_shizuku_step2">Step 2  For Shizuku, pair through Wireless debugging or start it with ADB/Root. Sui is detected automatically after it is enabled.</string>
+    <string name="lz_set_shizuku_step3">Step 3  Return here and tap below to check the transport and grant authorization when requested.</string>
+    <string name="lz_set_shizuku_check_button">Check Shizuku / Sui</string>
 
     <!-- AboutSheet.kt -->
     <string name="lz_set_about_intro">A dual-space manager for Android. Built on top of the system work profile, it provides isolated runtime environments so the same app can run with multiple accounts in parallel, with data fully separated.</string>

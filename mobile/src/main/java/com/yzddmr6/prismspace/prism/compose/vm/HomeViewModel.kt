@@ -16,6 +16,8 @@ import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.util.PrismLocale
 import com.yzddmr6.prismspace.util.Users
 import com.yzddmr6.prismspace.util.Users.Companion.toId
+import com.yzddmr6.prismspace.space.SpaceState
+import com.yzddmr6.prismspace.util.UserHandles
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,7 +27,18 @@ import kotlinx.coroutines.withContext
 // Health enum used by the home overview card.
 // ---------------------------------------------------------------------------
 
-enum class SpaceHealth { Normal, NotCreated, Suspended, Locked, Checking, NeedsRepair }
+enum class SpaceHealth { Normal, NotCreated, Provisioning, Suspended, Locked, Checking, NeedsRepair }
+
+internal fun spaceHealth(state: SpaceState): SpaceHealth = when (state) {
+    SpaceState.NoProfile -> SpaceHealth.NotCreated
+    is SpaceState.Provisioning -> SpaceHealth.Provisioning
+    is SpaceState.Locked -> SpaceHealth.Locked
+    is SpaceState.Inactive -> SpaceHealth.Suspended
+    is SpaceState.Healthy -> SpaceHealth.Normal
+    is SpaceState.OrphanProfile,
+    is SpaceState.HalfProvisioned,
+    is SpaceState.BridgeDown -> SpaceHealth.NeedsRepair
+}
 
 enum class HomePrimaryAction { OpenSpace, StartSetup, OpenSettings }
 
@@ -84,6 +97,17 @@ internal fun mapHome(
         primaryLabel = resolve(R.string.lz_home_label_create),
         primaryRoute = null,
         primaryAction = HomePrimaryAction.StartSetup,
+    )
+    SpaceHealth.Provisioning -> HomeUiModel(
+        level = PrismLevel.Warn,
+        statusTitle = resolve(R.string.lz_home_status_provisioning_title),
+        statusBody = resolve(R.string.lz_home_status_provisioning_body),
+        tag = resolve(R.string.lz_home_tag_provisioning),
+        mainCount = mainCount,
+        cloneCount = cloneCount,
+        primaryLabel = resolve(R.string.lz_home_label_provisioning),
+        primaryRoute = null,
+        primaryAction = HomePrimaryAction.OpenSettings,
     )
     SpaceHealth.Suspended -> HomeUiModel(
         level = PrismLevel.Warn,
@@ -207,7 +231,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val resolve: (Int) -> String = { id -> PrismLocale.wrap(getApplication()).getString(id) }
 
         // Work-profile status flags used to derive the overview state.
-        val profile = Users.profile
+        val state = spaceRepo.state()
+        val profile = state.userId?.let(UserHandles::of)
         val profileOwner = runCatching {
             profile?.let { Users.isProfileManagedByPrism(context, it) } == true
         }.getOrDefault(false)
@@ -218,18 +243,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 			profile?.let { Users.isProfileQuietModeEnabled(context, it) } == true
 		}.getOrDefault(false)
 
-		val health = when (spaceRepo.dualSpace()?.let { spaceRepo.usabilityOf(it) } ?: SpaceUsability.NotProvisioned) {
-            SpaceUsability.NotProvisioned    -> SpaceHealth.NotCreated
-            SpaceUsability.Suspended         -> SpaceHealth.Suspended
-            SpaceUsability.LockedNeedsUnlock -> SpaceHealth.Locked
-            SpaceUsability.BridgeNotReady    -> SpaceHealth.NeedsRepair
-            SpaceUsability.Unknown           -> SpaceHealth.Checking
-            SpaceUsability.Usable            -> SpaceHealth.Normal
-        }
+		val health = spaceHealth(state)
         DiagnosticLog.d(
 			TAG,
 			"home state profile=${profile?.toId() ?: Users.NULL_ID} " +
-				"profileOwner=$profileOwner running=$running quietMode=$quietMode health=$health",
+				"profileOwner=$profileOwner running=$running quietMode=$quietMode state=$state health=$health",
 		)
 
         // Counts — sourced via SpaceRepository (single source of truth; was: direct provider/Users)
@@ -290,7 +308,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun refreshBridgeHealthIfPossible(): Boolean {
-        val profile = Users.profile ?: return false
+        val profile = spaceRepo.state().userId?.let(UserHandles::of) ?: return false
         val before = bridgeHealthRepo.cachedHealth(profile)?.diagnosticLine()
         val after = runCatching { bridgeHealthRepo.refreshHealth(profile).diagnosticLine() }
             .onFailure { DiagnosticLog.w(TAG, "refresh home bridge health failed", it) }

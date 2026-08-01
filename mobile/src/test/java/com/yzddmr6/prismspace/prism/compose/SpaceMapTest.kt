@@ -21,10 +21,12 @@ class SpaceMapTest {
         launchable: Boolean = true,
         system: Boolean = false,
         cloned: Boolean = false,
+        critical: Boolean = false,
     ) = SpaceAppInput(
         pkg = pkg, label = label, frozen = frozen, suspended = suspended,
         launchable = launchable, system = system, cloned = cloned,
         segment = SpaceSegment.Dual,
+        critical = critical,
     )
 
     private fun mainInput(
@@ -57,6 +59,11 @@ class SpaceMapTest {
         assertEquals(1, rows.size)
         assertEquals("运行中", rows[0].chipText)
         assertTrue(rows[0].chipOk)
+    }
+
+    @Test
+    fun `critical package classification reaches the row model`() {
+        assertTrue(mapRows(listOf(dualInput(system = true, critical = true))).single().critical)
     }
 
     @Test

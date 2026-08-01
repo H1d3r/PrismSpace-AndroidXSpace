@@ -1,6 +1,10 @@
 package com.yzddmr6.prismspace.prism.compose.screen
 
+import android.content.Intent
 import android.graphics.drawable.Drawable
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -87,8 +91,10 @@ import com.yzddmr6.prismspace.prism.compose.vm.SpaceUiState
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceViewModel
 import com.yzddmr6.prismspace.prism.compose.vm.applyListTransform
 import com.yzddmr6.prismspace.prism.compose.vm.batchActionsFor
+import com.yzddmr6.prismspace.prism.compose.vm.filterSystemAppRows
 import com.yzddmr6.prismspace.prism.ui.PrismAppsViewModel
 import com.yzddmr6.prismspace.mobile.R
+import com.yzddmr6.prismspace.util.UserHandles
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -96,16 +102,37 @@ fun SpaceScreen(nav: NavHostController) {
     val vm: SpaceViewModel = viewModel()
     val prismAppsVm: PrismAppsViewModel = viewModel()
     val uiState by vm.uiState.collectAsState()
+    val pendingUninstall by vm.pendingUninstallRequest.collectAsState()
     val context = LocalContext.current
     LaunchedEffect(Unit) { vm.syncExperimentalFlag() }
     val activity = context as? FragmentActivity
+    val uninstallLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        vm.onUninstallActivityResult(result.resultCode)
+    }
+
+    LaunchedEffect(pendingUninstall) {
+        val request = pendingUninstall ?: return@LaunchedEffect
+        vm.onUninstallLaunched()
+        runCatching {
+            uninstallLauncher.launch(
+                Intent(Intent.ACTION_UNINSTALL_PACKAGE, Uri.fromParts("package", request.packageName, null))
+                    .putExtra(Intent.EXTRA_USER, UserHandles.of(request.targetUserId))
+                    .putExtra(Intent.EXTRA_RETURN_RESULT, true)
+            )
+        }.onFailure {
+            vm.onUninstallLaunchFailed()
+        }
+    }
 
     // Uninstall (分身) goes through the system uninstaller (async, in another task). Refresh the list
     // whenever we come back to the foreground so a just-uninstalled clone disappears instead of lingering.
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) vm.refresh()
+            if (event == Lifecycle.Event.ON_RESUME) {
+                vm.onHostResumed()
+                vm.refresh()
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -115,6 +142,8 @@ fun SpaceScreen(nav: NavHostController) {
     // for the most user-affecting state (search query). selectedRow / menuExpanded
     // are transient sheet/menu state and stay on plain `remember`.
     var searchQuery by rememberSaveable { mutableStateOf("") }
+    var systemSearchQuery by rememberSaveable { mutableStateOf("") }
+    var systemAppsOpen by rememberSaveable { mutableStateOf(false) }
     var selectedRow by remember { mutableStateOf<SpaceRow?>(null) }
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -131,13 +160,15 @@ fun SpaceScreen(nav: NavHostController) {
     LaunchedEffect(uiState.isMultiSelect) { AppLaunchSignals.setMultiSelectActive(uiState.isMultiSelect) }
     DisposableEffect(Unit) { onDispose { AppLaunchSignals.setMultiSelectActive(false) } }
 
-    val totalInSegment = (uiState.current as? SpaceSegmentState.Content)?.rows?.size ?: 0
+    val totalInSegment = (uiState.current as? SpaceSegmentState.Content)
+        ?.rows?.count { !it.system } ?: 0
     val allSelected = uiState.isMultiSelect && totalInSegment > 0 && uiState.selectedCount >= totalInSegment
 
     Scaffold(
         topBar = {
             SpaceTopBar(
                 isMultiSelect = uiState.isMultiSelect,
+                systemAppsOpen = systemAppsOpen,
                 selectedCount = uiState.selectedCount,
                 allSelected = allSelected,
                 onSelectAll = { vm.selectAll() },
@@ -169,12 +200,29 @@ fun SpaceScreen(nav: NavHostController) {
             } else {
                 SpaceToolbar(
                     uiState = uiState,
-                    searchQuery = searchQuery,
+                    searchQuery = if (systemAppsOpen) systemSearchQuery else searchQuery,
+                    systemAppsOpen = systemAppsOpen,
                     menuExpanded = menuExpanded,
-                    onSelectMain = { vm.selectSegment(SpaceSegment.Main) },
-                    onSelectDual = { vm.selectSpace(it) },
+                    onSelectMain = {
+                        systemAppsOpen = false
+                        vm.selectSegment(SpaceSegment.Main)
+                    },
+                    onSelectDual = {
+                        systemAppsOpen = false
+                        vm.selectSpace(it)
+                    },
                     onCreate = { vm.createSpace() },
-                    onSearchChanged = { searchQuery = it },
+                    onSearchChanged = {
+                        if (systemAppsOpen) systemSearchQuery = it else searchQuery = it
+                    },
+                    onOpenSystemApps = {
+                        systemAppsOpen = true
+                        menuExpanded = false
+                    },
+                    onCloseSystemApps = {
+                        systemAppsOpen = false
+                        systemSearchQuery = ""
+                    },
                     onMenuToggle = { menuExpanded = !menuExpanded },
                     onMenuDismiss = { menuExpanded = false },
                     onSortSelected = { order ->
@@ -199,10 +247,11 @@ fun SpaceScreen(nav: NavHostController) {
             // App list — client-side filter/sort/search applied over loaded rows
             AppListSection(
                 segment = uiState.segment,
-                currentState = uiState.current,
+                currentState = if (systemAppsOpen) uiState.systemApps else uiState.current,
+                systemAppsMode = systemAppsOpen,
                 isMultiSelect = uiState.isMultiSelect,
                 selectedPkgs = uiState.selectedPkgs,
-                searchQuery = searchQuery,
+                searchQuery = if (systemAppsOpen) systemSearchQuery else searchQuery,
                 sortOrder = uiState.sortOrder,
                 cloneFilter = uiState.cloneFilter,
                 showSystem = if (uiState.segment == SpaceSegment.Dual) uiState.showSystemDual else uiState.showSystem,
@@ -231,6 +280,19 @@ fun SpaceScreen(nav: NavHostController) {
 
     uiState.experimentalCreateBlocked?.let { info ->
         ExperimentalUnsupportedSheet(info = info, onDismiss = { vm.clearExperimentalCreateBlocked() })
+    }
+
+    uiState.mainCopyLostPackage?.let { pkg ->
+        AlertDialog(
+            onDismissRequest = { vm.clearMainCopyLostWarning() },
+            title = { Text(stringResource(R.string.lz_space_main_copy_lost_title)) },
+            text = { Text(stringResource(R.string.lz_space_main_copy_lost_body, pkg)) },
+            confirmButton = {
+                TextButton(onClick = { vm.clearMainCopyLostWarning() }) {
+                    Text(stringResource(android.R.string.ok))
+                }
+            },
+        )
     }
 
     // ── Batch confirm (uninstall / clone) ──────────────────────────────────────
@@ -270,6 +332,7 @@ fun SpaceScreen(nav: NavHostController) {
 @Composable
 private fun SpaceTopBar(
     isMultiSelect: Boolean,
+    systemAppsOpen: Boolean,
     selectedCount: Int,
     allSelected: Boolean,
     onSelectAll: () -> Unit,
@@ -278,8 +341,11 @@ private fun SpaceTopBar(
     TopAppBar(
         title = {
             Text(
-                text = if (isMultiSelect) stringResource(R.string.lz_space_selected_count, selectedCount)
-                       else stringResource(R.string.lz_space_title),
+                text = when {
+                    isMultiSelect -> stringResource(R.string.lz_space_selected_count, selectedCount)
+                    systemAppsOpen -> stringResource(R.string.lz_system_apps_title)
+                    else -> stringResource(R.string.lz_space_title)
+                },
                 style = MaterialTheme.typography.titleLarge,
             )
         },
@@ -312,6 +378,7 @@ private fun SpaceTopBar(
 private fun AppListSection(
     segment: SpaceSegment,
     currentState: SpaceSegmentState,
+    systemAppsMode: Boolean,
     isMultiSelect: Boolean,
     selectedPkgs: Set<String>?,
     searchQuery: String,
@@ -324,8 +391,10 @@ private fun AppListSection(
     onRowSelected: (SpaceRow) -> Unit,
 ) {
     val allRows = (currentState as? SpaceSegmentState.Content)?.rows ?: emptyList()
-    val filteredRows = if (isMultiSelect) {
-        allRows
+    val filteredRows = if (systemAppsMode) {
+        filterSystemAppRows(allRows, searchQuery)
+    } else if (isMultiSelect) {
+        allRows.filterNot { it.system }
     } else {
         applyListTransform(
             rows = allRows,
@@ -345,6 +414,7 @@ private fun AppListSection(
             EmptyPlaceholder(
                 segment = segment,
                 hasQuery = searchQuery.isNotBlank(),
+                systemAppsMode = systemAppsMode,
                 dualUsability = dualUsability,
             )
         }
@@ -367,7 +437,7 @@ private fun AppListSection(
                             }
                         },
                         onLongClick = {
-                            if (!isMultiSelect) {
+                            if (!isMultiSelect && !systemAppsMode) {
                                 onEnterMultiSelect(row.pkg)
                             }
                         },
@@ -528,11 +598,14 @@ private fun BatchConfirmDialog(
 private fun SpaceToolbar(
     uiState: SpaceUiState,
     searchQuery: String,
+    systemAppsOpen: Boolean,
     menuExpanded: Boolean,
     onSelectMain: () -> Unit,
     onSelectDual: (String) -> Unit,
     onCreate: () -> Unit,
     onSearchChanged: (String) -> Unit,
+    onOpenSystemApps: () -> Unit,
+    onCloseSystemApps: () -> Unit,
     onMenuToggle: () -> Unit,
     onMenuDismiss: () -> Unit,
     onSortSelected: (SortOrder) -> Unit,
@@ -562,7 +635,11 @@ private fun SpaceToolbar(
         Spacer(modifier = Modifier.height(PrismSpacing.Sm))
 
         // Search box + ⋯ button in one row
-        val placeholder = if (uiState.segment == SpaceSegment.Dual) stringResource(R.string.lz_space_search_dual) else stringResource(R.string.lz_space_search_main)
+        val placeholder = when {
+            systemAppsOpen -> stringResource(R.string.lz_system_apps_search)
+            uiState.segment == SpaceSegment.Dual -> stringResource(R.string.lz_space_search_dual)
+            else -> stringResource(R.string.lz_space_search_main)
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -597,8 +674,13 @@ private fun SpaceToolbar(
                 ),
             )
 
-            // ⋯ overflow menu button anchored to the RIGHT of the search box
-            Box {
+            if (systemAppsOpen) {
+                TextButton(onClick = onCloseSystemApps) {
+                    Text(stringResource(R.string.lz_system_apps_back))
+                }
+            } else {
+                // ⋯ overflow menu button anchored to the RIGHT of the search box
+                Box {
                 IconButton(
                     onClick = onMenuToggle,
                     modifier = Modifier.size(48.dp),
@@ -623,6 +705,19 @@ private fun SpaceToolbar(
                     onShowSystemToggled = onShowSystemToggled,
                     onRefresh = onRefresh,
                 )
+                }
+            }
+        }
+
+        if (uiState.segment == SpaceSegment.Dual && !systemAppsOpen) {
+            TextButton(onClick = onOpenSystemApps) {
+                Icon(
+                    imageVector = PrismIcons.Droid,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(modifier = Modifier.width(PrismSpacing.Sm))
+                Text(stringResource(R.string.lz_system_apps_entry))
             }
         }
 
@@ -930,6 +1025,7 @@ private fun LoadingPlaceholder() {
 private fun EmptyPlaceholder(
     segment: SpaceSegment,
     hasQuery: Boolean,
+    systemAppsMode: Boolean,
     dualUsability: SpaceUsability,
 ) {
     Box(
@@ -950,6 +1046,8 @@ private fun EmptyPlaceholder(
             Spacer(modifier = Modifier.height(PrismSpacing.Md))
             Text(
                 text = when {
+                    systemAppsMode && !hasQuery -> stringResource(R.string.lz_system_apps_empty_search_title)
+                    systemAppsMode -> stringResource(R.string.lz_system_apps_empty_result_title)
                     hasQuery -> stringResource(R.string.lz_space_empty_no_match)
                     segment == SpaceSegment.Dual &&
                         dualUsability == SpaceUsability.LockedNeedsUnlock -> stringResource(R.string.lz_space_empty_dual_locked)
@@ -968,6 +1066,8 @@ private fun EmptyPlaceholder(
             Spacer(modifier = Modifier.height(PrismSpacing.Sm))
             Text(
                 text = when {
+                    systemAppsMode && !hasQuery -> stringResource(R.string.lz_system_apps_empty_search_hint)
+                    systemAppsMode -> stringResource(R.string.lz_system_apps_empty_result_hint)
                     hasQuery -> stringResource(R.string.lz_space_empty_no_match_hint)
                     segment == SpaceSegment.Dual &&
                         dualUsability == SpaceUsability.LockedNeedsUnlock -> stringResource(R.string.lz_space_empty_dual_locked_hint)

@@ -25,6 +25,7 @@
     <string name="lz_vm_batch_freeze_partial">Freeze finished: %1$d succeeded, %2$d failed</string>
     <string name="lz_vm_batch_uninstall_ok">Uninstalling %1$d apps</string>
     <string name="lz_vm_batch_uninstall_partial">Uninstall started: %1$d succeeded, %2$d failed</string>
+    <string name="lz_vm_uninstall_queue_summary">Uninstall complete: %1$d removed, %2$d not removed, %3$d unconfirmed.</string>
     <string name="lz_vm_batch_clone_ok">Cloning %1$d apps to the dual space</string>
     <string name="lz_vm_batch_clone_partial">Clone started: %1$d succeeded, %2$d failed</string>
 
@@ -34,6 +35,9 @@
     <string name="lz_vm_create_cap_reached">Reached this device\'s space limit (up to %1$d users); cannot create more</string>
     <string name="lz_vm_create_managed_profile_limit">This device only allows one dual space (the system work-profile limit has been reached); cannot create more</string>
     <string name="lz_vm_create_failed">Failed to create space: %1$s. You can retry</string>
+    <string name="lz_vm_create_blocked_existing">A dual-space profile already exists. Repair it or remove it before creating another.</string>
+    <string name="lz_vm_create_blocked_orphan">Android already has a work profile not managed by PrismSpace. Remove it from system settings before creating a dual space.</string>
+    <string name="lz_vm_delete_manual_required">PrismSpace cannot remove this profile in-app. Complete removal in Android system settings.</string>
 
     <!-- ProvisioningFeedback: delete -->
     <string name="lz_vm_delete_success">The dual space has been deleted</string>

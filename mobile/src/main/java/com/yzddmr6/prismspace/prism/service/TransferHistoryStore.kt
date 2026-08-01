@@ -14,6 +14,8 @@ data class TransferRecord(
     val location: String,   // human-readable destination, e.g. "下载/PrismSpace"
     val isImage: Boolean,
     val timeMillis: Long,
+    /** Null for records written before bidirectional in-app transfer was introduced. */
+    val direction: TransferDirection? = null,
 )
 
 /**
@@ -48,7 +50,14 @@ object TransferHistoryStore {
     private const val KEY = "prism_transfer_history"
     private const val MAX = 50
 
-    fun record(context: Context, name: String, location: String, isImage: Boolean, packageName: String? = null) {
+    fun record(
+        context: Context,
+        name: String,
+        location: String,
+        isImage: Boolean,
+        packageName: String? = null,
+        direction: TransferDirection? = null,
+    ) {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
         val arr = runCatching { JSONArray(prefs.getString(KEY, "[]")) }.getOrDefault(JSONArray())
         val entry = JSONObject().apply {
@@ -57,6 +66,7 @@ object TransferHistoryStore {
             put("location", location)
             put("isImage", isImage)
             put("time", System.currentTimeMillis())
+            direction?.let { put("direction", it.wireValue) }
         }
         // newest first, capped
         val out = JSONArray().apply { put(entry) }
@@ -65,7 +75,7 @@ object TransferHistoryStore {
         // closure running in the profile process, which can be torn down immediately after the
         // closure returns — an async apply() may never flush, so the record silently vanishes.
         prefs.edit().putString(KEY, out.toString()).commit()
-        DiagnosticLog.i(TAG, "transfer recorded name=$name pkg=${packageName ?: ""} location=$location isImage=$isImage")
+        DiagnosticLog.i(TAG, "transfer recorded name=$name pkg=${packageName ?: ""} location=$location isImage=$isImage direction=${direction?.wireValue}")
     }
 
     fun load(context: Context): List<TransferRecord> {
@@ -81,6 +91,7 @@ object TransferHistoryStore {
                         location = o.optString("location", ""),
                         isImage = o.optBoolean("isImage", false),
                         timeMillis = o.optLong("time", 0L),
+                        direction = TransferDirection.fromWireValue(o.optString("direction", "")),
                     )
                 )
             }

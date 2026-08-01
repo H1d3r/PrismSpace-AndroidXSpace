@@ -168,8 +168,7 @@ private fun ShizukuGuideInline(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = PrismSpacing.Md),
         )
-        // Check Shizuku connection.
-        // Uses same readiness check as PrismAppClones: Shizuku.getVersion()>=11 && checkSelfPermission()==GRANTED
+        // Check the centralized Shizuku/Sui readiness source used by clone routing.
         Button(
             onClick = {
                 if (onCheckShizuku()) onDismiss()

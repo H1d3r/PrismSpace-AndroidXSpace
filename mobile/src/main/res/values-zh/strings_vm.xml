@@ -25,6 +25,7 @@
     <string name="lz_vm_batch_freeze_partial">冻结完成: 成功 %1$d, 失败 %2$d</string>
     <string name="lz_vm_batch_uninstall_ok">正在卸载 %1$d 个应用</string>
     <string name="lz_vm_batch_uninstall_partial">卸载发起: 成功 %1$d, 失败 %2$d</string>
+    <string name="lz_vm_uninstall_queue_summary">卸载完成：已卸载 %1$d 个，未卸载 %2$d 个，未能确认 %3$d 个。</string>
     <string name="lz_vm_batch_clone_ok">正在克隆 %1$d 个应用到双开空间</string>
     <string name="lz_vm_batch_clone_partial">克隆发起: 成功 %1$d, 失败 %2$d</string>
 
@@ -34,6 +35,9 @@
     <string name="lz_vm_create_cap_reached">已达本设备空间上限（最多 %1$d 个用户），无法再创建</string>
     <string name="lz_vm_create_managed_profile_limit">本设备系统仅允许一个双开空间（已达系统工作资料上限），无法再创建</string>
     <string name="lz_vm_create_failed">创建空间失败：%1$s，可重试</string>
+    <string name="lz_vm_create_blocked_existing">设备上已有双开资料，请先修复或删除后再重新创建。</string>
+    <string name="lz_vm_create_blocked_orphan">Android 中已有不受 PrismSpace 管理的工作资料，请先在系统设置中移除它。</string>
+    <string name="lz_vm_delete_manual_required">PrismSpace 无法在应用内移除此资料，请前往 Android 系统设置完成删除。</string>
 
     <!-- ProvisioningFeedback: delete -->
     <string name="lz_vm_delete_success">已删除该双开空间</string>

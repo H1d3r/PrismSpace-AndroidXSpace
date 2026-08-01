@@ -72,8 +72,13 @@ object PrismAppShortcut {
 	@OwnerUser @JvmStatic fun requestPin(context: Context, app: ApplicationInfo) {
 		val dynamic = isDynamicLabelEnabled(context)
 		val profile = app.user
-		if (PrismManager.isReady(context, profile))
-			Shuttle(context, profile).launchNoThrows { requestPinAsUser(this, app, dynamic) }
+		if (PrismManager.isReady(context, profile)) {
+			val pkg = app.packageName
+			Shuttle(context, profile).launchNoThrows {
+				val profileApp = packageManager.getApplicationInfo(pkg, MATCH_UNINSTALLED_PACKAGES)
+				requestPinAsUser(this, profileApp, dynamic)
+			}
+		}
 		else requestPinAsUser(context, app, dynamic)    // Create cross-profile shortcut in MainSpace if PrismSpace is not ready (probably deactivated)
 	}
 
@@ -94,8 +99,12 @@ object PrismAppShortcut {
 		val id = getShortcutId(pkg, Users.current().toId())
 		ShortcutManagerCompat.removeLongLivedShortcuts(context, listOf(id))
 
-		if (! Users.isParentProfile()) Shuttle(context, to = Users.parentProfile).launchNoThrows(with = Users.currentId()) {
-			ShortcutManagerCompat.removeLongLivedShortcuts(this, listOf(getShortcutId(pkg, it, isCrossProfile = true))) }
+		if (! Users.isParentProfile()) {
+			val profileId = Users.currentId()
+			Shuttle(context, to = Users.parentProfile).launchNoThrows {
+				ShortcutManagerCompat.removeLongLivedShortcuts(this, listOf(getShortcutId(pkg, profileId, isCrossProfile = true)))
+			}
+		}
 	}
 
 	@OwnerUser @ProfileUser @RequiresApi(O) fun updateIfNeeded(context: Context, app: ApplicationInfo, isCrossProfile: Boolean) {
@@ -213,9 +222,15 @@ object PrismAppShortcut {
 
 			updateIfNeeded(context, info, false)
 
-			if (! Users.isParentProfile()) Shuttle(context, to = Users.parentProfile).launchNoThrows {  // For cross-profile shortcut
-				if (isDynamicLabelEnabled(this)) updateIfNeeded(this, info, true) }}
-		}
+			if (! Users.isParentProfile()) { // For cross-profile shortcut
+				val profile = Users.current()
+				Shuttle(context, to = Users.parentProfile).launchNoThrows {
+					val profileApp = LauncherAppsCompat(this)
+						.getApplicationInfoNoThrows(pkg, MATCH_UNINSTALLED_PACKAGES, profile)
+					if (profileApp != null && isDynamicLabelEnabled(this)) updateIfNeeded(this, profileApp, true)
+				}
+			}
+		}}
 
 		override fun onCreate() {
 			registerReceiver(mPackageObserver, IntentFilter(ACTION_PACKAGE_REMOVED).apply {

@@ -31,6 +31,11 @@
     <string name="lz_home_tag_notcreated">未创建</string>
     <string name="lz_home_label_create">创建双开空间</string>
 
+    <string name="lz_home_status_provisioning_title">双开空间配置进行中</string>
+    <string name="lz_home_status_provisioning_body">Android 与 PrismSpace 正在完成工作资料配置。</string>
+    <string name="lz_home_tag_provisioning">配置中</string>
+    <string name="lz_home_label_provisioning">打开设置</string>
+
     <string name="lz_home_status_suspended_title">双开空间已暂停</string>
     <string name="lz_home_status_suspended_body">双开空间已暂停，分身应用暂不可用。</string>
     <string name="lz_home_tag_suspended">已暂停</string>
@@ -47,7 +52,7 @@
     <string name="lz_home_label_checking">打开设置</string>
 
     <string name="lz_home_status_needsrepair_title">双开空间需要修复</string>
-    <string name="lz_home_status_needsrepair_body">上次检测发现问题，请前往设置修复。</string>
+    <string name="lz_home_status_needsrepair_body">双开空间连接需要修复。点击“修复”并完成可见的空间内步骤；即使拒绝通知权限，此入口仍可使用。</string>
     <string name="lz_home_tag_needsrepair">需要修复</string>
     <string name="lz_home_label_repair">修复双开空间</string>
 

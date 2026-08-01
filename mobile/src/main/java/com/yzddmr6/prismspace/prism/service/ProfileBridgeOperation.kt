@@ -72,6 +72,15 @@ internal fun ProfileBridgeResult<*>.failureReason(): FileTransferFailureReason? 
         is ProfileBridgeResult.Value -> null
     }
 
+internal fun crossSpaceFailureReason(result: ProfileBridgeResult<*>): FileTransferFailureReason = when (result) {
+    ProfileBridgeResult.SpaceMissing,
+    is ProfileBridgeResult.SpaceInactive -> FileTransferFailureReason.SpaceUnavailable
+    is ProfileBridgeResult.BridgeNotReady,
+    ProfileBridgeResult.TimedOut -> FileTransferFailureReason.BridgeNotReady
+    is ProfileBridgeResult.Failed,
+    is ProfileBridgeResult.Value -> FileTransferFailureReason.TargetWriteFailed
+}
+
 internal fun <R> ProfileBridgeResult<*>.asFailureResult(): ProfileBridgeResult<R> =
     when (this) {
         ProfileBridgeResult.SpaceMissing -> ProfileBridgeResult.SpaceMissing
@@ -88,12 +97,22 @@ internal fun profileBridgeFailureMessage(
     fallbackMessage: String,
 ): String {
     val strings = PrismLocale.wrap(context)
-    return when (result) {
-        ProfileBridgeResult.SpaceMissing -> strings.getString(R.string.fb_need_create_space)
-        is ProfileBridgeResult.SpaceInactive -> strings.getString(R.string.fb_space_inactive)
-        is ProfileBridgeResult.BridgeNotReady -> strings.getString(R.string.fb_space_bridge_repair_needed)
-        ProfileBridgeResult.TimedOut -> strings.getString(R.string.fb_space_not_ready)
-        is ProfileBridgeResult.Failed -> result.error.message ?: fallbackMessage
-        is ProfileBridgeResult.Value -> fallbackMessage
-    }
+    val spec = profileBridgeFailureMessageSpec(result) ?: return fallbackMessage
+    return if (spec.argument == null) strings.getString(spec.resourceId)
+    else strings.getString(spec.resourceId, spec.argument)
 }
+
+internal data class ProfileBridgeFailureMessageSpec(val resourceId: Int, val argument: String? = null)
+
+internal fun profileBridgeFailureMessageSpec(result: ProfileBridgeResult<*>): ProfileBridgeFailureMessageSpec? =
+    when (result) {
+        ProfileBridgeResult.SpaceMissing -> ProfileBridgeFailureMessageSpec(R.string.fb_need_create_space)
+        is ProfileBridgeResult.SpaceInactive -> ProfileBridgeFailureMessageSpec(R.string.fb_space_inactive)
+        is ProfileBridgeResult.BridgeNotReady -> ProfileBridgeFailureMessageSpec(R.string.fb_space_bridge_repair_needed)
+        ProfileBridgeResult.TimedOut -> ProfileBridgeFailureMessageSpec(R.string.fb_space_not_ready)
+        is ProfileBridgeResult.Failed -> ProfileBridgeFailureMessageSpec(
+            R.string.fb_space_internal_operation_failed,
+            result.error.javaClass.simpleName.ifBlank { result.error.javaClass.name },
+        )
+        is ProfileBridgeResult.Value -> null
+    }

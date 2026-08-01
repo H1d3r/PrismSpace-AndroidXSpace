@@ -116,13 +116,18 @@ private const val PREFS_NAME = "app_ops"
         }
 
         internal fun flattenPackageOps(appops: AppOpsCompat, ops: List<OpEntry>): String {
-            return ops.asSequence().filter { it.mode != appops.opToDefaultMode(it.op) }.map { entry -> "${entry.op}:${entry.mode}" }.joinToString(",")
+            return AppOpsPersistence.encode(
+                ops.asSequence()
+                    .filter { it.mode != appops.opToDefaultMode(it.op) }
+                    .map { entry -> entry.op to entry.mode }
+                    .asIterable(),
+            )
         }
 
-        internal fun unflattenPackageOps(appops: AppOpsCompat, flat: String): Sequence<OpEntry> = try {
-            flat.splitToSequence(",").map { it.trim().split(":") }.filter { it.size >= 2 }.map{ OpEntryData(it[0].toInt(), it[1].substring(0, 1).toInt()) }
-                    .filter { it.mode != appops.opToDefaultMode(it.op) }    // In case data is flatten by older version
-        } catch (e: NumberFormatException) { Log.w(TAG, "Drop invalid flatten package ops: $flat"); emptySequence() }
+        internal fun unflattenPackageOps(appops: AppOpsCompat, flat: String): Sequence<OpEntry> =
+            AppOpsPersistence.decode(flat).asSequence()
+                .map { (op, mode) -> OpEntryData(op, mode) }
+                .filter { it.mode != appops.opToDefaultMode(it.op) }    // In case data is flattened by older version
     }
 
     private fun saveAppOp(pkg: String, op: Int, mode: Int, uid: Int = getPackageUid(pkg)) {

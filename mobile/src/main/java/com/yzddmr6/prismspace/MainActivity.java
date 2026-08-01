@@ -9,8 +9,6 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
-import android.content.pm.LauncherActivityInfo;
-import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.os.Bundle;
@@ -26,7 +24,9 @@ import com.yzddmr6.prismspace.mobile.BuildConfig;
 import com.yzddmr6.prismspace.mobile.R;
 import com.yzddmr6.prismspace.prism.compose.host.PrismComposeHostFragment;
 import com.yzddmr6.prismspace.prism.compose.nav.AppLaunchSignals;
+import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository;
 import com.yzddmr6.prismspace.setup.SetupActivity;
+import com.yzddmr6.prismspace.space.SpaceState;
 import com.yzddmr6.prismspace.util.CallerAwareActivity;
 import com.yzddmr6.prismspace.util.DeviceAdmins;
 import com.yzddmr6.prismspace.util.DevicePolicies;
@@ -63,27 +63,12 @@ public class MainActivity extends FragmentActivity {
 			startMainUi(savedInstanceState);	// As device owner, always show main UI.
 			return;
 		}
-		if (! Users.hasProfile()) {					// Nothing setup yet
+		// The marker-only Users cache intentionally does not claim half-provisioned profiles.
+		// Route from the complete state classifier so those users can reach Home/Settings repair
+		// instead of being trapped in a setup screen that correctly refuses to create a duplicate.
+		if (new SpaceStateRepository(this).state() == SpaceState.NoProfile.INSTANCE) {
 			Log.i(TAG, "Profile not setup yet");
 			startSetupWizard();
-			return;
-		}
-		final UserHandle profile = Users.profile;
-
-		final LauncherApps launcher_apps = (LauncherApps) getSystemService(Context.LAUNCHER_APPS_SERVICE);
-		final List<LauncherActivityInfo> our_activities_in_launcher;
-		if (launcher_apps != null && ! (our_activities_in_launcher = launcher_apps.getActivityList(getPackageName(), profile)).isEmpty()
-				&& our_activities_in_launcher.get(0).getComponentName().getClassName().equals(MainActivity.class.getName())) {
-			// Main activity is left enabled, probably due to pending post-provisioning in manual setup. Some domestic ROMs may block implicit broadcast, causing ACTION_USER_INITIALIZE being dropped.
-			Analytics.$().event("profile_provision_leftover").send();
-			Log.w(TAG, "Setup in PrismSpace is not complete, continue it now.");
-			try {
-				launcher_apps.startMainActivity(our_activities_in_launcher.get(0).getComponentName(), profile, null, null);
-			} catch (final RuntimeException e) {
-				Analytics.$().logAndReport(TAG, "Error starting self in profile " + Users.toId(profile), e);
-				startSetupWizard();
-			}
-			finish();
 			return;
 		}
 		startMainUi(savedInstanceState);

@@ -12,6 +12,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.Intent.FLAG_ACTIVITY_NEW_TASK
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.content.pm.CrossProfileApps
 import android.net.Uri
 import android.os.Build
@@ -45,6 +46,11 @@ class ShuttleCarrierActivity: Activity() {
 			)
 			if (credentialNeeded) {
 				DiagnosticLog.i(TAG, "carrier self-start deferred by credential notification user=${Users.currentId()}")
+				if (SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+					context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+					DiagnosticLog.w(TAG, "notification_suppressed reason=permission user=${Users.currentId()}")
+					return
+				}
 				return NotificationIds.Shuttle.post(context) { setOngoing(true).setVisibility(VISIBILITY_PUBLIC)
 						.setSmallIcon(R.drawable.ic_landscape_black_24dp).setColor(context.getColor(R.color.accent))
 						.setContentTitle(context.getString(R.string.notification_profile_shuttle_pending_title))

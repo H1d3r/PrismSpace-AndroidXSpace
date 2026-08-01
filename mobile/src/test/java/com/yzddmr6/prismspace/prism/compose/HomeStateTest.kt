@@ -4,15 +4,37 @@ import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.prism.compose.component.PrismLevel
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceHealth
 import com.yzddmr6.prismspace.prism.compose.vm.mapHomeState
+import com.yzddmr6.prismspace.prism.compose.vm.spaceHealth
+import com.yzddmr6.prismspace.space.SpaceBridgeCause
+import com.yzddmr6.prismspace.space.SpaceState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /**
  * Tests the extended HomeUiModel produced by mapHomeState().
  */
 class HomeStateTest {
+
+    @Test fun `main entry uses canonical state so half-provisioned profiles can reach repair`() {
+        val source = File("src/main/java/com/yzddmr6/prismspace/MainActivity.java").readText()
+
+        assertTrue(source.contains("new SpaceStateRepository(this).state() == SpaceState.NoProfile.INSTANCE"))
+        assertFalse(source.contains("! Users.hasProfile()"))
+    }
+
+    @Test fun `canonical space states map to truthful home health`() {
+        assertEquals(SpaceHealth.NotCreated, spaceHealth(SpaceState.NoProfile))
+        assertEquals(SpaceHealth.Provisioning, spaceHealth(SpaceState.Provisioning(22)))
+        assertEquals(SpaceHealth.NeedsRepair, spaceHealth(SpaceState.HalfProvisioned(22, true)))
+        assertEquals(SpaceHealth.NeedsRepair, spaceHealth(SpaceState.OrphanProfile(22)))
+        assertEquals(SpaceHealth.NeedsRepair, spaceHealth(SpaceState.BridgeDown(22, SpaceBridgeCause.Failed)))
+        assertEquals(SpaceHealth.Locked, spaceHealth(SpaceState.Locked(22)))
+        assertEquals(SpaceHealth.Suspended, spaceHealth(SpaceState.Inactive(22)))
+        assertEquals(SpaceHealth.Normal, spaceHealth(SpaceState.Healthy(22)))
+    }
 
     // Fake string resolver maps the lz_home_ resource IDs that drive the
     // tags asserted below to their Chinese values; unknown IDs fall back to "".

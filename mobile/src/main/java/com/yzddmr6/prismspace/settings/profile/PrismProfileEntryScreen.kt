@@ -5,6 +5,8 @@ import android.os.Build
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.Shield
@@ -28,8 +30,10 @@ import com.yzddmr6.prismspace.prism.compose.component.StatusRow
 import com.yzddmr6.prismspace.prism.compose.theme.PrismTheme
 import com.yzddmr6.prismspace.prism.service.TransferRecordActions
 import com.yzddmr6.prismspace.prism.service.TransferHistoryStore
+import com.yzddmr6.prismspace.prism.service.TransferDirection
 import com.yzddmr6.prismspace.prism.service.displayTitle
 import com.yzddmr6.prismspace.prism.service.openSystemFileManager
+import com.yzddmr6.prismspace.prism.ui.CrossSpaceTransferEntry
 import com.yzddmr6.prismspace.util.DevicePolicies
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -54,6 +58,9 @@ import java.util.Locale
 fun PrismProfileEntryScreen() {
     val context = LocalContext.current
     val state = remember { loadProfileEntryState(context) }
+    val sendFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        CrossSpaceTransferEntry.launch(context, uris)
+    }
 
     // Transfer history for THIS space — files that landed in the dual space: shares imported here
     // (ImportToSpaceActivity) + clone APKs synced in (importApkToProfile). TransferHistoryStore is
@@ -99,6 +106,14 @@ fun PrismProfileEntryScreen() {
                         leadingIcon = Icons.Outlined.Shield,
                     )
                 } else {
+                    GroupCard {
+                        ActionRow(
+                            title = stringResource(R.string.lz_pf_files_send_other),
+                            summary = stringResource(R.string.lz_pf_files_send_other_summary),
+                            leadingIcon = PrismIcons.File,
+                            onClick = { sendFiles.launch(arrayOf("*/*")) },
+                        )
+                    }
                     // Export starts from the source app through the system share sheet.
                     GroupCard {
                         StatusRow(
@@ -131,6 +146,10 @@ fun PrismProfileEntryScreen() {
                                     ActionRow(
                                         title = item.displayTitle(),
                                         summary = listOf(
+                                            item.direction?.let { direction -> stringResource(
+                                                if (direction == TransferDirection.ToMain) R.string.lz_pf_direction_to_main
+                                                else R.string.lz_pf_direction_to_profile,
+                                            ) },
                                             item.location.takeIf { it.isNotBlank() },
                                             formatTransferTime(item.timeMillis).takeIf { it.isNotBlank() },
                                         ).filterNotNull().joinToString(" · "),

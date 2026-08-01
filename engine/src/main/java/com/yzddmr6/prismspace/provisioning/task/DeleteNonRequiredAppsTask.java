@@ -180,8 +180,11 @@ public class DeleteNonRequiredAppsTask {
         // Newly installed system apps are uninstalled when they are not required and are either
         // disallowed or have a launcher icon.
         packagesToDelete.removeAll(getRequiredApps());
-        // Don't delete the system input method packages in case of Device owner provisioning.
-        if (mProvisioningType == DEVICE_OWNER || mProvisioningType == MANAGED_USER) {
+        // Product deviation from AOSP: PrismSpace's PROFILE_OWNER flow is user-facing and must
+        // preserve vendor IMEs just like managed-user/device-owner provisioning. Hiding the only
+        // usable IME can make the clone space impossible to operate on customized ROMs.
+        if (mProvisioningType == DEVICE_OWNER || mProvisioningType == PROFILE_OWNER
+                || mProvisioningType == MANAGED_USER) {
             packagesToDelete.removeAll(getSystemInputMethods());
         }
         packagesToDelete.addAll(getDisallowedApps());

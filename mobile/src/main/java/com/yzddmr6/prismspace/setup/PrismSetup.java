@@ -31,6 +31,9 @@ import com.yzddmr6.prismspace.util.Hack;
 import com.yzddmr6.prismspace.analytics.Analytics;
 import com.yzddmr6.prismspace.mobile.BuildConfig;
 import com.yzddmr6.prismspace.mobile.R;
+import com.yzddmr6.prismspace.prism.compose.settings.ExperimentalFlags;
+import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository;
+import com.yzddmr6.prismspace.space.SpaceState;
 import com.yzddmr6.prismspace.shuttle.Shuttle;
 import com.yzddmr6.prismspace.util.DeviceAdmins;
 import com.yzddmr6.prismspace.util.DevicePolicies;
@@ -63,9 +66,10 @@ public class PrismSetup {
 	public static void requestProfileOwnerSetupWithRoot(final Activity activity) {
 		// Pre-flight: if a managed profile already exists in this user,
 		// the OS will reject `pm create-user --managed` (max 1 managed profile per parent).
-			// Skip Shell.SU.run entirely and surface a clear message instead of triggering
-			// the silent-hang path from a rejected managed-profile create command.
-		if (hasAnyExistingProfile(activity)) {
+		// Skip Shell.SU.run entirely and surface a clear message instead of triggering
+		// the silent-hang path from a rejected managed-profile create command.
+		if (! ExperimentalFlags.isMultiProfileEnabled(activity)
+				&& new SpaceStateRepository(activity).preflightCreate() != SpaceState.NoProfile.INSTANCE) {
 			showProfileAlreadyExistsDialog(activity);
 			return;
 		}
@@ -93,15 +97,6 @@ public class PrismSetup {
 
 			installPrismInProfileWithRoot(context, progress, profile_pending_setup.get());
 		});
-	}
-
-	/** Return true if user 0 already has any profile other than itself. */
-	private static boolean hasAnyExistingProfile(final Context context) {
-		try {
-			final List<UserInfo> profiles = Hack.into(requireNonNull(context.getSystemService(Context.USER_SERVICE)))
-					.with(UserManagerHack.class).getProfiles(Users.toId(Users.current()));
-			return profiles.stream().map(UserInfo::getUserHandle).anyMatch(p -> ! p.equals(Users.current()));
-		} catch (final RuntimeException ignored) { return false; }	// Reflection failure: don't block, fall through.
 	}
 
 	private static void showProfileAlreadyExistsDialog(final Activity activity) {

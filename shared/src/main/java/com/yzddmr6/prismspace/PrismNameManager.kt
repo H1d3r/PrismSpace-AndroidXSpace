@@ -64,8 +64,10 @@ object PrismNameManager {
 		syncNameToParentProfile(context, name)
 	}
 
-	@ProfileUser fun syncNameToParentProfile(context: Context, name: String = getName(context))
-			= Shuttle(context, to = Users.parentProfile).launchNoThrows(with = Users.current()) { saveProfileName(this, it, name) }
+	@ProfileUser fun syncNameToParentProfile(context: Context, name: String = getName(context)): Boolean {
+		val profile = Users.current()
+		return Shuttle(context, to = Users.parentProfile).launchNoThrows { saveProfileName(this, profile, name) }
+	}
 
 	class NameInitializer: BroadcastReceiver() {
 

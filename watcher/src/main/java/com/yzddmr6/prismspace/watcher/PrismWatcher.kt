@@ -116,9 +116,12 @@ import kotlinx.coroutines.launch
 						GlobalScope.launch { requestQuietModeApi29(this@PrismDeactivationService, profile) }
 						return START_STICKY }   // Still ongoing
 				} else {
-					if (isParentProfileOwner(this) == true) // The automatic way
-						Shuttle(this, to = Users.parentProfile).launch(with = Users.current()) {
-							startService(Intent(this, PrismDeactivationService::class.java).putExtra(Intent.EXTRA_USER, it)) }
+					if (isParentProfileOwner(this) == true) { // The automatic way
+						val profile = Users.current()
+						Shuttle(this, to = Users.parentProfile).launch {
+							startService(Intent(this, PrismDeactivationService::class.java).putExtra(Intent.EXTRA_USER, profile))
+						}
+					}
 					else try {                              // The manual way
 						startActivity(Intent(Settings.ACTION_SYNC_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 						Toasts.showLong(applicationContext, R.string.toast_manual_quiet_mode) }

@@ -37,6 +37,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.yzddmr6.prismspace.mobile.R
+import com.yzddmr6.prismspace.notification.NotificationPermissionPrompt
 import com.yzddmr6.prismspace.prism.compose.component.GroupCard
 import com.yzddmr6.prismspace.prism.compose.component.PrismIcons
 import com.yzddmr6.prismspace.prism.compose.component.PrismLevel
@@ -51,6 +52,7 @@ import com.yzddmr6.prismspace.prism.compose.vm.AppFeedbackBus
 import com.yzddmr6.prismspace.prism.compose.vm.HomePrimaryAction
 import com.yzddmr6.prismspace.prism.compose.vm.HomeViewModel
 import com.yzddmr6.prismspace.setup.SetupFlow
+import com.yzddmr6.prismspace.util.Activities
 
 /** PrismSpace repository URL. */
 private const val PRISM_GITHUB_URL = "https://github.com/yzddmr6/PrismSpace"
@@ -136,7 +138,10 @@ fun HomeScreen(nav: NavHostController) {
                                 onClick   = {
                                     when (state.primaryAction) {
                                         HomePrimaryAction.StartSetup -> SetupFlow.open(context)
-                                        HomePrimaryAction.OpenSettings -> vm.repair { route -> nav.navigateToTab(route) }
+                                        HomePrimaryAction.OpenSettings -> {
+                                            Activities.findActivityFrom(context)?.let(NotificationPermissionPrompt::requestOnce)
+                                            vm.repair { route -> nav.navigateToTab(route) }
+                                        }
                                         HomePrimaryAction.OpenSpace -> nav.navigateToTab(PrismRoutes.SPACE)
                                     }
                                 },

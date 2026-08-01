@@ -17,10 +17,15 @@ import com.yzddmr6.prismspace.prism.compose.component.PrismLevel
 import com.yzddmr6.prismspace.prism.compose.settings.ExperimentalFlags
 import com.yzddmr6.prismspace.prism.compose.space.BridgeHealthRepository
 import com.yzddmr6.prismspace.prism.compose.space.DeleteSpaceResult
-import com.yzddmr6.prismspace.prism.compose.space.SpaceProvisioningEngine
+import com.yzddmr6.prismspace.prism.compose.space.SpaceDeletionCoordinator
+import com.yzddmr6.prismspace.prism.compose.space.PrismSpace
+import com.yzddmr6.prismspace.prism.compose.space.PrismSpaceKind
 import com.yzddmr6.prismspace.prism.compose.space.SpaceRepository
 import com.yzddmr6.prismspace.prism.compose.space.SpaceRepositoryProvider
 import com.yzddmr6.prismspace.prism.compose.space.SpaceUsability
+import com.yzddmr6.prismspace.prism.compose.space.SpaceRecoveryPlan
+import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository
+import com.yzddmr6.prismspace.prism.compose.space.recoveryPlan
 import com.yzddmr6.prismspace.prism.model.CapabilityAvailability
 import com.yzddmr6.prismspace.prism.model.CapabilityState
 import com.yzddmr6.prismspace.prism.model.PrismRootStatus
@@ -29,7 +34,10 @@ import com.yzddmr6.prismspace.prism.model.PrismShizukuAdbStatus
 import com.yzddmr6.prismspace.prism.model.SettingsActionPlanner
 import com.yzddmr6.prismspace.prism.service.CapabilityService
 import com.yzddmr6.prismspace.prism.service.ProfileEntryLauncher
+import com.yzddmr6.prismspace.prism.service.ProfileBridgeResult
+import com.yzddmr6.prismspace.prism.service.ProfileRecoveryService
 import com.yzddmr6.prismspace.setup.PrismSetup
+import com.yzddmr6.prismspace.setup.DestroyProfileResult
 import com.yzddmr6.prismspace.setup.SetupFlow
 import com.yzddmr6.prismspace.shuttle.Shuttle
 import com.yzddmr6.prismspace.shuttle.ShuttleOutcome
@@ -37,6 +45,8 @@ import com.yzddmr6.prismspace.shuttle.ShuttleProvider
 import com.yzddmr6.prismspace.util.PrismLocale
 import com.yzddmr6.prismspace.util.Users
 import com.yzddmr6.prismspace.util.Users.Companion.toId
+import com.yzddmr6.prismspace.util.UserHandles
+import com.yzddmr6.prismspace.space.SpaceState
 import eu.chainfire.libsuperuser.Shell
 import java.io.FileInputStream
 import kotlinx.coroutines.Dispatchers
@@ -195,6 +205,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
 
     private val spaceRepo: SpaceRepository by lazy { SpaceRepositoryProvider.get(getApplication()) }
     private val bridgeHealthRepo: BridgeHealthRepository by lazy { BridgeHealthRepository(getApplication()) }
+    private val stateRepo: SpaceStateRepository by lazy { SpaceStateRepository(getApplication()) }
     private val capRepo: CapabilityRepository by lazy { CapabilityRepositoryProvider.get(getApplication()) }
 
     private val _uiState = MutableStateFlow<SettingsUiModel?>(null)
@@ -422,43 +433,26 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     fun repairSpace(context: Context) {
         viewModelScope.launch {
             val appContext = context.applicationContext
-            val outcome = withContext(Dispatchers.IO) {
-                runCatching { Users.refreshUsers(appContext) }
-                    .onFailure { DiagnosticLog.w(TAG, "refresh users before repair failed", it) }
-                val profile = Users.profile ?: return@withContext RepairSpaceOutcome.StartSetup
-                val dual = spaceRepo.dualSpace() ?: return@withContext RepairSpaceOutcome.StartSetup
-                val usability = spaceRepo.usabilityOf(dual).let { current ->
-                    if (current == SpaceUsability.Unknown || current == SpaceUsability.BridgeNotReady) {
+            val plan = withContext(Dispatchers.IO) {
+                val initial = stateRepo.state()
+                if (initial is SpaceState.HalfProvisioned || initial is SpaceState.BridgeDown) {
+                    initial.userId?.let(UserHandles::of)?.let { profile ->
                         runCatching { bridgeHealthRepo.refreshHealth(profile) }
                             .onFailure { DiagnosticLog.w(TAG, "refresh bridge health before repair failed", it) }
-                        spaceRepo.usabilityOf(dual)
-                    } else {
-                        current
                     }
                 }
-                when (usability) {
-                    SpaceUsability.NotProvisioned ->
-                        RepairSpaceOutcome.StartSetup
-                    SpaceUsability.Suspended,
-                    SpaceUsability.LockedNeedsUnlock ->
-                        RepairSpaceOutcome.Activate(profile)
-                    SpaceUsability.BridgeNotReady ->
-                        RepairSpaceOutcome.RepairBridge(profile)
-                    SpaceUsability.Unknown ->
-                        RepairSpaceOutcome.RepairBridge(profile)
-                    SpaceUsability.Usable ->
-                        RepairSpaceOutcome.AlreadyReady
-                }
+                recoveryPlan(stateRepo.state())
             }
-            when (outcome) {
-                RepairSpaceOutcome.StartSetup -> {
+            when (plan) {
+                SpaceRecoveryPlan.StartSetup -> {
                     setFeedback(str(R.string.lz_setvm_opening_setup), isError = false)
                     SetupFlow.open(context)
                 }
-				is RepairSpaceOutcome.Activate -> {
+				is SpaceRecoveryPlan.Activate -> {
 					setFeedback(str(R.string.lz_setvm_repairing), isError = false)
+					val profile = UserHandles.of(plan.userId)
 					val ok = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-						runCatching { Users.requestQuietModeDisabled(context, outcome.profile) }
+						runCatching { Users.requestQuietModeDisabled(context, profile) }
 							.onFailure { DiagnosticLog.e(TAG, "profile activation failed", it) }
 							.getOrDefault(false)
 					} else {
@@ -471,9 +465,36 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     refreshCapabilities()
                 }
-                is RepairSpaceOutcome.RepairBridge -> {
+                is SpaceRecoveryPlan.ActivateThenOpenEntry -> {
+                    setFeedback(str(R.string.lz_setvm_repairing), isError = false)
+                    val profile = UserHandles.of(plan.userId)
+                    val active = Users.isProfileAvailable(context, profile) ||
+                        (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
+                            runCatching { Users.requestQuietModeDisabled(context, profile) }.getOrDefault(false))
+                    val opened = active && ProfileEntryLauncher.start(context, profile)
+                    setFeedback(
+                        if (opened) str(R.string.lz_setvm_bridge_repair_opened_profile)
+                        else str(R.string.lz_setvm_incomplete_cannot_auto_repair),
+                        isError = !opened,
+                    )
+                    refreshCapabilities()
+                }
+                is SpaceRecoveryPlan.RepairIncrementally -> {
+                    setFeedback(str(R.string.lz_setvm_repairing), isError = false)
+                    val result = withContext(Dispatchers.IO) {
+                        ProfileRecoveryService.repair(appContext, UserHandles.of(plan.userId))
+                    }
+                    val repaired = result is ProfileBridgeResult.Value && result.value == true
+                    setFeedback(
+                        if (repaired) str(R.string.lz_setvm_incomplete_repaired)
+                        else str(R.string.lz_setvm_incomplete_cannot_auto_repair),
+                        isError = !repaired,
+                    )
+                    refreshCapabilities()
+                }
+                is SpaceRecoveryPlan.ReconnectBridge -> {
                     setFeedback(str(R.string.lz_setvm_bridge_repairing), isError = false)
-                    val opened = ProfileEntryLauncher.start(context, outcome.profile)
+                    val opened = ProfileEntryLauncher.start(context, UserHandles.of(plan.userId))
                     if (opened) {
                         setFeedback(str(R.string.lz_setvm_bridge_repair_opened_profile), isError = false)
                     } else {
@@ -481,7 +502,15 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     refreshCapabilities()
                 }
-                RepairSpaceOutcome.AlreadyReady -> {
+                is SpaceRecoveryPlan.OpenSystemProfileSettings -> {
+                    val manager = stateRepo.profileOwnerPackage(plan.userId)
+                        ?: str(R.string.lz_setvm_orphan_manager_unknown)
+                    setFeedback(str(R.string.lz_setvm_orphan_profile, manager), isError = true)
+                    (context as? Activity)?.let(PrismSetup::promptManualRemoval)
+                }
+                is SpaceRecoveryPlan.WaitForProvisioning ->
+                    setFeedback(str(R.string.lz_setvm_provisioning_active), isError = false)
+                is SpaceRecoveryPlan.AlreadyReady -> {
                     setFeedback(str(R.string.lz_setvm_space_already_ready), isError = false)
                     refreshCapabilities()
                 }
@@ -498,10 +527,26 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         val res: StringResolver = prismResolver(getApplication())
         viewModelScope.launch {
             setFeedback(res(R.string.lz_vm_deleting_space, emptyArray()), isError = false)
-            val space = withContext(Dispatchers.IO) {
-                runCatching { Users.refreshUsers(getApplication()) }
-                    .onFailure { DiagnosticLog.w(TAG, "refresh users before settings delete failed", it) }
-                spaceRepo.dualSpace()
+            val stateAndSpace = withContext(Dispatchers.IO) {
+                val state = stateRepo.state()
+                val space = state.userId?.let { userId ->
+                    spaceRepo.dualSpace() ?: PrismSpace(
+                        id = "space_$userId",
+                        userId = userId,
+                        kind = PrismSpaceKind.Dual,
+                        displayName = res(R.string.lz_vm_default_space_name, emptyArray()),
+                    )
+                }
+                state to space
+            }
+            val (state, space) = stateAndSpace
+            if (state is SpaceState.OrphanProfile) {
+                val manager = stateRepo.profileOwnerPackage(state.userId)
+                    ?: str(R.string.lz_setvm_orphan_manager_unknown)
+                setFeedback(str(R.string.lz_setvm_orphan_profile, manager), isError = true)
+                PrismSetup.promptManualRemoval(activity)
+                refreshCapabilities()
+                return@launch
             }
             if (space == null) {
                 setFeedback(res(R.string.lz_space_delete_target_missing, emptyArray()), isError = true)
@@ -511,8 +556,16 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             val result: DeleteSpaceResult =
                 if (space.userId == Users.currentId())
                     DeleteSpaceResult.FellBackToSelfDestroy(PrismSetup.destroyProfileDirect(activity))
-                else SpaceProvisioningEngine.deleteSpace(getApplication(), space)
+                else SpaceDeletionCoordinator.delete(
+                    getApplication(),
+                    space,
+                    useRoot = capRepo.selectedMode.value == PrismMode.Root,
+                )
             val fb = provisioningFeedback(result, res)
+            if (result == DeleteSpaceResult.Success ||
+                (result is DeleteSpaceResult.FellBackToSelfDestroy && result.inner == DestroyProfileResult.Success)) {
+                UserCloneRegistry.clear(getApplication())
+            }
             setFeedback(fb.message, isError = fb.isError)
             if (fb.routeToSystemRemoval) PrismSetup.promptManualRemoval(activity)
             refreshCapabilities()
@@ -645,13 +698,6 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    private sealed interface RepairSpaceOutcome {
-        data object StartSetup : RepairSpaceOutcome
-        data class Activate(val profile: android.os.UserHandle) : RepairSpaceOutcome
-        data class RepairBridge(val profile: android.os.UserHandle) : RepairSpaceOutcome
-        data object AlreadyReady : RepairSpaceOutcome
-    }
-
     private fun collectProfileDiagnostics(context: Context): List<DiagnosticSection> {
         val profile = Users.profile ?: return listOf(DiagnosticSection(
             title = "Dual-space diagnostic snapshot",
@@ -664,18 +710,30 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         )
         return try {
             val descriptorOutcome = Shuttle(context, to = profile).invokeOutcomeWithin(timeoutMs = 4_500L) {
-                DiagnosticLog.openSnapshotDescriptor(this)
+                DiagnosticLog.openSnapshotSession(this)
             }
             val body = when (descriptorOutcome) {
-                is ShuttleOutcome.Value -> descriptorOutcome.value?.use { pfd ->
-                    FileInputStream(pfd.fileDescriptor).use { it.readBytes().toString(Charsets.UTF_8) }
-                } ?: "Dual-space diagnostic snapshot returned no descriptor."
+                is ShuttleOutcome.Value -> descriptorOutcome.value?.let { session ->
+                    val expectedLength = DiagnosticLog.snapshotLength(session)
+                    val pfd = DiagnosticLog.snapshotDescriptor(session)
+                        ?: return@let "Dual-space diagnostic snapshot transport lost descriptor " +
+                            "(profileBytes=$expectedLength)."
+                    pfd.use {
+                        val text = FileInputStream(it.fileDescriptor).use { input ->
+                            input.readBytes().toString(Charsets.UTF_8)
+                        }
+                        text.ifBlank {
+                            "Dual-space diagnostic snapshot was empty (profileBytes=$expectedLength)."
+                        }
+                    }
+                } ?: "Dual-space diagnostic snapshot transport returned no session."
                 is ShuttleOutcome.NotReady ->
                     "Dual-space diagnostic snapshot unavailable: shuttle is not ready (${descriptorOutcome.cause})."
                 ShuttleOutcome.TimedOut ->
-                    "Dual-space diagnostic snapshot unavailable: shuttle timed out."
+                    "Dual-space diagnostic snapshot unavailable: shuttle timed out while opening the profile file."
                 is ShuttleOutcome.Failed ->
-                    "Failed to collect dual-space diagnostics: ${descriptorOutcome.error.message ?: descriptorOutcome.error.javaClass.simpleName}"
+                    "Failed to open dual-space diagnostic snapshot: " +
+                        "${descriptorOutcome.error.javaClass.name}: ${descriptorOutcome.error.message.orEmpty()}"
                 is ShuttleOutcome.Skipped ->
                     "Dual-space diagnostic snapshot skipped: ${descriptorOutcome.reason}"
             }
@@ -687,7 +745,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             DiagnosticLog.e(TAG, "dual-space diagnostic collection failed", e)
             listOf(healthSection, DiagnosticSection(
                 title = "Dual-space diagnostic snapshot user=${profile.toId()}",
-                body = "Failed to collect dual-space diagnostics: ${e.message ?: e.javaClass.simpleName}",
+                body = "Failed to read dual-space diagnostic snapshot: ${e.javaClass.name}: ${e.message.orEmpty()}",
             ))
         }
     }

@@ -96,7 +96,7 @@ public class PrismProvisioning extends IntentService {
 	/** Provision type: 0 (default) - Managed provisioning, 1 - Manual provisioning */
 	private static final String PREF_KEY_PROFILE_PROVISION_TYPE = "profile.provision.type";
 	/** The revision for post-provisioning. Increase this const value if post-provisioning needs to be re-performed after upgrade. */
-	private static final int POST_PROVISION_REV = 9;
+	private static final int POST_PROVISION_REV = 10;
 	private static final String AFFILIATION_ID = "com.yzddmr6.prismspace";
 	private static final String SCHEME_PACKAGE = "package";
 
@@ -128,10 +128,8 @@ public class PrismProvisioning extends IntentService {
 		}
 		if (DevicePolicyManager.ACTION_PROVISION_MANAGED_PROFILE.equals(intent.getAction())) {		// Borrow this activity intent for re-provision.
 			Log.d(TAG, "Re-provisioning PrismSpace.");
-				// "repair" starts this service in the OWNER user (user 0), where PrismSpace is not the
-			// admin, so the profile-owner post-provisioning DPM/app-ops calls throw SecurityException.
-			// The normal provisioning path tolerates such failures via try-catch (see below); the repair
-			// path must too, otherwise the uncaught exception crashes the app.
+			// Repair normally starts this service inside the managed profile through Shuttle. Keep the
+			// boundary defensive because vendor service routing can still fail at runtime.
 			try {
 				reprovisionManagedProfile(context);
 				Toasts.show(context, R.string.toast_reprovision_done, Toast.LENGTH_SHORT);
@@ -206,11 +204,22 @@ public class PrismProvisioning extends IntentService {
 	@WorkerThread public static void performIncrementalProfileOwnerProvisioningIfNeeded(final Context context) {
 		try {
 			final DevicePolicies policies = new DevicePolicies(context);
-			startProfileOwnerPostProvisioning(context, policies);
+			final SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+			final int state = prefs.getInt(PREF_KEY_PROVISION_STATE, 0);
+			if (shouldRunOneTimePostProvisionMigration(state, POST_PROVISION_REV)) {
+				Log.i(TAG, "Running post-provision migration " + state + " -> " + POST_PROVISION_REV);
+				startProfileOwnerPostProvisioning(context, policies);
+				prefs.edit().putInt(PREF_KEY_PROVISION_STATE, POST_PROVISION_REV).commit();
+			} else Log.i(TAG, "Post-provision migration already current at " + state);
+			// Availability of installer/DocumentsUI packages is a runtime invariant, not a migration.
 			enableCriticalAppsIfNeeded(context, policies);
 		} catch (final RuntimeException e) {
 			Analytics.$().logAndReport(TAG, "Error provisioning profile", e);
 		}
+	}
+
+	static boolean shouldRunOneTimePostProvisionMigration(final int state, final int revision) {
+		return state < revision;
 	}
 
 	@Override public void onCreate() {
@@ -356,6 +365,7 @@ public class PrismProvisioning extends IntentService {
 
 	@ProfileUser private static void startProfileOwnerPostProvisioningForNonOwnerProfile(final Context context, final DevicePolicies policies) {
 		policies.addUserRestrictionIfNeeded(UserManager.ALLOW_PARENT_PROFILE_APP_LINKING);
+		CrossProfileIntentFiltersHelper.setFilters(policies);
 		enableAdditionalForwarding(context, policies);
 
 		// Prepare API

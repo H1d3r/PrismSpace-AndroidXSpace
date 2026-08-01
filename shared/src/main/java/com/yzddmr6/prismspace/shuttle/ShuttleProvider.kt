@@ -27,16 +27,32 @@ class ShuttleProvider: ContentProvider() {
 	companion object {
 
 		fun <R> call(context: Context, profile: UserHandle, function: ContextFun<R>): ShuttleResult<R> {
+			val functionFqn = function.javaClass.name
+			val targetUser = profile.toId()
+			if (!isReady(context, profile)) {
+				DiagnosticLog.w(
+					TAG,
+					"Shuttle call skipped fqn=$functionFqn targetUser=$targetUser cause=${ShuttleNotReadyCause.PermissionDenied}",
+				)
+				return ShuttleResult.notReady(ShuttleNotReadyCause.PermissionDenied)
+			}
 			val bundle = Bundle(1).apply { putParcelable(null, Closure(function)) }
 			val uri = buildCrossProfileUri(profile.toId())
-			try { return ShuttleResult.value(context.contentResolver.call(uri, function.javaClass.name, null, bundle)) }
+			try { return ShuttleResult.value(context.contentResolver.call(uri, functionFqn, null, bundle)) }
 			catch (e: RuntimeException) { // "SecurityException" or "IllegalArgumentException: Unknown authority 0@..." if shuttle is not ready
 				val permissionGranted = isReady(context, profile)
 				val cause = classifyShuttleNotReadyCause(e, permissionGranted)
 				if (cause != null) {
-					Log.w(TAG, "Shuttle call not ready target=${profile.toId()} cause=$cause permissionGranted=$permissionGranted method=${function.javaClass.name}")
-					if (permissionGranted) analytics().logAndReport(TAG, "Error shuttling $function", e)
+					val message = "Shuttle call failed fqn=$functionFqn targetUser=$targetUser " +
+						"exception=${e.javaClass.name} cause=$cause permissionGranted=$permissionGranted"
+					DiagnosticLog.w(TAG, message, e)
+					if (permissionGranted) analytics().report(message, e)
 					return ShuttleResult.notReady(cause) }
+				DiagnosticLog.w(
+					TAG,
+					"Shuttle execution failed fqn=$functionFqn targetUser=$targetUser exception=${e.javaClass.name}",
+					e,
+				)
 				throw e }
 		}
 
