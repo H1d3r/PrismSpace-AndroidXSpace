@@ -37,8 +37,13 @@ class SpaceStateClassifierTest {
             SpaceFacts(listOf(profile(marker = false, bridge = true, owner = false)))))
     }
 
-    @Test fun lockedPrecedesQuietMode() = assertEquals(
-        SpaceState.Locked(22), SpaceStateClassifier.classify(SpaceFacts(listOf(profile(unlocked = false, quiet = true)))),
+    @Test fun quietModePrecedesItsDerivedStoppedAndLockedFacts() = assertEquals(
+        SpaceState.Inactive(22),
+        SpaceStateClassifier.classify(SpaceFacts(listOf(profile(running = false, unlocked = false, quiet = true)))),
+    )
+
+    @Test fun unlockedFalseWhileRunningIsLocked() = assertEquals(
+        SpaceState.Locked(22), SpaceStateClassifier.classify(SpaceFacts(listOf(profile(unlocked = false)))),
     )
 
     @Test fun quietOrStoppedIsInactive() {

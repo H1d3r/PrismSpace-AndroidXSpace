@@ -51,8 +51,8 @@ object SpaceStateClassifier {
             val resumable = profile.bridgeReady == true && profile.profileOwner == true
             return SpaceState.HalfProvisioned(profile.userId, resumable)
         }
-        if (!profile.unlocked) return SpaceState.Locked(profile.userId)
         if (profile.quietMode || !profile.running) return SpaceState.Inactive(profile.userId)
+        if (!profile.unlocked) return SpaceState.Locked(profile.userId)
         if (profile.bridgeReady != true) return SpaceState.BridgeDown(profile.userId, profile.bridgeCause)
         return SpaceState.Healthy(profile.userId)
     }
