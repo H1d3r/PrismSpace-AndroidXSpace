@@ -207,7 +207,7 @@ class ShuttleProvider: ContentProvider() {
 	}
 
 	override fun onCreate() = true.also {
-		BridgePorts.installRegistered()
+		BridgePorts.installRegistered(context)
 		initialize(context)
 	}
 

@@ -3,6 +3,7 @@ package com.yzddmr6.prismspace.bridge
 import android.content.Context
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
 import com.yzddmr6.prismspace.shared.BuildConfig
+import com.yzddmr6.prismspace.shared.R
 import java.util.concurrent.CopyOnWriteArrayList
 
 interface AppControlPort {
@@ -147,14 +148,14 @@ object BridgePorts {
     }
 
     /** The command provider owns assembly, after higher-initOrder contributors have registered. */
-    fun installRegistered() {
+    fun installRegistered(context: Context) {
         if (!BridgePortsContributors.hasContributors()) return
         install(BridgePortsContributors.assemble())
-        verifyInstalled()
+        verifyInstalled(context.resources.getBoolean(R.bool.bridge_require_installer_port))
     }
 
-    fun verifyInstalled() {
-        val missing = installed?.missing().orEmpty().ifEmpty {
+    fun verifyInstalled(requireInstaller: Boolean) {
+        val missing = installed?.missing(requireInstaller).orEmpty().ifEmpty {
             if (installed == null) listOf("installation") else emptyList()
         }
         if (missing.isEmpty()) return
