@@ -70,12 +70,15 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.yzddmr6.prismspace.prism.compose.component.AppActionSheet
+import com.yzddmr6.prismspace.prism.compose.component.DeleteFinalSheet
+import com.yzddmr6.prismspace.prism.compose.component.DeleteWarningSheet
 import com.yzddmr6.prismspace.prism.compose.component.DisabledAlpha
 import com.yzddmr6.prismspace.prism.compose.component.ExperimentalUnsupportedSheet
 import com.yzddmr6.prismspace.prism.compose.component.PrismIcons
 import com.yzddmr6.prismspace.prism.compose.component.SpaceSegmentChips
 import com.yzddmr6.prismspace.prism.compose.nav.AppLaunchSignals
 import com.yzddmr6.prismspace.prism.compose.space.SpaceUsability
+import com.yzddmr6.prismspace.prism.compose.space.PrismSpaceKind
 import com.yzddmr6.prismspace.prism.compose.space.selectedDualChipId
 import com.yzddmr6.prismspace.prism.compose.space.spaceChips
 import com.yzddmr6.prismspace.prism.compose.theme.LocalPrismExtraColors
@@ -146,6 +149,17 @@ fun SpaceScreen(nav: NavHostController) {
     var systemAppsOpen by rememberSaveable { mutableStateOf(false) }
     var selectedRow by remember { mutableStateOf<SpaceRow?>(null) }
     var menuExpanded by remember { mutableStateOf(false) }
+    var showDeleteWarning by rememberSaveable { mutableStateOf(false) }
+    var showDeleteFinal by rememberSaveable { mutableStateOf(false) }
+
+    val selectedDualId = selectedDualChipId(
+        uiState.segment,
+        uiState.selectedDualSpaceId,
+        uiState.spaces,
+    )
+    val selectedDualSpace = uiState.spaces.firstOrNull {
+        it.kind == PrismSpaceKind.Dual && it.id == selectedDualId
+    }
 
     // One-shot batch confirm. Uninstall is irreversible; clone runs serially after one OK.
     var pendingBatch by remember { mutableStateOf<BatchAction?>(null) }
@@ -241,6 +255,11 @@ fun SpaceScreen(nav: NavHostController) {
                         vm.refresh()
                         menuExpanded = false
                     },
+                    canDeleteSpace = selectedDualSpace != null && activity != null,
+                    onDeleteSpace = {
+                        menuExpanded = false
+                        showDeleteWarning = true
+                    },
                 )
             }
 
@@ -280,6 +299,25 @@ fun SpaceScreen(nav: NavHostController) {
 
     uiState.experimentalCreateBlocked?.let { info ->
         ExperimentalUnsupportedSheet(info = info, onDismiss = { vm.clearExperimentalCreateBlocked() })
+    }
+
+    if (showDeleteWarning && selectedDualSpace != null) {
+        DeleteWarningSheet(
+            onContinue = {
+                showDeleteWarning = false
+                showDeleteFinal = true
+            },
+            onDismiss = { showDeleteWarning = false },
+        )
+    }
+    if (showDeleteFinal && selectedDualSpace != null && activity != null) {
+        DeleteFinalSheet(
+            onConfirm = {
+                showDeleteFinal = false
+                vm.deleteSpace(activity, selectedDualSpace)
+            },
+            onDismiss = { showDeleteFinal = false },
+        )
     }
 
     uiState.mainCopyLostPackage?.let { pkg ->
@@ -612,6 +650,8 @@ private fun SpaceToolbar(
     onCloneFilterSelected: (CloneFilter) -> Unit,
     onShowSystemToggled: () -> Unit,
     onRefresh: () -> Unit,
+    canDeleteSpace: Boolean,
+    onDeleteSpace: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -704,6 +744,8 @@ private fun SpaceToolbar(
                     onCloneFilterSelected = onCloneFilterSelected,
                     onShowSystemToggled = onShowSystemToggled,
                     onRefresh = onRefresh,
+                    canDeleteSpace = canDeleteSpace,
+                    onDeleteSpace = onDeleteSpace,
                 )
                 }
             }
@@ -741,6 +783,8 @@ private fun OverflowMenu(
     onCloneFilterSelected: (CloneFilter) -> Unit,
     onShowSystemToggled: () -> Unit,
     onRefresh: () -> Unit,
+    canDeleteSpace: Boolean,
+    onDeleteSpace: () -> Unit,
 ) {
     DropdownMenu(
         expanded = expanded,
@@ -819,6 +863,30 @@ private fun OverflowMenu(
             },
             onClick = onRefresh,
         )
+        if (segment == SpaceSegment.Dual && canDeleteSpace) {
+            DropdownMenuItem(
+                text = {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(
+                            imageVector = PrismIcons.Trash,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Text(
+                            text = stringResource(R.string.lz_set_delete_space_title),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                },
+                onClick = onDeleteSpace,
+            )
+        }
     }
 }
 

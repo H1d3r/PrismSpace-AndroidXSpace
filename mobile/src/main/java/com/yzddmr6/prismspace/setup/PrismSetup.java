@@ -25,6 +25,7 @@ import com.yzddmr6.prismspace.prism.compose.space.RootSetupResultMapping;
 import com.yzddmr6.prismspace.prism.compose.space.RootSetupUiOutcome;
 import com.yzddmr6.prismspace.prism.compose.space.SpaceProvisioningEngine;
 import com.yzddmr6.prismspace.prism.compose.space.SpaceDeletionCoordinator;
+import com.yzddmr6.prismspace.prism.compose.vm.ProvisioningFeedbackBridge;
 import com.yzddmr6.prismspace.bridge.Bridge;
 import com.yzddmr6.prismspace.bridge.BridgeTargets;
 import com.yzddmr6.prismspace.bridge.ParentTarget;
@@ -74,13 +75,17 @@ public class PrismSetup {
 			Analytics.$().event("setup_prism_root_failed")
 					.withRaw("phase", String.valueOf(phase))
 					.with(CONTENT, result.toString()).send();
-			dismissProgressAndShowError(activity, progress, phase);
+			dismissProgressAndShowError(activity, progress, phase, result);
 		}
 	}
 
-	private static void dismissProgressAndShowError(final Activity activity, final ProgressDialog progress, final int stage) {
+	private static void dismissProgressAndShowError(final Activity activity, final ProgressDialog progress,
+	                                                final int stage, final CreateSpaceResult result) {
 		dismissProgress(progress);
-		Dialogs.buildAlert(activity, null, activity.getString(R.string.dialog_space_setup_failed, stage)).withOkButton(null).show();
+		final String specificFailure = ProvisioningFeedbackBridge.specificRootSetupFailure(activity, result);
+		final String message = specificFailure != null
+				? specificFailure : activity.getString(R.string.dialog_space_setup_failed, stage);
+		Dialogs.buildAlert(activity, null, message).withOkButton(null).show();
 	}
 
 	private static void dismissProgress(final ProgressDialog progress) {

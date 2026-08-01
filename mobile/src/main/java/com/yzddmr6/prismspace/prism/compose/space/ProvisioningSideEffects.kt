@@ -43,18 +43,26 @@ internal fun buildRootProvisioningCommand(input: RootProvisioningCommandInput): 
           $maxUsersRestore
           echo ${shellQuote("PRISM_SIDE_EFFECT_RESTORE max_users original=${input.maxUsersOriginal ?: "<unset>"}")}
         }
+        fail_prism_provisioning() {
+          PRISM_FAILURE_STATUS="${'$'}1"
+          PRISM_FAILURE_STAGE="${'$'}2"
+          restore_prism_side_effects
+          echo "PRISM_PROVISION_FAILED stage=${'$'}PRISM_FAILURE_STAGE"
+          exit "${'$'}PRISM_FAILURE_STATUS"
+        }
         trap restore_prism_side_effects EXIT HUP INT TERM
         $verifierWrite
         $maxUsersWrite
         CREATE_OUTPUT="$(pm create-user --profileOf ${input.parentUserId} --managed PrismSpace 2>&1)"
         CREATE_STATUS="${'$'}?"
         printf '%s\n' "${'$'}CREATE_OUTPUT"
-        [ "${'$'}CREATE_STATUS" -eq 0 ] || { echo 'PRISM_PROVISION_FAILED stage=create'; exit 20; }
+        [ "${'$'}CREATE_STATUS" -eq 0 ] || fail_prism_provisioning 20 create
         PROFILE_ID="$(printf '%s\n' "${'$'}CREATE_OUTPUT" | sed -n 's/.*[Ii][Dd] \([0-9][0-9]*\).*/\1/p' | tail -n 1)"
-        [ -n "${'$'}PROFILE_ID" ] || { echo 'PRISM_PROVISION_FAILED stage=parse_user'; exit 20; }
-        pm install -r --user "${'$'}PROFILE_ID"$debugFlag ${shellQuote(input.apkPath)} || { echo 'PRISM_PROVISION_FAILED stage=install'; exit 30; }
-        dpm set-profile-owner --user "${'$'}PROFILE_ID" ${shellQuote(input.adminComponent)} || { echo 'PRISM_PROVISION_FAILED stage=owner'; exit 40; }
-        am start-user "${'$'}PROFILE_ID" || { echo 'PRISM_PROVISION_FAILED stage=start'; exit 50; }
+        [ -n "${'$'}PROFILE_ID" ] || fail_prism_provisioning 20 parse_user
+        pm install -r --user "${'$'}PROFILE_ID"$debugFlag ${shellQuote(input.apkPath)} || fail_prism_provisioning 30 install
+        restore_prism_side_effects
+        dpm set-profile-owner --user "${'$'}PROFILE_ID" ${shellQuote(input.adminComponent)} || fail_prism_provisioning 40 owner
+        am start-user "${'$'}PROFILE_ID" || fail_prism_provisioning 50 start
         echo "PRISM_PROVISION_SUCCESS user=${'$'}PROFILE_ID"
     """.trimIndent()
 }
@@ -64,6 +72,12 @@ internal fun verifierRestoreCommand(original: String?): String =
     else "settings put global $VERIFIER_SETTING ${shellQuote(original)}"
 
 internal fun shellQuote(value: String): String = "'${value.replace("'", "'\"'\"'")}'"
+
+internal fun detachedRootProvisioningLauncher(command: String, outputPath: String): String =
+    "setsid sh -c ${shellQuote(command)} >${shellQuote(outputPath)} 2>&1 </dev/null & echo ${'$'}!"
+
+internal fun provisioningTransactionFinished(lines: List<String>): Boolean =
+    lines.any { it.startsWith("PRISM_PROVISION_SUCCESS ") || it.startsWith("PRISM_PROVISION_FAILED ") }
 
 internal fun provisioningCompleted(lines: List<String>?, userId: Int): Boolean =
     lines?.any { it.trim() == "PRISM_PROVISION_SUCCESS user=$userId" } == true

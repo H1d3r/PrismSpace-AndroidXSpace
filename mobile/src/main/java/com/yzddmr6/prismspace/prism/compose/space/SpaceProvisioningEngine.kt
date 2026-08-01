@@ -2,6 +2,7 @@ package com.yzddmr6.prismspace.prism.compose.space
 
 import android.content.Context
 import android.content.pm.LauncherApps
+import android.os.SystemClock
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
 import com.yzddmr6.prismspace.mobile.BuildConfig
 import com.yzddmr6.prismspace.util.DeviceAdmins
@@ -13,8 +14,10 @@ import com.yzddmr6.prismspace.prism.compose.settings.ExperimentalFlags
 import com.yzddmr6.prismspace.space.SpaceState
 import eu.chainfire.libsuperuser.Shell
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /** Root-gated create/delete of PrismSpace-managed profile spaces. PUBLIC APIs only;
  *  pure parsing/decisions delegated to SpaceProvisioningParsers. Activity-free. */
@@ -83,7 +86,7 @@ object SpaceProvisioningEngine {
         ProvisioningSideEffects.logMaxUsersWrite(maxUsersOriginal, cap)
         SpaceProvisioningTracker.markStarted()
         val output = try {
-            Shell.SU.run(command)
+            runDetachedProvisioningTransaction(context, command)
         } catch (e: RuntimeException) {
             DiagnosticLog.e(TAG, "root provisioning shell failed", e)
             SpaceProvisioningTracker.clear()
@@ -143,5 +146,39 @@ object SpaceProvisioningEngine {
         }
     }
 
+    private suspend fun runDetachedProvisioningTransaction(context: Context, command: String): List<String>? {
+        val outputFile = File(context.cacheDir, ROOT_TRANSACTION_OUTPUT_FILE)
+        if (runCatching {
+                outputFile.parentFile?.mkdirs()
+                outputFile.writeText("")
+            }.isFailure) {
+            return null
+        }
+        val pid = Shell.SU.run(detachedRootProvisioningLauncher(command, outputFile.absolutePath))
+            ?.asSequence()
+            ?.map(String::trim)
+            ?.mapNotNull(String::toLongOrNull)
+            ?.lastOrNull()
+            ?: return null
+        val deadline = SystemClock.elapsedRealtime() + ROOT_TRANSACTION_TIMEOUT_MS
+        var lines = emptyList<String>()
+        while (SystemClock.elapsedRealtime() < deadline) {
+            lines = runCatching { outputFile.readLines() }.getOrDefault(emptyList())
+            if (provisioningTransactionFinished(lines)) {
+                outputFile.delete()
+                return lines
+            }
+            delay(ROOT_TRANSACTION_POLL_MS)
+        }
+        Shell.SU.run("kill -TERM $pid")
+        delay(ROOT_TRANSACTION_POLL_MS)
+        lines = runCatching { outputFile.readLines() }.getOrDefault(lines)
+        outputFile.delete()
+        return lines + "PRISM_PROVISION_FAILED stage=timeout"
+    }
+
     private const val TAG = "Prism.SpaceProvision"
+    private const val ROOT_TRANSACTION_OUTPUT_FILE = "root-provisioning-transaction.log"
+    private const val ROOT_TRANSACTION_TIMEOUT_MS = 120_000L
+    private const val ROOT_TRANSACTION_POLL_MS = 200L
 }
