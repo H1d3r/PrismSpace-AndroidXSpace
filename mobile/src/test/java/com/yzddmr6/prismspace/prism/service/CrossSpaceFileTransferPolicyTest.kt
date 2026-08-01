@@ -4,9 +4,16 @@ import com.yzddmr6.prismspace.shuttle.ShuttleNotReadyCause
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
+import java.util.concurrent.atomic.AtomicInteger
+import com.yzddmr6.prismspace.prism.ui.runCancellableTransferQueue
+import com.yzddmr6.prismspace.prism.ui.transferProgressPercent
 
 class CrossSpaceFileTransferPolicyTest {
     @Test fun imageAndDocumentDestinationsAreDeterministic() {
@@ -38,9 +45,99 @@ class CrossSpaceFileTransferPolicyTest {
         var lastProgress = 0L
         val copied = copyCancellable(ByteArrayInputStream(bytes), output, TransferCancellationSignal()) {
             lastProgress = it
+            assertEquals(output.size().toLong(), it)
         }
         assertEquals(bytes.size.toLong(), copied)
         assertEquals(copied, lastProgress)
         assertEquals(bytes.toList(), output.toByteArray().toList())
+    }
+
+    @Test fun singleCopyOpensSourceExactlyOnce() {
+        val opens = AtomicInteger()
+        val output = ByteArrayOutputStream()
+        var aborts = 0
+        val result = transferSingleCopy(
+            source = TransferSource.testing(declaredSize = 3L) {
+                opens.incrementAndGet()
+                ByteArrayInputStream(byteArrayOf(1, 2, 3))
+            },
+            output = output,
+            cancellation = TransferCancellationSignal(),
+            abort = { aborts++ },
+        )
+
+        assertEquals(SingleCopyTransferResult.Written(3L), result)
+        assertEquals(1, opens.get())
+        assertEquals(0, aborts)
+        assertEquals(listOf<Byte>(1, 2, 3), output.toByteArray().toList())
+    }
+
+    @Test fun sourceOpenAndReadFailuresAbortTarget() {
+        var openAborts = 0
+        val openFailure = transferSingleCopy(
+            TransferSource.testing { throw IOException("gone") },
+            ByteArrayOutputStream(),
+            TransferCancellationSignal(),
+            abort = { openAborts++ },
+        )
+        var readAborts = 0
+        val readFailure = transferSingleCopy(
+            TransferSource.testing { object : InputStream() {
+                override fun read(): Int = throw IOException("revoked")
+                override fun read(b: ByteArray, off: Int, len: Int): Int = throw IOException("revoked")
+            } },
+            ByteArrayOutputStream(),
+            TransferCancellationSignal(),
+            abort = { readAborts++ },
+        )
+
+        assertEquals(SingleCopyTransferResult.SourceUnreadable, openFailure)
+        assertEquals(SingleCopyTransferResult.SourceUnreadable, readFailure)
+        assertEquals(1, openAborts)
+        assertEquals(1, readAborts)
+    }
+
+    @Test fun targetFailureAndCancellationAbortTarget() {
+        var writeAborts = 0
+        val writeFailure = transferSingleCopy(
+            TransferSource.testing { ByteArrayInputStream(byteArrayOf(1)) },
+            object : OutputStream() { override fun write(b: Int) = throw IOException("full") },
+            TransferCancellationSignal(),
+            abort = { writeAborts++ },
+        )
+        val cancellation = TransferCancellationSignal().also { it.cancel() }
+        var cancelAborts = 0
+        val cancelled = transferSingleCopy(
+            TransferSource.testing { ByteArrayInputStream(byteArrayOf(1)) },
+            ByteArrayOutputStream(),
+            cancellation,
+            abort = { cancelAborts++ },
+        )
+
+        assertEquals(SingleCopyTransferResult.TargetWriteFailed, writeFailure)
+        assertEquals(SingleCopyTransferResult.Cancelled, cancelled)
+        assertEquals(1, writeAborts)
+        assertEquals(1, cancelAborts)
+    }
+
+    @Test fun cancellingQueuePreventsRemainingItemsFromStarting() {
+        val cancellation = TransferCancellationSignal()
+        val started = mutableListOf<Int>()
+
+        val results = runCancellableTransferQueue(listOf(1, 2, 3), cancellation) { _, item ->
+            started += item
+            cancellation.cancel()
+            FileTransferResult(success = true, message = "done")
+        }
+
+        assertEquals(listOf(1), started)
+        assertEquals(1, results.size)
+        assertTrue(cancellation.isCancelled())
+    }
+
+    @Test fun unknownSizeDoesNotInventPercentage() {
+        assertNull(transferProgressPercent(null, 1_024L))
+        assertEquals(100, transferProgressPercent(0L, 0L))
+        assertEquals(50, transferProgressPercent(200L, 100L))
     }
 }

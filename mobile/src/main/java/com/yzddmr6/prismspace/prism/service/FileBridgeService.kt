@@ -54,6 +54,7 @@ import com.yzddmr6.prismspace.util.Users
 import java.io.InputStream
 import java.io.OutputStream
 import java.io.File
+import java.io.FileNotFoundException
 import java.util.concurrent.atomic.AtomicBoolean
 import java.nio.charset.StandardCharsets
 
@@ -81,6 +82,7 @@ enum class FileTransferFailureReason {
     IOError,
     SpaceUnavailable,
     TargetWriteFailed,
+    Cancelled,
 }
 
 enum class TransferDirection(val wireValue: String) {
@@ -107,6 +109,43 @@ class TransferCancellationSignal {
     private val cancelled = AtomicBoolean(false)
     fun cancel() { cancelled.set(true) }
     fun isCancelled(): Boolean = cancelled.get()
+}
+
+/** A single-use source for one transfer. It carries metadata, not a private cached copy. */
+class TransferSource private constructor(
+    val displayName: String,
+    val mime: String,
+    val declaredSize: Long?,
+    private val opener: () -> InputStream,
+) {
+    private val opened = AtomicBoolean(false)
+
+    fun openOnce(): InputStream {
+        check(opened.compareAndSet(false, true)) { "Transfer source was already opened" }
+        return opener()
+    }
+
+    companion object {
+        fun fromFile(file: File, displayName: String = file.name, mime: String): TransferSource =
+            TransferSource(displayName, mime, file.length().takeIf { it >= 0L }) { file.inputStream() }
+
+        fun fromUri(
+            resolver: ContentResolver,
+            uri: Uri,
+            displayName: String,
+            mime: String,
+            declaredSize: Long?,
+        ): TransferSource = TransferSource(displayName, mime, declaredSize?.takeIf { it >= 0L }) {
+            resolver.openInputStream(uri) ?: throw FileNotFoundException(uri.toString())
+        }
+
+        internal fun testing(
+            displayName: String = "test.bin",
+            mime: String = "application/octet-stream",
+            declaredSize: Long? = null,
+            opener: () -> InputStream,
+        ): TransferSource = TransferSource(displayName, mime, declaredSize, opener)
+    }
 }
 
 data class PerAppShareFolderResult(
@@ -170,20 +209,12 @@ class FileBridgeService {
 
     fun transferToOtherSpace(
         context: Context,
-        localFile: File,
-        displayName: String,
-        mime: String,
+        source: TransferSource,
         direction: TransferDirection,
         cancellation: TransferCancellationSignal = TransferCancellationSignal(),
         onProgress: (Long) -> Unit = {},
     ): FileTransferResult {
-        val safeName = FileTransferPolicy.safeDisplayName(displayName)
-        if (!localFile.isFile || !localFile.canRead()) return FileTransferResult(
-            false,
-            str(context, R.string.fb_transfer_source_unreadable),
-            safeName,
-            failureReason = FileTransferFailureReason.SourceUnreadable,
-        )
+        val safeName = FileTransferPolicy.safeDisplayName(source.displayName)
         val target = when (direction) {
             TransferDirection.ToProfile -> BridgeTargets.profile(context)
             TransferDirection.ToMain -> BridgeTargets.parent(context).takeIf { !Users.isParentProfile() }
@@ -193,7 +224,7 @@ class FileBridgeService {
             safeName,
             failureReason = FileTransferFailureReason.SpaceUnavailable,
         )
-        val destination = CrossSpaceFileTransferPolicy.destination(mime)
+        val destination = CrossSpaceFileTransferPolicy.destination(source.mime)
         val store = if (destination.isImage) PROFILE_WRITE_MEDIA else PROFILE_WRITE_DOWNLOAD
         val operation = "cross-space transfer direction=${direction.wireValue} name=$safeName"
         val session = when (val result = runDestinationBridgeOperation(
@@ -201,7 +232,7 @@ class FileBridgeService {
             TAG,
             "$operation open",
             target,
-            command = OpenWriteSession(store.toBridgeStore(), safeName, mime, destination.relativePath),
+            command = OpenWriteSession(store.toBridgeStore(), safeName, source.mime, destination.relativePath),
         )) {
             is ProfileBridgeResult.Value -> result.value
             else -> return bridgeFailureResult(context, result, str(context, R.string.fb_transfer_bridge_not_ready))
@@ -211,12 +242,29 @@ class FileBridgeService {
         val targetUri = session.uri
         val pfd = session.descriptor
 
-        return try {
-            localFile.inputStream().use { input ->
-                ParcelFileDescriptor.AutoCloseOutputStream(pfd).use { output ->
-                    copyCancellable(input, output, cancellation, onProgress)
-                }
+        val write = transferSingleCopy(
+            source = source,
+            output = ParcelFileDescriptor.AutoCloseOutputStream(pfd),
+            cancellation = cancellation,
+            onProgress = onProgress,
+            abort = { abortTransfer(context, target, store, targetUri, "$operation abort") },
+        )
+        if (write !is SingleCopyTransferResult.Written) {
+            val reason = when (write) {
+                SingleCopyTransferResult.SourceUnreadable -> FileTransferFailureReason.SourceUnreadable
+                SingleCopyTransferResult.TargetWriteFailed -> FileTransferFailureReason.TargetWriteFailed
+                SingleCopyTransferResult.Cancelled -> FileTransferFailureReason.Cancelled
+                is SingleCopyTransferResult.Written -> error("Handled above")
             }
+            val message = when (write) {
+                SingleCopyTransferResult.SourceUnreadable -> str(context, R.string.fb_transfer_source_unreadable)
+                SingleCopyTransferResult.Cancelled -> str(context, R.string.fb_transfer_cancelled)
+                else -> str(context, R.string.fb_transfer_target_failed)
+            }
+            return FileTransferResult(false, message, safeName, failureReason = reason)
+        }
+
+        return try {
             val finished = runDestinationBridgeOperation(
                 context,
                 TAG,
@@ -248,10 +296,6 @@ class FileBridgeService {
                         .copy(failureReason = FileTransferFailureReason.TargetWriteFailed)
                 }
             }
-        } catch (e: TransferCancelledException) {
-            abortTransfer(context, target, store, targetUri, "$operation cancel")
-            FileTransferResult(false, str(context, R.string.fb_transfer_cancelled), safeName,
-                failureReason = FileTransferFailureReason.TargetWriteFailed)
         } catch (e: Throwable) {
             abortTransfer(context, target, store, targetUri, "$operation abort")
             DiagnosticLog.w(TAG, "$operation failed", e)
@@ -1091,6 +1135,48 @@ private fun abortProfileWriteSession(context: Context, store: Int, targetUri: St
 }
 
 private class TransferCancelledException : java.io.IOException("Transfer cancelled")
+private class SourceReadException(cause: Throwable) : java.io.IOException(cause)
+private class TargetWriteException(cause: Throwable) : java.io.IOException(cause)
+
+internal sealed interface SingleCopyTransferResult {
+    data class Written(val bytes: Long) : SingleCopyTransferResult
+    object SourceUnreadable : SingleCopyTransferResult
+    object TargetWriteFailed : SingleCopyTransferResult
+    object Cancelled : SingleCopyTransferResult
+}
+
+internal fun transferSingleCopy(
+    source: TransferSource,
+    output: OutputStream,
+    cancellation: TransferCancellationSignal,
+    onProgress: (Long) -> Unit = {},
+    abort: () -> Unit,
+): SingleCopyTransferResult {
+    val input = try {
+        source.openOnce()
+    } catch (_: Exception) {
+        runCatching(abort)
+        runCatching { output.close() }
+        return SingleCopyTransferResult.SourceUnreadable
+    }
+    val result = try {
+        input.use {
+            output.use {
+                SingleCopyTransferResult.Written(copyCancellable(input, output, cancellation, onProgress))
+            }
+        }
+    } catch (_: TransferCancelledException) {
+        SingleCopyTransferResult.Cancelled
+    } catch (_: SourceReadException) {
+        SingleCopyTransferResult.SourceUnreadable
+    } catch (_: TargetWriteException) {
+        SingleCopyTransferResult.TargetWriteFailed
+    } catch (_: Exception) {
+        SingleCopyTransferResult.TargetWriteFailed
+    }
+    if (result !is SingleCopyTransferResult.Written) runCatching(abort)
+    return result
+}
 
 internal fun copyCancellable(
     input: InputStream,
@@ -1102,13 +1188,25 @@ internal fun copyCancellable(
     var copied = 0L
     while (true) {
         if (cancellation.isCancelled()) throw TransferCancelledException()
-        val read = input.read(buffer)
+        val read = try {
+            input.read(buffer)
+        } catch (e: Exception) {
+            throw SourceReadException(e)
+        }
         if (read < 0) break
-        output.write(buffer, 0, read)
+        try {
+            output.write(buffer, 0, read)
+        } catch (e: Exception) {
+            throw TargetWriteException(e)
+        }
         copied += read
         onProgress(copied)
     }
-    output.flush()
+    try {
+        output.flush()
+    } catch (e: Exception) {
+        throw TargetWriteException(e)
+    }
     return copied
 }
 

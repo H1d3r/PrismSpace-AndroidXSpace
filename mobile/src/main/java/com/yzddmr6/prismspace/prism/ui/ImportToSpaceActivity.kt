@@ -15,8 +15,11 @@ import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.prism.compose.vm.isImageMime
 import com.yzddmr6.prismspace.prism.service.TransferHistoryStore
 import com.yzddmr6.prismspace.prism.service.FileBridgeService
+import com.yzddmr6.prismspace.prism.service.FileTransferFailureReason
+import com.yzddmr6.prismspace.prism.service.FileTransferResult
 import com.yzddmr6.prismspace.prism.service.TransferCancellationSignal
 import com.yzddmr6.prismspace.prism.service.TransferDirection
+import com.yzddmr6.prismspace.prism.service.TransferSource
 import com.yzddmr6.prismspace.util.PrismLocale
 import com.yzddmr6.prismspace.util.Users
 import java.io.File
@@ -33,21 +36,28 @@ import java.nio.charset.StandardCharsets
  * Why share (not SAF): some ROMs intercept the document picker across profile boundaries, while
  * the system share chooser keeps the Personal/Work routing explicit.
  *
- * Flow: receive shared file → copy it to a private cache temp (reads the cross-profile-granted URI
- * immediately, before it can expire) → let the user choose the exact destination file via the
- * system save panel (CREATE_DOCUMENT) → write the file there → record in the persisted transfer
- * history.
+ * Cross-space transfers stream the granted URI directly into the destination session. A private
+ * cache file is created lazily only for the local CREATE_DOCUMENT branch, whose picker temporarily
+ * leaves this Activity.
  */
 class ImportToSpaceActivity : Activity() {
 
     override fun attachBaseContext(newBase: Context) = super.attachBaseContext(PrismLocale.wrap(newBase))
 
-    private data class PendingImport(val file: File, val displayName: String, val mime: String, val isImage: Boolean)
+    private data class PendingImport(
+        val uri: Uri,
+        val displayName: String,
+        val mime: String,
+        val declaredSize: Long?,
+        val isImage: Boolean,
+        var cachedFile: File? = null,
+    )
 
     private val pending = mutableListOf<PendingImport>()
     private var saveAsIndex = 0
     private var saveAsSuccesses = 0
     private var saveAsLastFailure: String? = null
+    private var activeCancellation: TransferCancellationSignal? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -58,17 +68,16 @@ class ImportToSpaceActivity : Activity() {
             finish()
             return
         }
-        if (uris.size > MAX_BATCH) toast(getString(R.string.lz_io_too_many, MAX_BATCH))
         Thread {
-            uris.take(MAX_BATCH).forEachIndexed { index, uri ->
+            uris.forEachIndexed { index, uri ->
                 try {
                     val mime = intent?.type?.takeUnless { it == "*/*" }
                         ?: contentResolver.getType(uri) ?: "application/octet-stream"
-                    val displayName = queryName(uri) ?: uri.lastPathSegment?.substringAfterLast('/') ?: "file"
+                    val metadata = queryMetadata(uri)
+                    val displayName = metadata.first
+                        ?: uri.lastPathSegment?.substringAfterLast('/') ?: "file"
                     DiagnosticLog.i(TAG, "import receive start index=$index name=$displayName mime=$mime uri=$uri")
-                    val temp = copyToCache(uri, index)
-                    if (temp != null) pending += PendingImport(temp, displayName, mime, isImageMime(mime))
-                    else DiagnosticLog.w(TAG, "import receive failed index=$index reason=SourceUnreadable")
+                    pending += PendingImport(uri, displayName, mime, metadata.second, isImageMime(mime))
                 } catch (e: Throwable) {
                     DiagnosticLog.w(TAG, "import receive failed index=$index reason=SourceUnreadable", e)
                 }
@@ -81,7 +90,7 @@ class ImportToSpaceActivity : Activity() {
                     runBatch(toOtherSpace = true)
                 } else showDestinationDialog()
             }
-        }.apply { name = "Prism-import-cache" }.start()
+        }.apply { name = "Prism-import-metadata" }.start()
     }
 
     private fun receivedUris(): List<Uri> {
@@ -121,35 +130,64 @@ class ImportToSpaceActivity : Activity() {
 
     private fun runBatch(toOtherSpace: Boolean) {
         val cancellation = TransferCancellationSignal()
+        activeCancellation = cancellation
         @Suppress("DEPRECATION")
         val progress = ProgressDialog(this).apply {
+            setProgressStyle(ProgressDialog.STYLE_HORIZONTAL)
+            max = 100
+            isIndeterminate = true
             setMessage(getString(R.string.lz_io_transfer_progress, pending.size))
             setCancelable(true)
             setOnCancelListener { cancellation.cancel() }
             show()
         }
         Thread {
-            var successes = 0
-            var lastFailure: String? = null
-            pending.forEachIndexed { index, item ->
-                if (cancellation.isCancelled()) return@forEachIndexed
-                val service = FileBridgeService()
+            val service = FileBridgeService()
+            val results = runCancellableTransferQueue(pending, cancellation) { index, item ->
+                updateProgress(progress, index, item, 0L)
+                var lastPercent = -1
+                val onProgress: (Long) -> Unit = { written ->
+                    transferProgressPercent(item.declaredSize, written)?.let { percent ->
+                        if (percent != lastPercent) {
+                            lastPercent = percent
+                            updateProgress(progress, index, item, written)
+                        }
+                    }
+                }
                 val result = if (toOtherSpace) {
                     val direction = if (Users.isParentProfile()) TransferDirection.ToProfile else TransferDirection.ToMain
-                    service.transferToOtherSpace(this, item.file, item.displayName, item.mime, direction, cancellation)
+                    val source = TransferSource.fromUri(
+                        contentResolver, item.uri, item.displayName, item.mime, item.declaredSize,
+                    )
+                    service.transferToOtherSpace(this, source, direction, cancellation, onProgress)
                 } else {
-                    service.saveInCurrentSpace(this, item.file, item.displayName, item.mime, cancellation)
+                    val localFile = item.cachedFile ?: copyToCache(item.uri, index)?.also { item.cachedFile = it }
+                    if (localFile == null) {
+                        FileTransferResult(
+                            false,
+                            getString(R.string.fb_transfer_source_unreadable),
+                            item.displayName,
+                            failureReason = FileTransferFailureReason.SourceUnreadable,
+                        )
+                    } else {
+                        service.saveInCurrentSpace(
+                            this, localFile, item.displayName, item.mime, cancellation, onProgress,
+                        )
+                    }
                 }
                 if (result.success) {
-                    successes++
                     DiagnosticLog.i(TAG, "import receive done index=$index result=success otherSpace=$toOtherSpace name=${item.displayName}")
                 } else {
-                    lastFailure = result.message
                     DiagnosticLog.w(TAG, "import receive failed index=$index reason=${result.failureReason} otherSpace=$toOtherSpace name=${item.displayName}")
                 }
+                result
             }
             runOnUiThread {
+                activeCancellation = null
+                if (isDestroyed) return@runOnUiThread
                 progress.dismiss()
+                val successes = results.count { it.success }
+                val lastFailure = results.lastOrNull { !it.success }?.message
                 val message = when {
                     cancellation.isCancelled() -> getString(R.string.lz_io_cancelled)
                     successes == pending.size -> getString(R.string.lz_io_batch_done, successes)
@@ -159,6 +197,17 @@ class ImportToSpaceActivity : Activity() {
                 cleanupAndFinish()
             }
         }.apply { name = "Prism-import-transfer" }.start()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun updateProgress(progress: ProgressDialog, index: Int, item: PendingImport, written: Long) {
+        val percent = transferProgressPercent(item.declaredSize, written)
+        runOnUiThread {
+            if (isDestroyed) return@runOnUiThread
+            progress.setMessage(getString(R.string.lz_io_transfer_item_progress, index + 1, pending.size, item.displayName))
+            progress.isIndeterminate = percent == null
+            if (percent != null) progress.progress = percent
+        }
     }
 
     private fun saveAsNext() {
@@ -182,6 +231,22 @@ class ImportToSpaceActivity : Activity() {
             return
         }
         val item = pending[saveAsIndex]
+        if (item.cachedFile == null) {
+            val index = saveAsIndex
+            Thread {
+                val cached = copyToCache(item.uri, index)
+                runOnUiThread {
+                    if (cached == null) {
+                        saveAsLastFailure = getString(R.string.fb_transfer_source_unreadable)
+                        saveAsIndex++
+                    } else {
+                        item.cachedFile = cached
+                    }
+                    saveAsNext()
+                }
+            }.apply { name = "Prism-import-save-as-cache" }.start()
+            return
+        }
         try {
             startActivityForResult(
                 ImportDestinationPlanner.buildCreateDocumentIntent(item.displayName, item.mime),
@@ -207,7 +272,7 @@ class ImportToSpaceActivity : Activity() {
             return
         }
         try {
-            writeToDocument(target, item.file)
+            writeToDocument(target, requireNotNull(item.cachedFile))
             val location = ImportDestinationPlanner.displayLocationForCreatedDocument(target.toString())
             TransferHistoryStore.record(this, item.displayName, location, item.isImage)
             saveAsSuccesses++
@@ -221,7 +286,7 @@ class ImportToSpaceActivity : Activity() {
     }
 
     private fun cleanupAndFinish() {
-        pending.forEach { it.file.delete() }
+        pending.forEach { it.cachedFile?.delete() }
         pending.clear()
         finish()
     }
@@ -262,22 +327,56 @@ class ImportToSpaceActivity : Activity() {
         }
     }
 
-    private fun queryName(uri: Uri): String? = runCatching {
-        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+    private fun queryMetadata(uri: Uri): Pair<String?, Long?> = runCatching {
+        contentResolver.query(
+            uri,
+            arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+            null,
+            null,
+            null,
+        )?.use { c ->
             if (c.moveToFirst()) {
-                val idx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (idx >= 0) c.getString(idx) else null
-            } else null
-        }
-    }.getOrNull()
+                val nameIndex = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                val sizeIndex = c.getColumnIndex(OpenableColumns.SIZE)
+                val name = if (nameIndex >= 0) c.getString(nameIndex) else null
+                val size = if (sizeIndex >= 0 && !c.isNull(sizeIndex)) {
+                    c.getLong(sizeIndex).takeIf { it >= 0L }
+                } else null
+                name to size
+            } else null to null
+        } ?: (null to null)
+    }.getOrDefault(null to null)
+
+    override fun onStop() {
+        activeCancellation?.cancel()
+        super.onStop()
+    }
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
 
     private companion object {
         private const val TAG = "Prism.ImportToSpace"
         private const val REQ_CREATE_DOCUMENT = 4201
-        private const val MAX_BATCH = 20
     }
+}
+
+internal fun <T> runCancellableTransferQueue(
+    items: List<T>,
+    cancellation: TransferCancellationSignal,
+    transfer: (index: Int, item: T) -> FileTransferResult,
+): List<FileTransferResult> {
+    val results = ArrayList<FileTransferResult>(items.size)
+    for ((index, item) in items.withIndex()) {
+        if (cancellation.isCancelled()) break
+        results += transfer(index, item)
+    }
+    return results
+}
+
+internal fun transferProgressPercent(declaredSize: Long?, written: Long): Int? = when {
+    declaredSize == null || declaredSize < 0L -> null
+    declaredSize == 0L -> 100
+    else -> ((written.toDouble() / declaredSize) * 100).toInt().coerceIn(0, 100)
 }
 
 internal object CrossSpaceTransferEntry {

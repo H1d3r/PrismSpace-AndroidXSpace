@@ -10,7 +10,7 @@
     <string name="lz_io_target_save_as">Save as…</string>
     <string name="lz_io_target_other_space">Send to the other space</string>
     <string name="lz_io_transfer_progress">Transferring %1$d file(s)… Tap Back to cancel.</string>
-    <string name="lz_io_too_many">Select at most %1$d files at a time. Only the first batch will be processed.</string>
+    <string name="lz_io_transfer_item_progress">Transferring %1$d/%2$d: %3$s</string>
     <string name="lz_io_batch_done">%1$d file(s) transferred</string>
     <string name="lz_io_batch_partial">Transferred %1$d of %2$d file(s). %3$s</string>
 </resources>
