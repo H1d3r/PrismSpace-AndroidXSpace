@@ -2,6 +2,7 @@ package com.yzddmr6.prismspace.prism.compose.space
 
 import com.yzddmr6.prismspace.space.SpaceState
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -86,6 +87,47 @@ class SpaceStateStoreTest {
         second.await()
 
         assertEquals(1, calls.get())
+    }
+
+    @Test fun invalidationWhileUnobservedRefreshesWhenSubscriberReturns() = runBlocking {
+        val current = AtomicReference<SpaceState>(SpaceState.NoProfile)
+        val calls = AtomicInteger()
+        val store = SpaceStateStore(
+            collector = { calls.incrementAndGet(); current.get() },
+            scope = scope,
+            debounceMs = 20L,
+        )
+        val firstObserver = scope.launch { store.state.collect() }
+        withTimeout(2_000L) { store.state.first { it == SpaceSnapshot.Loaded(SpaceState.NoProfile) } }
+        firstObserver.cancel()
+        delay(50L)
+
+        current.set(SpaceState.Healthy(22))
+        store.invalidate("profile_added_while_unobserved")
+
+        withTimeout(2_000L) { store.state.first { it == SpaceSnapshot.Loaded(SpaceState.Healthy(22)) } }
+        assertEquals(2, calls.get())
+    }
+
+    @Test fun initialCollectionFailureIsRetriedWithoutEscapingScope() = runBlocking {
+        val calls = AtomicInteger()
+        val failures = AtomicInteger()
+        val store = SpaceStateStore(
+            collector = {
+                if (calls.incrementAndGet() == 1) error("transient")
+                SpaceState.NoProfile
+            },
+            scope = scope,
+            debounceMs = 20L,
+            retryMs = 20L,
+            onCollectionFailure = { _, _ -> failures.incrementAndGet() },
+        )
+
+        val loaded = withTimeout(2_000L) { store.state.first { it is SpaceSnapshot.Loaded } }
+
+        assertEquals(SpaceSnapshot.Loaded(SpaceState.NoProfile), loaded)
+        assertEquals(2, calls.get())
+        assertEquals(1, failures.get())
     }
 
     @Test fun provisioningEndsOnEveryParentObservableSignal() {

@@ -2,6 +2,7 @@ package com.yzddmr6.prismspace.prism.compose
 
 import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.prism.compose.component.PrismLevel
+import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceHealth
 import com.yzddmr6.prismspace.prism.compose.vm.mapHomeState
 import com.yzddmr6.prismspace.prism.compose.vm.spaceHealth
@@ -11,18 +12,17 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 /**
  * Tests the extended HomeUiModel produced by mapHomeState().
  */
 class HomeStateTest {
 
-    @Test fun `main entry uses canonical state so half-provisioned profiles can reach repair`() {
-        val source = File("src/main/java/com/yzddmr6/prismspace/MainActivity.java").readText()
-
-        assertTrue(source.contains("new SpaceStateRepository(this).currentState() == SpaceState.NoProfile.INSTANCE"))
-        assertFalse(source.contains("! Users.hasProfile()"))
+    @Test fun `initial routing opens setup only for confirmed absence`() {
+        assertTrue(SpaceStateRepository.shouldOpenSetup(SpaceState.NoProfile))
+        assertFalse(SpaceStateRepository.shouldOpenSetup(null))
+        assertFalse(SpaceStateRepository.shouldOpenSetup(SpaceState.OrphanProfile(22)))
+        assertFalse(SpaceStateRepository.shouldOpenSetup(SpaceState.HalfProvisioned(22, bridgeReady = true)))
     }
 
     @Test fun `canonical space states map to truthful home health`() {

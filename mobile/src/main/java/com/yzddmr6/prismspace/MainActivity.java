@@ -58,15 +58,32 @@ public class MainActivity extends FragmentActivity {
 			startMainUi(savedInstanceState);	// As device owner, always show main UI.
 			return;
 		}
-		// The marker-only Users cache intentionally does not claim half-provisioned profiles.
-		// Route from the complete state classifier so those users can reach Home/Settings repair
-		// instead of being trapped in a setup screen that correctly refuses to create a duplicate.
-		if (new SpaceStateRepository(this).currentState() == SpaceState.NoProfile.INSTANCE) {
-			Log.i(TAG, "Profile not setup yet");
-			startSetupWizard();
-			return;
-		}
-		startMainUi(savedInstanceState);
+		resolveInitialRoute(savedInstanceState);
+	}
+
+	private void resolveInitialRoute(final Bundle savedInstanceState) {
+		new Thread(() -> {
+			SpaceState resolved;
+			try {
+				resolved = new SpaceStateRepository(getApplicationContext())
+						.awaitInitialStateBlocking(INITIAL_STATE_TIMEOUT_MS);
+			} catch (final RuntimeException error) {
+				Log.e(TAG, "Initial space-state collection failed", error);
+				resolved = null;
+			}
+			final SpaceState state = resolved;
+			runOnUiThread(() -> {
+				if (isFinishing() || isDestroyed()) return;
+				// Only a confirmed absence enters setup. Unknown/failed states stay on the repair-capable UI.
+				if (SpaceStateRepository.shouldOpenSetup(state)) {
+					Log.i(TAG, "Profile not setup yet");
+					startSetupWizard();
+				} else {
+					if (state == null) Log.w(TAG, "Initial space-state collection timed out; opening main UI");
+					startMainUi(savedInstanceState);
+				}
+			});
+		}, "Prism-initial-space-state").start();
 	}
 
 	@Override protected void onNewIntent(final Intent intent) {
@@ -141,5 +158,6 @@ public class MainActivity extends FragmentActivity {
 
 	private boolean mIsDeviceOwner;
 
+	private static final long INITIAL_STATE_TIMEOUT_MS = 5_000L;
 	private static final String TAG = "Prism.Main";
 }

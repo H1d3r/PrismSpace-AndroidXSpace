@@ -25,22 +25,28 @@ import com.yzddmr6.prismspace.util.Modules
 import com.yzddmr6.prismspace.util.Users
 import com.yzddmr6.prismspace.util.Users.Companion.toId
 import java.util.concurrent.CopyOnWriteArraySet
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 sealed interface SpaceSnapshot {
     object Loading : SpaceSnapshot
@@ -68,6 +74,11 @@ class SpaceStateRepository(context: Context) {
     /** Java bridge for legacy callers. Invoke from a worker thread only. */
     fun preflightCreateBlocking(): SpaceState = runBlocking { preflightCreate() }
 
+    /** Initial Activity routing may wait off-main, but must not guess if collection keeps failing. */
+    fun awaitInitialStateBlocking(timeoutMs: Long): SpaceState? = runBlocking {
+        withTimeoutOrNull(timeoutMs) { preflightCreate() }
+    }
+
     /** Non-blocking adapter for legacy repository APIs. */
     fun currentState(): SpaceState? = (state.value as? SpaceSnapshot.Loaded)?.state
 
@@ -76,6 +87,7 @@ class SpaceStateRepository(context: Context) {
     fun profileOwnerPackage(userId: Int): String? = facts.profileOwnerPackage(userId)
 
     internal companion object {
+        @JvmStatic fun shouldOpenSetup(state: SpaceState?): Boolean = state == SpaceState.NoProfile
         const val TAG = "Prism.SpaceState"
     }
 }
@@ -84,28 +96,64 @@ internal class SpaceStateStore(
     private val collector: suspend (String) -> SpaceState,
     private val scope: CoroutineScope,
     private val debounceMs: Long = 300L,
+    private val retryMs: Long = 1_000L,
+    private val onCollectionFailure: (String, Throwable) -> Unit = { _, _ -> },
 ) {
     private val mutableState = MutableStateFlow<SpaceSnapshot>(SpaceSnapshot.Loading)
     private val refreshMutex = Mutex()
-    private var inFlight: Deferred<Unit>? = null
-    private var debounceJob: Job? = null
+    private var inFlight: Deferred<Boolean>? = null
+    private val invalidations = Channel<String>(Channel.CONFLATED)
 
     val state: StateFlow<SpaceSnapshot> = mutableState.asStateFlow()
 
     init {
         scope.launch {
-            mutableState.subscriptionCount.first { it > 0 }
-            refresh("initial")
+            mutableState.subscriptionCount
+                .map { it > 0 }
+                .distinctUntilChanged()
+                .collect { active ->
+                    if (active) invalidations.trySend(
+                        if (mutableState.value == SpaceSnapshot.Loading) "initial" else "subscriber_resumed",
+                    )
+                }
+        }
+        scope.launch {
+            for (firstReason in invalidations) {
+                if (mutableState.subscriptionCount.value == 0) continue
+                var reason = firstReason
+                if (reason != "initial") {
+                    delay(debounceMs)
+                    while (true) {
+                        reason = invalidations.tryReceive().getOrNull() ?: break
+                    }
+                }
+                while (mutableState.subscriptionCount.value > 0 && !refreshOnce(reason)) {
+                    delay(retryMs)
+                    reason = "retry:$reason"
+                }
+            }
         }
     }
 
     suspend fun refresh(reason: String) {
+        refreshOnce(reason)
+    }
+
+    private suspend fun refreshOnce(reason: String): Boolean {
         val work = refreshMutex.withLock {
             inFlight?.takeIf { it.isActive } ?: scope.async {
-                mutableState.value = SpaceSnapshot.Loaded(collector(reason))
+                try {
+                    mutableState.value = SpaceSnapshot.Loaded(collector(reason))
+                    true
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    runCatching { onCollectionFailure(reason, error) }
+                    false
+                }
             }.also { inFlight = it }
         }
-        try {
+        return try {
             work.await()
         } finally {
             refreshMutex.withLock {
@@ -114,14 +162,8 @@ internal class SpaceStateStore(
         }
     }
 
-    @Synchronized
     fun invalidate(reason: String) {
-        if (mutableState.subscriptionCount.value == 0) return
-        debounceJob?.cancel()
-        debounceJob = scope.launch {
-            delay(debounceMs)
-            refresh(reason)
-        }
+        invalidations.trySend(reason)
     }
 }
 
@@ -145,6 +187,9 @@ private object SpaceStateStores {
                 }
             },
             scope = scope,
+            onCollectionFailure = { reason, error ->
+                DiagnosticLog.e(SpaceStateRepository.TAG, "state collection failed reason=$reason", error)
+            },
         )
         Users.addChangeListener { action ->
             when (action) {
