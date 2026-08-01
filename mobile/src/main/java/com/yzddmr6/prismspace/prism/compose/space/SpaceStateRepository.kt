@@ -64,9 +64,7 @@ class SpaceStateRepository(context: Context) {
 
     /** Creation is the only read path allowed to wait for initial fact collection. */
     suspend fun preflightCreate(): SpaceState {
-        val current = state.value
-        if (current is SpaceSnapshot.Loaded) return current.state
-        refresh("preflight_create")
+        store.refreshAndRead("preflight_create")?.let { return it }
         return (state.first { it is SpaceSnapshot.Loaded } as SpaceSnapshot.Loaded).state
     }
 
@@ -75,7 +73,7 @@ class SpaceStateRepository(context: Context) {
 
     /** Initial Activity routing may wait off-main, but must not guess if collection keeps failing. */
     fun awaitInitialStateBlocking(timeoutMs: Long): SpaceState? = runBlocking {
-        withTimeoutOrNull(timeoutMs) { preflightCreate() }
+        withTimeoutOrNull(timeoutMs) { store.refreshAndRead("initial_route") }
     }
 
     /** Non-blocking adapter for legacy repository APIs. */
@@ -135,6 +133,11 @@ internal class SpaceStateStore(
     }
 
     suspend fun refresh(reason: String): Boolean = refreshOnce(reason)
+
+    suspend fun refreshAndRead(reason: String): SpaceState? {
+        if (!refreshOnce(reason)) return null
+        return (mutableState.value as? SpaceSnapshot.Loaded)?.state
+    }
 
     private suspend fun refreshOnce(reason: String): Boolean {
         val work = refreshMutex.withLock {

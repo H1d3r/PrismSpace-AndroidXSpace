@@ -105,6 +105,35 @@ class SpaceStateStoreTest {
         assertEquals(SpaceSnapshot.Loaded(SpaceState.NoProfile), store.state.value)
     }
 
+    @Test fun refreshAndReadReplacesAStaleLoadedSnapshot() = runBlocking {
+        val current = AtomicReference<SpaceState>(SpaceState.NoProfile)
+        val store = SpaceStateStore(
+            collector = { current.get() },
+            scope = scope,
+        )
+
+        assertEquals(SpaceState.NoProfile, store.refreshAndRead("before_provisioning"))
+        current.set(SpaceState.Healthy(16))
+
+        assertEquals(SpaceState.Healthy(16), store.refreshAndRead("initial_route"))
+        assertEquals(SpaceSnapshot.Loaded(SpaceState.Healthy(16)), store.state.value)
+    }
+
+    @Test fun refreshAndReadDoesNotReturnAStaleSnapshotWhenRefreshFails() = runBlocking {
+        val calls = AtomicInteger()
+        val store = SpaceStateStore(
+            collector = {
+                if (calls.incrementAndGet() == 1) SpaceState.NoProfile else error("unavailable")
+            },
+            scope = scope,
+            onCollectionFailure = { _, _ -> },
+        )
+
+        assertEquals(SpaceState.NoProfile, store.refreshAndRead("initial"))
+        assertEquals(null, store.refreshAndRead("initial_route"))
+        assertEquals(SpaceSnapshot.Loaded(SpaceState.NoProfile), store.state.value)
+    }
+
     @Test fun invalidationWhileUnobservedRefreshesWhenSubscriberReturns() = runBlocking {
         val current = AtomicReference<SpaceState>(SpaceState.NoProfile)
         val calls = AtomicInteger()
