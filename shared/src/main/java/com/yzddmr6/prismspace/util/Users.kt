@@ -21,6 +21,7 @@ import com.yzddmr6.prismspace.home.HomeRole
 import com.yzddmr6.prismspace.util.PseudoContentProvider
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import java.util.concurrent.CopyOnWriteArraySet
 import kotlin.coroutines.resume
 
 /**
@@ -33,20 +34,31 @@ class Users : PseudoContentProvider() {
 	override fun onCreate(): Boolean {
 		Log.v(TAG, "onCreate()")
 		val priority = IntentFilter.SYSTEM_HIGH_PRIORITY - 1
-		context().registerReceiver(mProfileChangeObserver,
-			IntentFilters.forActions(Intent.ACTION_MANAGED_PROFILE_ADDED,  // ACTION_MANAGED_PROFILE_ADDED is sent by DevicePolicyManagerService.setProfileEnabled()
-				Intent.ACTION_MANAGED_PROFILE_REMOVED,
-				DevicePolicyManager.ACTION_PROFILE_OWNER_CHANGED // ACTION_PROFILE_OWNER_CHANGED is sent after "dpm set-profile-owner ..."
-			).inPriority(priority))
+		val filter = IntentFilters.forActions(
+			Intent.ACTION_MANAGED_PROFILE_ADDED,
+			Intent.ACTION_MANAGED_PROFILE_REMOVED,
+			Intent.ACTION_MANAGED_PROFILE_AVAILABLE,
+			Intent.ACTION_MANAGED_PROFILE_UNAVAILABLE,
+			Intent.ACTION_USER_UNLOCKED,
+			Intent.ACTION_MY_PACKAGE_REPLACED,
+			DevicePolicyManager.ACTION_PROFILE_OWNER_CHANGED,
+		).inPriority(priority)
+		if (SDK_INT >= TIRAMISU) {
+			context().registerReceiver(mProfileChangeObserver, filter, Context.RECEIVER_NOT_EXPORTED)
+		} else {
+			@Suppress("UnspecifiedRegisterReceiverFlag")
+			context().registerReceiver(mProfileChangeObserver, filter)
+		}
 		refreshUsers(context())
 		return true
 	}
 
 	private val mProfileChangeObserver: BroadcastReceiver = object : BroadcastReceiver() { override fun onReceive(context: Context, intent: Intent) {
-		val added = intent.action == Intent.ACTION_MANAGED_PROFILE_ADDED
 		val user = intent.getParcelableExtra<UserHandle>(Intent.EXTRA_USER)
-		Log.i(TAG, (if (added) "Profile added: " else "Profile removed: ") + (user?.toId()?.toString() ?: "null"))
+		val action = intent.action ?: return
+		Log.i(TAG, "User state changed action=$action user=${user?.toId() ?: NULL_ID}")
 		refreshUsers(context)
+		notifyChanged(action)
 	}}
 
 	companion object {
@@ -59,9 +71,19 @@ class Users : PseudoContentProvider() {
 
 		private val CURRENT: UserHandle = Process.myUserHandle()
 		private val CURRENT_ID = CURRENT.toId()
+		private val changeListeners = CopyOnWriteArraySet<(String) -> Unit>()
 		@JvmStatic fun current() = CURRENT
 		@JvmStatic fun currentId() = CURRENT_ID
 		const val NULL_ID = -10000
+
+		/** Reuses the provider's single persistent receiver as the process-wide invalidation source. */
+		@JvmStatic fun addChangeListener(listener: (String) -> Unit) {
+			changeListeners += listener
+		}
+
+		private fun notifyChanged(action: String) {
+			changeListeners.forEach { it(action) }
+		}
 
 		/** This method should not be called under normal circumstance.  */
 		@JvmStatic fun refreshUsers(context: Context) {

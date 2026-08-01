@@ -21,7 +21,7 @@ class HomeStateTest {
     @Test fun `main entry uses canonical state so half-provisioned profiles can reach repair`() {
         val source = File("src/main/java/com/yzddmr6/prismspace/MainActivity.java").readText()
 
-        assertTrue(source.contains("new SpaceStateRepository(this).state() == SpaceState.NoProfile.INSTANCE"))
+        assertTrue(source.contains("new SpaceStateRepository(this).currentState() == SpaceState.NoProfile.INSTANCE"))
         assertFalse(source.contains("! Users.hasProfile()"))
     }
 

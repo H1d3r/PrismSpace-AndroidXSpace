@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResultLauncher
 import androidx.annotation.StringRes
+import androidx.lifecycle.lifecycleScope
 import com.yzddmr6.prismspace.help.PrismHelp
 import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.setup.PrismSetup
@@ -17,6 +18,7 @@ import com.yzddmr6.prismspace.prism.compose.space.SpaceProvisioningTracker
 import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository
 import com.yzddmr6.prismspace.space.SpaceState
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
 /**
  * Activity-scoped bridge between Compose UI and the [SetupViewModel] state machine.
@@ -38,33 +40,38 @@ class SetupController(
 
     /** Primary CTA tapped (welcome state or retry-from-error). */
     fun onPrimaryCta() {
-        if (!ExperimentalFlags.isMultiProfileEnabled(activity)) {
-            when (SpaceStateRepository(activity.applicationContext).preflightCreate()) {
-                SpaceState.NoProfile -> Unit
-                is SpaceState.OrphanProfile -> {
-                    stateVm.setUiState(SetupUiState.Error(
-                        messageRes = R.string.setup_error_orphan_profile,
-                        messageParams = null,
-                        extraActionRes = R.string.button_setup_help,
-                    ))
-                    return
-                }
-                else -> {
-                    stateVm.setUiState(SetupUiState.Error(
-                        messageRes = R.string.setup_error_existing_space_state,
-                        messageParams = null,
-                        extraActionRes = R.string.button_setup_help,
-                    ))
-                    return
+        if (stateVm.uiState.value is SetupUiState.Checking) return
+        stateVm.setUiState(SetupUiState.Checking)
+        activity.lifecycleScope.launch {
+            if (!ExperimentalFlags.isMultiProfileEnabled(activity)) {
+                when (SpaceStateRepository(activity.applicationContext).preflightCreate()) {
+                    SpaceState.NoProfile -> Unit
+                    is SpaceState.OrphanProfile -> {
+                        stateVm.setUiState(SetupUiState.Error(
+                            messageRes = R.string.setup_error_orphan_profile,
+                            messageParams = null,
+                            extraActionRes = R.string.button_setup_help,
+                        ))
+                        return@launch
+                    }
+                    else -> {
+                        stateVm.setUiState(SetupUiState.Error(
+                            messageRes = R.string.setup_error_existing_space_state,
+                            messageParams = null,
+                            extraActionRes = R.string.button_setup_help,
+                        ))
+                        return@launch
+                    }
                 }
             }
+            val errorVm = SetupViewModel.checkManagedProvisioningPrerequisites(activity, stateVm.incompleteSetupAcked)
+            if (errorVm != null) {
+                stateVm.setUiState(errorVm.toErrorState())
+                return@launch
+            }
+            stateVm.setUiState(SetupUiState.Welcome)
+            launchManagedProvisioning()
         }
-        val errorVm = SetupViewModel.checkManagedProvisioningPrerequisites(activity, stateVm.incompleteSetupAcked)
-        if (errorVm != null) {
-            stateVm.setUiState(errorVm.toErrorState())
-            return
-        }
-        launchManagedProvisioning()
     }
 
     /** Extra action button (from error state) tapped. */
@@ -145,6 +152,9 @@ class SetupController(
 sealed interface SetupUiState {
     /** Initial welcome screen — guided install pitch. */
     data object Welcome : SetupUiState
+
+    /** The create button is waiting for the one allowed fresh state preflight. */
+    data object Checking : SetupUiState
 
     /** Error pane shown when prerequisites fail or provisioning is cancelled. */
     data class Error(

@@ -27,7 +27,6 @@ import com.yzddmr6.prismspace.prism.compose.nav.AppLaunchSignals;
 import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository;
 import com.yzddmr6.prismspace.setup.SetupActivity;
 import com.yzddmr6.prismspace.space.SpaceState;
-import com.yzddmr6.prismspace.util.CallerAwareActivity;
 import com.yzddmr6.prismspace.util.DeviceAdmins;
 import com.yzddmr6.prismspace.util.DevicePolicies;
 import com.yzddmr6.prismspace.util.Loopers;
@@ -54,10 +53,6 @@ public class MainActivity extends FragmentActivity {
 				} else startSetupWizard();
 			return;
 		}
-		Users.refreshUsers(this);     // Managed-profile create/remove can happen outside our task; never trust a hot-process cache at the entry point.
-		final String caller = CallerAwareActivity.getCallingPackage(this);
-		if (Modules.MODULE_ENGINE.equals(caller)) Users.refreshUsers(this);     // Possibly started by PrismProvisioning, refresh user state as profile or its owner may be changed.
-
 		mIsDeviceOwner = new DevicePolicies(this).isProfileOrDeviceOwnerOnCallingUser();
 		if (mIsDeviceOwner) {
 			startMainUi(savedInstanceState);	// As device owner, always show main UI.
@@ -66,7 +61,7 @@ public class MainActivity extends FragmentActivity {
 		// The marker-only Users cache intentionally does not claim half-provisioned profiles.
 		// Route from the complete state classifier so those users can reach Home/Settings repair
 		// instead of being trapped in a setup screen that correctly refuses to create a duplicate.
-		if (new SpaceStateRepository(this).state() == SpaceState.NoProfile.INSTANCE) {
+		if (new SpaceStateRepository(this).currentState() == SpaceState.NoProfile.INSTANCE) {
 			Log.i(TAG, "Profile not setup yet");
 			startSetupWizard();
 			return;

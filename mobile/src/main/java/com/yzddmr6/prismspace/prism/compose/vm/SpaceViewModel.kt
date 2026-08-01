@@ -19,7 +19,6 @@ import com.yzddmr6.prismspace.engine.LaunchResult
 import com.yzddmr6.prismspace.prism.compose.settings.ExperimentalFlags
 import com.yzddmr6.prismspace.prism.compose.space.CreateSpaceResult
 import com.yzddmr6.prismspace.prism.compose.space.DeleteSpaceResult
-import com.yzddmr6.prismspace.prism.compose.space.BridgeHealthRepository
 import com.yzddmr6.prismspace.prism.compose.space.ExperimentalBlockInfo
 import com.yzddmr6.prismspace.prism.compose.space.PrismSpace
 import com.yzddmr6.prismspace.prism.compose.space.PrismSpaceKind
@@ -28,6 +27,8 @@ import com.yzddmr6.prismspace.prism.compose.space.SpaceProvisioningEngine
 import com.yzddmr6.prismspace.prism.compose.space.SpaceDeletionCoordinator
 import com.yzddmr6.prismspace.prism.compose.space.SpaceRepository
 import com.yzddmr6.prismspace.prism.compose.space.SpaceRepositoryProvider
+import com.yzddmr6.prismspace.prism.compose.space.SpaceSnapshot
+import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository
 import com.yzddmr6.prismspace.prism.compose.space.SpaceUsability
 import com.yzddmr6.prismspace.prism.compose.space.experimentalBlockInfo
 import com.yzddmr6.prismspace.setup.PrismSetup
@@ -44,6 +45,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -253,7 +255,7 @@ data class SpaceUiState(
     val feedbackMessage: String? = null,
     val feedbackIsError: Boolean = false,
     val experimentalMultiProfile: Boolean = false,
-    val dualUsability: SpaceUsability = SpaceUsability.Usable,
+    val dualUsability: SpaceUsability = SpaceUsability.Unknown,
     val experimentalCreateBlocked: ExperimentalBlockInfo? = null,
     val mainCopyLostPackage: String? = null,
 ) {
@@ -287,7 +289,7 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
     private val _uiState = MutableStateFlow(SpaceUiState())
     val uiState: StateFlow<SpaceUiState> = _uiState
     private val spaceRepo: SpaceRepository by lazy { SpaceRepositoryProvider.get(getApplication()) }
-    private val bridgeHealthRepo: BridgeHealthRepository by lazy { BridgeHealthRepository(getApplication()) }
+    private val stateRepo: SpaceStateRepository by lazy { SpaceStateRepository(getApplication()) }
     private val capabilityRepo: CapabilityRepository by lazy { CapabilityRepositoryProvider.get(getApplication()) }
     private val _pendingUninstallRequest = MutableStateFlow<UninstallRequest?>(null)
     internal val pendingUninstallRequest: StateFlow<UninstallRequest?> = _pendingUninstallRequest
@@ -308,7 +310,16 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
 
     @Volatile private var appCache: AppCache = AppCache(emptyList(), emptyList())
 
-    init { refresh() }
+    init {
+        viewModelScope.launch {
+            stateRepo.state.collectLatest { snapshot ->
+                when (snapshot) {
+                    SpaceSnapshot.Loading -> Unit
+                    is SpaceSnapshot.Loaded -> loadContent()
+                }
+            }
+        }
+    }
 
     // -----------------------------------------------------------------------
     // Segment switching
@@ -339,8 +350,6 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
         val res: StringResolver = prismResolver(getApplication())
         viewModelScope.launch {
             setFeedback(res(R.string.lz_vm_creating_space, emptyArray()), isError = false)
-            runCatching { Users.refreshUsers(getApplication()) }
-                .onFailure { DiagnosticLog.w(TAG, "refresh users before create failed", it) }
             val r = SpaceProvisioningEngine.createSpace(getApplication())
             if (r is CreateSpaceResult.CapReached || r is CreateSpaceResult.ManagedProfileLimitReached) {
                 val duals = _uiState.value.spaces.filter { it.kind == PrismSpaceKind.Dual }
@@ -414,43 +423,37 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refresh() {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                dual = SpaceSegmentState.Loading,
-                main = SpaceSegmentState.Loading,
-                systemApps = SpaceSegmentState.Loading,
-            )
-            val selectedDualId = _uiState.value.selectedDualSpaceId
-            val (pair, allSpaces, dualUsability) = withContext(Dispatchers.IO) {
-                val segments = loadBothSegments()
-                val spaces = spaceRepo.spaces()
-                val usability = (selectedDualId?.let { spaceRepo.space(it) } ?: spaceRepo.dualSpace())
-                    ?.let { spaceRepo.usabilityOf(it) } ?: SpaceUsability.NotProvisioned
-                Triple(segments, spaces, usability)
-            }
-            val dualRows = pair.dual
-            val mainRows = pair.main
-            val systemRows = pair.systemApps
-            _uiState.value = _uiState.value.copy(
-                dual = if (dualRows.isEmpty()) SpaceSegmentState.Empty
-                       else SpaceSegmentState.Content(dualRows),
-                main = if (mainRows.isEmpty()) SpaceSegmentState.Empty
-                       else SpaceSegmentState.Content(mainRows),
-                systemApps = if (systemRows.isEmpty()) SpaceSegmentState.Empty
-                             else SpaceSegmentState.Content(systemRows),
-                spaces = allSpaces,
-                experimentalMultiProfile = ExperimentalFlags.isMultiProfileEnabled(getApplication()),
-                dualUsability = dualUsability,
-            )
-            val bridgeChanged = withContext(Dispatchers.IO) { refreshSelectedBridgeHealth(selectedDualId) }
-            if (bridgeChanged) {
-                val refreshedUsability = withContext(Dispatchers.IO) {
-                    (selectedDualId?.let { spaceRepo.space(it) } ?: spaceRepo.dualSpace())
-                        ?.let { spaceRepo.usabilityOf(it) } ?: SpaceUsability.NotProvisioned
-                }
-                _uiState.value = _uiState.value.copy(dualUsability = refreshedUsability)
-            }
+            stateRepo.refresh("space_explicit")
+            loadContent()
         }
     }
+
+    private suspend fun loadContent() {
+        _uiState.value = _uiState.value.copy(
+            dual = SpaceSegmentState.Loading,
+            main = SpaceSegmentState.Loading,
+            systemApps = SpaceSegmentState.Loading,
+        )
+        val selectedDualId = _uiState.value.selectedDualSpaceId
+        val (pair, allSpaces, dualUsability) = withContext(Dispatchers.IO) {
+            val segments = loadBothSegments()
+            val spaces = spaceRepo.spaces()
+            val usability = (selectedDualId?.let { spaceRepo.space(it) } ?: spaceRepo.dualSpace())
+                ?.let { spaceRepo.usabilityOf(it) } ?: SpaceUsability.NotProvisioned
+            Triple(segments, spaces, usability)
+        }
+        _uiState.value = _uiState.value.copy(
+            dual = pair.dual.toSegmentState(),
+            main = pair.main.toSegmentState(),
+            systemApps = pair.systemApps.toSegmentState(),
+            spaces = allSpaces,
+            experimentalMultiProfile = ExperimentalFlags.isMultiProfileEnabled(getApplication()),
+            dualUsability = dualUsability,
+        )
+    }
+
+    private fun List<SpaceRow>.toSegmentState(): SpaceSegmentState =
+        if (isEmpty()) SpaceSegmentState.Empty else SpaceSegmentState.Content(this)
 
     // -----------------------------------------------------------------------
     // Look-up
@@ -785,8 +788,6 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun loadBothSegments(): LoadedRows {
         val context: Context = getApplication()
-        runCatching { Users.refreshUsers(context) }
-            .onFailure { DiagnosticLog.w(TAG, "refresh users before space list failed", it) }
         val res: StringResolver = prismResolver(context)
         val dual = _uiState.value.selectedDualSpaceId
             ?.let { id -> spaceRepo.space(id)?.takeIf { it.kind == PrismSpaceKind.Dual } }
@@ -864,19 +865,6 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
         return LoadedRows(dualRows, mainRows, systemRows)
     }
 
-    private fun refreshSelectedBridgeHealth(selectedDualId: String?): Boolean {
-        val space = selectedDualId?.let { spaceRepo.space(it) } ?: spaceRepo.dualSpace() ?: return false
-        if (space.kind != PrismSpaceKind.Dual) return false
-        val profile = Users.getProfilesManagedByPrism()
-            .firstOrNull { it.toId() == space.userId }
-            ?: return false
-        val before = bridgeHealthRepo.cachedHealth(profile)?.diagnosticLine()
-        val after = runCatching { bridgeHealthRepo.refreshHealth(profile).diagnosticLine() }
-            .onFailure { DiagnosticLog.w(TAG, "refresh space bridge health failed user=${space.userId}", it) }
-            .getOrNull()
-            ?: return false
-        return before != after
-    }
 }
 
 private const val TAG = "Prism.SpaceVM"

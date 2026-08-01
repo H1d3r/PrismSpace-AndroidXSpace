@@ -32,6 +32,7 @@ import com.yzddmr6.prismspace.analytics.Analytics;
 import com.yzddmr6.prismspace.mobile.BuildConfig;
 import com.yzddmr6.prismspace.mobile.R;
 import com.yzddmr6.prismspace.prism.compose.settings.ExperimentalFlags;
+import com.yzddmr6.prismspace.prism.compose.space.SpaceProvisioningTracker;
 import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository;
 import com.yzddmr6.prismspace.space.SpaceState;
 import com.yzddmr6.prismspace.bridge.Bridge;
@@ -68,16 +69,26 @@ public class PrismSetup {
 	private static final String PACKAGE_VERIFIER_INCLUDE_ADB = "verifier_verify_adb_installs";
 
 	public static void requestProfileOwnerSetupWithRoot(final Activity activity) {
-		// Pre-flight: if a managed profile already exists in this user,
-		// the OS will reject `pm create-user --managed` (max 1 managed profile per parent).
-		// Skip Shell.SU.run entirely and surface a clear message instead of triggering
-		// the silent-hang path from a rejected managed-profile create command.
-		if (! ExperimentalFlags.isMultiProfileEnabled(activity)
-				&& new SpaceStateRepository(activity).preflightCreate() != SpaceState.NoProfile.INSTANCE) {
-			showProfileAlreadyExistsDialog(activity);
+		final ProgressDialog progress = ProgressDialog.show(activity, null, activity.getString(R.string.setup_root_profile_progress), true);
+		if (ExperimentalFlags.isMultiProfileEnabled(activity)) {
+			createProfileWithRoot(activity, progress);
 			return;
 		}
-		final ProgressDialog progress = ProgressDialog.show(activity, null, activity.getString(R.string.setup_root_profile_progress), true);
+		// The one fresh preflight may wait for cross-profile facts, so keep it off the UI thread.
+		SafeAsyncTask.execute(activity,
+				context -> new SpaceStateRepository(context).preflightCreateBlocking(),
+				(context, state) -> {
+					if (state != SpaceState.NoProfile.INSTANCE) {
+						progress.dismiss();
+						showProfileAlreadyExistsDialog(context);
+						return;
+					}
+					createProfileWithRoot(context, progress);
+				});
+	}
+
+	private static void createProfileWithRoot(final Activity activity, final ProgressDialog progress) {
+		SpaceProvisioningTracker.markStarted();
 		// Create the managed profile.
 		final List<String> commands = Arrays.asList("setprop fw.max_users 10",
 				"pm create-user --profileOf " + Users.toId(Process.myUserHandle()) + " --managed PrismSpace", "echo END");
@@ -87,6 +98,7 @@ public class PrismSetup {
 			final Optional<UserHandle> profile_pending_setup = profiles.stream().map(UserInfo::getUserHandle)
 					.filter(profile -> ! profile.equals(Users.current()) && isProfileWithoutOwner(context, profile)).findFirst();	// Not yet set up as profile owner
 			if (! profile_pending_setup.isPresent()) {		// Profile creation failed — ALWAYS dismiss progress dialog.
+				SpaceProvisioningTracker.clear();
 				// Always route through the error dialog when root is denied or
 				// libsuperuser returns empty stdout.
 					Analytics.$().event("setup_prism_root_failed")
@@ -125,6 +137,7 @@ public class PrismSetup {
 		final ApplicationInfo info; try {
 			info = activity.getPackageManager().getApplicationInfo(Modules.MODULE_ENGINE, 0);
 		} catch (final NameNotFoundException e) {
+			SpaceProvisioningTracker.clear();
 			// Defensively dismiss progress and show a clear error.
 			dismissProgressAndShowError(activity, progress, 2);
 			return;
@@ -145,6 +158,7 @@ public class PrismSetup {
 		SafeAsyncTask.execute(activity, context -> Shell.SU.run(commands.toString()), (context, result) -> {
 			final LauncherApps launcher_apps = requireNonNull((LauncherApps) context.getSystemService(Context.LAUNCHER_APPS_SERVICE));
 			if (launcher_apps.getActivityList(context.getPackageName(), profile).isEmpty()) {
+				SpaceProvisioningTracker.clear();
 					Analytics.$().event("setup_prism_root_failed").withRaw("phase", "2").withRaw("command", commands.toString())
 						.with(CONTENT, result == null ? "<null>" : result.stream().collect(joining("\n"))).send();
 				dismissProgressAndShowError(context, progress, 2);
@@ -153,6 +167,7 @@ public class PrismSetup {
 					// Dismiss the progress dialog explicitly; package installation may leave this
 					// foreground process alive on modern Android versions.
 			if (progress.isShowing()) progress.dismiss();
+			SpaceProvisioningTracker.markReturnedSuccess();
 				Analytics.$().event("setup_prism_root_done").send();
 			context.finish();
 		});

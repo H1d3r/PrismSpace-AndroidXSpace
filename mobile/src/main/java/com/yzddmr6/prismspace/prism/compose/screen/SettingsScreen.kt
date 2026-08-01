@@ -125,33 +125,40 @@ fun SettingsScreen(nav: NavHostController) {
 
             // Space suspend and repair actions.
             GroupCard(title = null) {
-                val suspended = uiState?.spaceSuspended ?: false
-                SwitchRow(
-                    title = stringResource(R.string.lz_set_suspend_title),
-                    summary = stringResource(R.string.lz_set_suspend_summary),
-                    leadingIcon = PrismIcons.Snow,
-                    checked = suspended,
-                    onCheckedChange = { vm.suspendSpace(it) },
-                )
-                ActionRow(
-                    title = uiState?.spaceActionTitle?.takeIf { it.isNotBlank() }
-                        ?: stringResource(R.string.lz_set_repair_title),
-                    summary = uiState?.spaceActionSummary?.takeIf { it.isNotBlank() }
-                        ?: stringResource(R.string.lz_set_repair_summary),
-                    leadingIcon = PrismIcons.Wrench,
-                    onClick = {
-                        if (uiState?.spaceActionNeedsConfirmation == true) showRepairConfirm = true
-                        else vm.repairSpace(context)
-                    },
-                )
-                if (uiState?.profileOwnerReady == true) {
+                val state = uiState
+                if (state == null) {
                     ActionRow(
-                        title = stringResource(R.string.lz_set_delete_space_title),
-                        summary = stringResource(R.string.lz_set_delete_space_summary),
-                        leadingIcon = PrismIcons.Trash,
-                        danger = true,
-                        onClick = { showDeleteWarning = true },
+                        title = stringResource(R.string.lz_home_loading),
+                        leadingIcon = PrismIcons.Shield,
+                        enabled = false,
+                        onClick = {},
                     )
+                } else {
+                    SwitchRow(
+                        title = stringResource(R.string.lz_set_suspend_title),
+                        summary = stringResource(R.string.lz_set_suspend_summary),
+                        leadingIcon = PrismIcons.Snow,
+                        checked = state.spaceSuspended,
+                        onCheckedChange = { vm.suspendSpace(it) },
+                    )
+                    ActionRow(
+                        title = state.spaceActionTitle,
+                        summary = state.spaceActionSummary,
+                        leadingIcon = PrismIcons.Wrench,
+                        onClick = {
+                            if (state.spaceActionNeedsConfirmation) showRepairConfirm = true
+                            else vm.repairSpace(context)
+                        },
+                    )
+                    if (state.profileOwnerReady) {
+                        ActionRow(
+                            title = stringResource(R.string.lz_set_delete_space_title),
+                            summary = stringResource(R.string.lz_set_delete_space_summary),
+                            leadingIcon = PrismIcons.Trash,
+                            danger = true,
+                            onClick = { showDeleteWarning = true },
+                        )
+                    }
                 }
             }
 

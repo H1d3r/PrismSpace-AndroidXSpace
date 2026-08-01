@@ -26,6 +26,7 @@ import com.yzddmr6.prismspace.prism.compose.space.SpaceRepositoryProvider
 import com.yzddmr6.prismspace.prism.compose.space.SpaceUsability
 import com.yzddmr6.prismspace.prism.compose.space.SpaceRecoveryPlan
 import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository
+import com.yzddmr6.prismspace.prism.compose.space.SpaceSnapshot
 import com.yzddmr6.prismspace.prism.compose.space.recoveryPlan
 import com.yzddmr6.prismspace.prism.model.CapabilityAvailability
 import com.yzddmr6.prismspace.prism.model.CapabilityState
@@ -50,6 +51,7 @@ import eu.chainfire.libsuperuser.Shell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import rikka.shizuku.Shizuku
@@ -212,14 +214,28 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     // Selected mode is owned by CapabilityRepository and shared with Home.
     val selectedMode: StateFlow<PrismMode> get() = capRepo.selectedMode
 
+    init {
+        viewModelScope.launch {
+            stateRepo.state.collectLatest { snapshot ->
+                when (snapshot) {
+                    SpaceSnapshot.Loading -> _uiState.value = null
+                    is SpaceSnapshot.Loaded -> {
+                        _uiState.value = withContext(Dispatchers.IO) { buildUiModel(snapshot.state) }
+                    }
+                }
+            }
+        }
+    }
+
     // ---------------------------------------------------------------------------
     // Capability refresh
     // ---------------------------------------------------------------------------
 
     fun refreshCapabilities() {
         viewModelScope.launch {
-            val model = withContext(Dispatchers.IO) { buildUiModel() }
-            _uiState.value = model
+            stateRepo.refresh("settings_explicit")
+            val state = (stateRepo.state.value as? SpaceSnapshot.Loaded)?.state ?: return@launch
+            _uiState.value = withContext(Dispatchers.IO) { buildUiModel(state) }
         }
     }
 
@@ -431,15 +447,17 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     fun repairSpace(context: Context) {
         viewModelScope.launch {
             val appContext = context.applicationContext
+            stateRepo.refresh("settings_repair")
             val plan = withContext(Dispatchers.IO) {
-                val initial = stateRepo.state()
+                val initial = (stateRepo.state.value as SpaceSnapshot.Loaded).state
                 if (initial is SpaceState.HalfProvisioned || initial is SpaceState.BridgeDown) {
                     initial.userId?.let(UserHandles::of)?.let { profile ->
                         runCatching { bridgeHealthRepo.refreshHealth(profile) }
                             .onFailure { DiagnosticLog.w(TAG, "refresh bridge health before repair failed", it) }
                     }
                 }
-                recoveryPlan(stateRepo.state())
+                stateRepo.refresh("settings_repair_health")
+                recoveryPlan((stateRepo.state.value as SpaceSnapshot.Loaded).state)
             }
             when (plan) {
                 SpaceRecoveryPlan.StartSetup -> {
@@ -525,8 +543,9 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         val res: StringResolver = prismResolver(getApplication())
         viewModelScope.launch {
             setFeedback(res(R.string.lz_vm_deleting_space, emptyArray()), isError = false)
+            stateRepo.refresh("settings_delete_preflight")
             val stateAndSpace = withContext(Dispatchers.IO) {
-                val state = stateRepo.state()
+                val state = (stateRepo.state.value as SpaceSnapshot.Loaded).state
                 val space = state.userId?.let { userId ->
                     spaceRepo.dualSpace() ?: PrismSpace(
                         id = "space_$userId",
@@ -642,17 +661,16 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     // Private helpers
     // ---------------------------------------------------------------------------
 
-    private fun buildUiModel(): SettingsUiModel {
+    private fun buildUiModel(spaceState: SpaceState): SettingsUiModel {
         val context: Context = getApplication()
-        runCatching { Users.refreshUsers(context) }
-            .onFailure { DiagnosticLog.w(TAG, "refresh users before settings state failed", it) }
         val shizukuAvailable = isShizukuAvailable()
         val shizukuAuthorized = isShizukuAuthorized(shizukuAvailable)
-        val profileOwner = Users.profile?.let { Users.isProfileManagedByPrism(context, it) } == true
+        val profileOwner = spaceState !is SpaceState.NoProfile && spaceState !is SpaceState.OrphanProfile
         DiagnosticLog.d(
             TAG,
             "settings state profile=${Users.profile?.toId() ?: Users.NULL_ID} " +
-                "profileOwner=$profileOwner shizukuAvailable=$shizukuAvailable shizukuAuthorized=$shizukuAuthorized",
+                "profileOwner=$profileOwner state=$spaceState " +
+                "shizukuAvailable=$shizukuAvailable shizukuAuthorized=$shizukuAuthorized",
         )
 
         val modeState = PrismSettingsModeState.from(

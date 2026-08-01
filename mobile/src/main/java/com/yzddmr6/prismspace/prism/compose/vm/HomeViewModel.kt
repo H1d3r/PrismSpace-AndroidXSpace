@@ -7,9 +7,10 @@ import androidx.lifecycle.viewModelScope
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
 import com.yzddmr6.prismspace.controller.UserCloneRegistry
 import com.yzddmr6.prismspace.prism.compose.component.PrismLevel
-import com.yzddmr6.prismspace.prism.compose.space.BridgeHealthRepository
 import com.yzddmr6.prismspace.prism.compose.space.SpaceRepository
 import com.yzddmr6.prismspace.prism.compose.space.SpaceRepositoryProvider
+import com.yzddmr6.prismspace.prism.compose.space.SpaceSnapshot
+import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository
 import com.yzddmr6.prismspace.prism.compose.space.SpaceUsability
 import com.yzddmr6.prismspace.prism.compose.nav.PrismRoutes
 import com.yzddmr6.prismspace.mobile.R
@@ -21,6 +22,7 @@ import com.yzddmr6.prismspace.util.UserHandles
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 // ---------------------------------------------------------------------------
@@ -190,21 +192,32 @@ internal fun mapHomeState(
 class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     private val spaceRepo: SpaceRepository by lazy { SpaceRepositoryProvider.get(getApplication()) }
-    private val bridgeHealthRepo: BridgeHealthRepository by lazy { BridgeHealthRepository(getApplication()) }
+    private val stateRepo: SpaceStateRepository by lazy { SpaceStateRepository(getApplication()) }
     private val capRepo: CapabilityRepository by lazy { CapabilityRepositoryProvider.get(getApplication()) }
 
     private val _uiState = MutableStateFlow<HomeUiModel?>(null)
     val uiState: StateFlow<HomeUiModel?> = _uiState
 
-    fun refresh() {
+    init {
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { loadState() }
-            _uiState.value = result
-            val bridgeChanged = withContext(Dispatchers.IO) { refreshBridgeHealthIfPossible() }
-            if (bridgeChanged) {
-                _uiState.value = withContext(Dispatchers.IO) { loadState() }
+            stateRepo.state.collectLatest { snapshot ->
+                when (snapshot) {
+                    SpaceSnapshot.Loading -> _uiState.value = null
+                    is SpaceSnapshot.Loaded -> render(snapshot.state)
+                }
             }
         }
+    }
+
+    fun refresh() {
+        viewModelScope.launch {
+            stateRepo.refresh("home_explicit")
+            (stateRepo.state.value as? SpaceSnapshot.Loaded)?.state?.let { render(it) }
+        }
+    }
+
+    private suspend fun render(state: SpaceState) {
+        _uiState.value = withContext(Dispatchers.IO) { loadState(state) }
     }
 
     // Create/repair actions navigate to Settings, where provisioning and recovery live.
@@ -221,17 +234,14 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     // Private helpers
     // -----------------------------------------------------------------------
 
-    private fun loadState(): HomeUiModel {
+    private fun loadState(state: SpaceState): HomeUiModel {
         val context: Context = getApplication()
-        runCatching { Users.refreshUsers(context) }
-            .onFailure { DiagnosticLog.w(TAG, "refresh users before home state failed", it) }
 
         // Locale-aware string resolver — respects the user's chosen language (中/英),
         // even though these strings are built outside any @Composable.
         val resolve: (Int) -> String = { id -> PrismLocale.wrap(getApplication()).getString(id) }
 
         // Work-profile status flags used to derive the overview state.
-        val state = spaceRepo.state()
         val profile = state.userId?.let(UserHandles::of)
         val profileOwner = runCatching {
             profile?.let { Users.isProfileManagedByPrism(context, it) } == true
@@ -305,16 +315,6 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             profileOwnerLabel  = profileOwnerLabel,
             resolve            = resolve,
         )
-    }
-
-    private fun refreshBridgeHealthIfPossible(): Boolean {
-        val profile = spaceRepo.state().userId?.let(UserHandles::of) ?: return false
-        val before = bridgeHealthRepo.cachedHealth(profile)?.diagnosticLine()
-        val after = runCatching { bridgeHealthRepo.refreshHealth(profile).diagnosticLine() }
-            .onFailure { DiagnosticLog.w(TAG, "refresh home bridge health failed", it) }
-            .getOrNull()
-            ?: return false
-        return before != after
     }
 
 }

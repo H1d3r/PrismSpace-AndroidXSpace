@@ -43,6 +43,7 @@ fun PrismSetupScreen(controller: SetupController) {
         ) { padding ->
             SetupContent(
                 modifier = Modifier.padding(padding),
+                checking = state is SetupUiState.Checking,
                 onPrimaryCta = { controller.onPrimaryCta() },
                 onShowHelp = { controller.onShowHelp() },
             )
@@ -60,6 +61,7 @@ fun PrismSetupScreen(controller: SetupController) {
 @Composable
 private fun SetupContent(
     modifier: Modifier = Modifier,
+    checking: Boolean,
     onPrimaryCta: () -> Unit,
     onShowHelp: () -> Unit,
 ) {
@@ -74,7 +76,7 @@ private fun SetupContent(
         HeroSection()
         FeaturesSection()
         PrivacySection()
-        CtaSection(onPrimary = onPrimaryCta, onHelp = onShowHelp)
+        CtaSection(checking = checking, onPrimary = onPrimaryCta, onHelp = onShowHelp)
         Spacer(Modifier.height(24.dp))
     }
 }
@@ -177,19 +179,21 @@ private fun PrivacySection() {
 }
 
 @Composable
-private fun CtaSection(onPrimary: () -> Unit, onHelp: () -> Unit) {
+private fun CtaSection(checking: Boolean, onPrimary: () -> Unit, onHelp: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(
             onClick = onPrimary,
+            enabled = !checking,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(52.dp),
             shape = RoundedCornerShape(26.dp),
         ) {
-            Text(
-                text = stringResource(R.string.prism_setup_cta_primary),
-                style = MaterialTheme.typography.titleMedium,
-            )
+            if (checking) CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+            else Text(
+                    text = stringResource(R.string.prism_setup_cta_primary),
+                    style = MaterialTheme.typography.titleMedium,
+                )
         }
         TextButton(
             onClick = onHelp,

@@ -19,10 +19,7 @@ class DefaultSpaceRepository(private val appContext: Context) : SpaceRepository 
     // Space display names must follow the per-app language (Main + the profile default name).
     private val localized get() = PrismLocale.wrap(appContext)
 
-    override fun state(): SpaceState = stateRepository.state()
-
     override fun spaces(): List<PrismSpace> {
-        refreshUsersSnapshot()
         return buildList {
         add(PrismSpace("main", Users.parentProfile.toId(), PrismSpaceKind.Main, localized.getString(R.string.lz_space_main_name)))
         addAll(dualSpaces())
@@ -30,11 +27,10 @@ class DefaultSpaceRepository(private val appContext: Context) : SpaceRepository 
     }
 
     override fun dualSpaces(): List<PrismSpace> {
-        refreshUsersSnapshot()
         val named = PrismNameManager.getAllNames(localized)
             .map { (handle, name) -> PrismSpace("space_${handle.toId()}", handle.toId(), PrismSpaceKind.Dual, name) }
             .toMutableList()
-        val currentState = stateRepository.state()
+        val currentState = stateRepository.currentState()
         if ((currentState is SpaceState.HalfProvisioned || currentState is SpaceState.Provisioning) &&
             named.none { it.userId == currentState.userId }) {
             val id = requireNotNull(currentState.userId)
@@ -53,9 +49,8 @@ class DefaultSpaceRepository(private val appContext: Context) : SpaceRepository 
     override fun space(id: String) = spaces().firstOrNull { it.id == id }
 
     override fun usabilityOf(space: PrismSpace): SpaceUsability {
-        refreshUsersSnapshot()
         if (space.kind == PrismSpaceKind.Main) return SpaceUsability.Usable
-        when (val current = stateRepository.state()) {
+        when (stateRepository.currentState() ?: return SpaceUsability.Unknown) {
             SpaceState.NoProfile, is SpaceState.OrphanProfile -> return SpaceUsability.NotProvisioned
             is SpaceState.Provisioning -> return SpaceUsability.Unknown
             is SpaceState.HalfProvisioned, is SpaceState.BridgeDown -> return SpaceUsability.BridgeNotReady
@@ -86,7 +81,6 @@ class DefaultSpaceRepository(private val appContext: Context) : SpaceRepository 
     }
 
     override fun installedApps(space: PrismSpace): Collection<PrismAppInfo> {
-        refreshUsersSnapshot()
         // Resolve the real UserHandle from space.userId:
         // Main -> parentProfile; Dual -> the managed profile whose toId() == userId.
         val handle = if (space.kind == PrismSpaceKind.Main) Users.parentProfile
@@ -96,13 +90,7 @@ class DefaultSpaceRepository(private val appContext: Context) : SpaceRepository 
     }
 
     override fun cloneTargetSpaceCount(): Int {
-        refreshUsersSnapshot()
         return 1 + Users.getProfilesManagedByPrism().size
-    }
-
-    private fun refreshUsersSnapshot() {
-        runCatching { Users.refreshUsers(appContext) }
-            .onFailure { DiagnosticLog.w(TAG, "refresh users snapshot failed", it) }
     }
 
     private companion object {
