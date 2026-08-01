@@ -72,6 +72,31 @@ class CrossSpaceFileTransferPolicyTest {
         assertEquals(listOf<Byte>(1, 2, 3), output.toByteArray().toList())
     }
 
+    @Test fun sourceCandidateFallbackStopsAtFirstReadableStream() {
+        val attempts = mutableListOf<String>()
+        val opened = openFirstReadableCandidate(listOf("plain", "18@provider", "unused")) { candidate ->
+            attempts += candidate
+            if (candidate == "18@provider") ByteArrayInputStream(byteArrayOf(7)) else null
+        }
+
+        assertEquals(listOf("plain", "18@provider"), attempts)
+        assertEquals("18@provider", opened.candidate)
+        assertEquals(1, opened.index)
+        assertEquals(7, opened.stream.use { it.read() })
+    }
+
+    @Test fun sourceCandidateFallbackPreservesLastFailureWhenNoneAreReadable() {
+        val failure = runCatching {
+            openFirstReadableCandidate(listOf("plain", "18@provider")) { candidate ->
+                if (candidate == "plain") throw IOException("wrong user")
+                null
+            }
+        }.exceptionOrNull()
+
+        assertTrue(failure is java.io.FileNotFoundException)
+        assertEquals("wrong user", failure?.cause?.message)
+    }
+
     @Test fun sourceOpenAndReadFailuresAbortTarget() {
         var openAborts = 0
         val openFailure = transferSingleCopy(

@@ -135,8 +135,26 @@ class TransferSource private constructor(
             displayName: String,
             mime: String,
             declaredSize: Long?,
+        ): TransferSource = fromUriCandidates(
+            resolver, listOf(uri), displayName, mime, declaredSize,
+        )
+
+        fun fromUriCandidates(
+            resolver: ContentResolver,
+            uris: List<Uri>,
+            displayName: String,
+            mime: String,
+            declaredSize: Long?,
         ): TransferSource = TransferSource(displayName, mime, declaredSize?.takeIf { it >= 0L }) {
-            resolver.openInputStream(uri) ?: throw FileNotFoundException(uri.toString())
+            openFirstReadableCandidate(uris) { resolver.openInputStream(it) }.let { opened ->
+                if (opened.index > 0) {
+                    DiagnosticLog.i(
+                        "Prism.FileSource",
+                        "source URI opened with paired-user fallback authority=${opened.candidate.encodedAuthority}",
+                    )
+                }
+                opened.stream
+            }
         }
 
         internal fun testing(
@@ -145,6 +163,31 @@ class TransferSource private constructor(
             declaredSize: Long? = null,
             opener: () -> InputStream,
         ): TransferSource = TransferSource(displayName, mime, declaredSize, opener)
+    }
+}
+
+internal data class OpenedSource<T>(
+    val candidate: T,
+    val index: Int,
+    val stream: InputStream,
+)
+
+internal fun <T> openFirstReadableCandidate(
+    candidates: List<T>,
+    open: (T) -> InputStream?,
+): OpenedSource<T> {
+    require(candidates.isNotEmpty()) { "At least one source candidate is required" }
+    var lastFailure: Exception? = null
+    candidates.forEachIndexed { index, candidate ->
+        try {
+            val stream = open(candidate)
+            if (stream != null) return OpenedSource(candidate, index, stream)
+        } catch (failure: Exception) {
+            lastFailure = failure
+        }
+    }
+    throw FileNotFoundException("No readable source candidate").also { error ->
+        lastFailure?.let(error::initCause)
     }
 }
 

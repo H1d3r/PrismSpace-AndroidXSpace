@@ -20,21 +20,22 @@ import com.yzddmr6.prismspace.prism.service.FileTransferResult
 import com.yzddmr6.prismspace.prism.service.TransferCancellationSignal
 import com.yzddmr6.prismspace.prism.service.TransferDirection
 import com.yzddmr6.prismspace.prism.service.TransferSource
+import com.yzddmr6.prismspace.prism.service.openFirstReadableCandidate
 import com.yzddmr6.prismspace.util.PrismLocale
 import com.yzddmr6.prismspace.util.Users
+import com.yzddmr6.prismspace.util.Users.Companion.toId
 import java.io.File
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
 /**
  * Unified file-transfer receiver (bidirectional, normal permissions). PrismSpace is installed in
- * both the main and the dual space, so this single ACTION_SEND target appears in the system share
- * chooser's 个人/工作 tabs as "导入到此空间 PrismSpace". Whichever space's copy receives the share
- * writes the file into THAT space — selecting the 个人 tab imports to the main space, the 工作 tab
- * imports to the dual space. Same name, both directions correct.
+ * both the main and dual spaces. Vendor share proxies do not reliably preserve the Personal/Work
+ * tab as the receiving user, so the in-app destination choice is the authoritative target.
  *
- * Why share (not SAF): some ROMs intercept the document picker across profile boundaries, while
- * the system share chooser keeps the Personal/Work routing explicit.
+ * Why share (not SAF): some ROMs intercept the document picker across profile boundaries. If a
+ * vendor proxy drops the source user qualifier, reads retry only against the verified paired
+ * PrismSpace user; Android's URI grant remains the permission boundary.
  *
  * Cross-space transfers stream the granted URI directly into the destination session. A private
  * cache file is created lazily only for the local CREATE_DOCUMENT branch, whose picker temporarily
@@ -45,7 +46,7 @@ class ImportToSpaceActivity : Activity() {
     override fun attachBaseContext(newBase: Context) = super.attachBaseContext(PrismLocale.wrap(newBase))
 
     private data class PendingImport(
-        val uri: Uri,
+        val sourceUris: List<Uri>,
         val displayName: String,
         val mime: String,
         val declaredSize: Long?,
@@ -71,13 +72,14 @@ class ImportToSpaceActivity : Activity() {
         Thread {
             uris.forEachIndexed { index, uri ->
                 try {
+                    val sourceUris = SourceUriPlanner.candidates(uri, pairedSourceUserId())
                     val mime = intent?.type?.takeUnless { it == "*/*" }
-                        ?: contentResolver.getType(uri) ?: "application/octet-stream"
-                    val metadata = queryMetadata(uri)
+                        ?: queryMimeType(sourceUris) ?: "application/octet-stream"
+                    val metadata = queryMetadata(sourceUris)
                     val displayName = metadata.first
                         ?: uri.lastPathSegment?.substringAfterLast('/') ?: "file"
                     DiagnosticLog.i(TAG, "import receive start index=$index name=$displayName mime=$mime uri=$uri")
-                    pending += PendingImport(uri, displayName, mime, metadata.second, isImageMime(mime))
+                    pending += PendingImport(sourceUris, displayName, mime, metadata.second, isImageMime(mime))
                 } catch (e: Throwable) {
                     DiagnosticLog.w(TAG, "import receive failed index=$index reason=SourceUnreadable", e)
                 }
@@ -156,12 +158,13 @@ class ImportToSpaceActivity : Activity() {
                 }
                 val result = if (toOtherSpace) {
                     val direction = if (Users.isParentProfile()) TransferDirection.ToProfile else TransferDirection.ToMain
-                    val source = TransferSource.fromUri(
-                        contentResolver, item.uri, item.displayName, item.mime, item.declaredSize,
+                    val source = TransferSource.fromUriCandidates(
+                        contentResolver, item.sourceUris, item.displayName, item.mime, item.declaredSize,
                     )
                     service.transferToOtherSpace(this, source, direction, cancellation, onProgress)
                 } else {
-                    val localFile = item.cachedFile ?: copyToCache(item.uri, index)?.also { item.cachedFile = it }
+                    val localFile = item.cachedFile
+                        ?: copyToCache(item.sourceUris, index)?.also { item.cachedFile = it }
                     if (localFile == null) {
                         FileTransferResult(
                             false,
@@ -234,7 +237,7 @@ class ImportToSpaceActivity : Activity() {
         if (item.cachedFile == null) {
             val index = saveAsIndex
             Thread {
-                val cached = copyToCache(item.uri, index)
+                val cached = copyToCache(item.sourceUris, index)
                 runOnUiThread {
                     if (cached == null) {
                         saveAsLastFailure = getString(R.string.fb_transfer_source_unreadable)
@@ -291,12 +294,19 @@ class ImportToSpaceActivity : Activity() {
         finish()
     }
 
-    /** Copy [src] into a private cache temp; returns the temp file (or null on failure). */
-    private fun copyToCache(src: Uri, index: Int): File? {
+    /** Copy the first readable source candidate into a private cache temp. */
+    private fun copyToCache(sourceUris: List<Uri>, index: Int): File? {
         val dir = File(cacheDir, "import").apply { mkdirs() }
         val out = File(dir, "in_${System.currentTimeMillis()}_$index")
         return try {
-            contentResolver.openInputStream(src)!!.use { input ->
+            val opened = openFirstReadableCandidate(sourceUris) { contentResolver.openInputStream(it) }
+            if (opened.index > 0) {
+                DiagnosticLog.i(
+                    TAG,
+                    "source URI opened with paired-user fallback authority=${opened.candidate.encodedAuthority}",
+                )
+            }
+            opened.stream.use { input ->
                 out.outputStream().use { output ->
                     val buffer = ByteArray(64 * 1024)
                     while (true) {
@@ -327,25 +337,40 @@ class ImportToSpaceActivity : Activity() {
         }
     }
 
-    private fun queryMetadata(uri: Uri): Pair<String?, Long?> = runCatching {
-        contentResolver.query(
-            uri,
-            arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
-            null,
-            null,
-            null,
-        )?.use { c ->
-            if (c.moveToFirst()) {
-                val nameIndex = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                val sizeIndex = c.getColumnIndex(OpenableColumns.SIZE)
-                val name = if (nameIndex >= 0) c.getString(nameIndex) else null
-                val size = if (sizeIndex >= 0 && !c.isNull(sizeIndex)) {
-                    c.getLong(sizeIndex).takeIf { it >= 0L }
-                } else null
-                name to size
-            } else null to null
-        } ?: (null to null)
-    }.getOrDefault(null to null)
+    private fun queryMimeType(sourceUris: List<Uri>): String? = sourceUris.firstNotNullOfOrNull { uri ->
+        runCatching { contentResolver.getType(uri) }.getOrNull()
+    }
+
+    private fun queryMetadata(sourceUris: List<Uri>): Pair<String?, Long?> {
+        sourceUris.forEach { uri ->
+            val metadata = runCatching {
+                contentResolver.query(
+                    uri,
+                    arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+                    null,
+                    null,
+                    null,
+                )?.use { c ->
+                    if (!c.moveToFirst()) return@use null
+                    val nameIndex = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    val sizeIndex = c.getColumnIndex(OpenableColumns.SIZE)
+                    val name = if (nameIndex >= 0) c.getString(nameIndex) else null
+                    val size = if (sizeIndex >= 0 && !c.isNull(sizeIndex)) {
+                        c.getLong(sizeIndex).takeIf { it >= 0L }
+                    } else null
+                    name to size
+                }
+            }.getOrNull()
+            if (metadata != null) return metadata
+        }
+        return null to null
+    }
+
+    private fun pairedSourceUserId(): Int? = if (Users.isParentProfile()) {
+        Users.profile?.toId()
+    } else {
+        runCatching { Users.parentProfile.toId() }.getOrNull()
+    }
 
     override fun onStop() {
         activeCancellation?.cancel()
@@ -397,6 +422,19 @@ internal object CrossSpaceTransferEntry {
         if (uris.size > 1) intent.putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
         else intent.putExtra(Intent.EXTRA_STREAM, uris.first())
         context.startActivity(intent)
+    }
+}
+
+internal object SourceUriPlanner {
+    fun qualifiedAuthority(authority: String?, pairedUserId: Int?): String? = when {
+        authority.isNullOrBlank() || pairedUserId == null || pairedUserId < 0 || '@' in authority -> null
+        else -> "$pairedUserId@$authority"
+    }
+
+    fun candidates(uri: Uri, pairedUserId: Int?): List<Uri> {
+        if (uri.scheme != "content") return listOf(uri)
+        val qualifiedAuthority = qualifiedAuthority(uri.encodedAuthority, pairedUserId) ?: return listOf(uri)
+        return listOf(uri, uri.buildUpon().encodedAuthority(qualifiedAuthority).build())
     }
 }
 
