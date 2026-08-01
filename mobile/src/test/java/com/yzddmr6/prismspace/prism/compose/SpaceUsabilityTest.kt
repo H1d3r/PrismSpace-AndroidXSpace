@@ -2,6 +2,9 @@ package com.yzddmr6.prismspace.prism.compose
 
 import com.yzddmr6.prismspace.prism.compose.space.SpaceUsability
 import com.yzddmr6.prismspace.prism.compose.space.spaceUsability
+import com.yzddmr6.prismspace.prism.compose.space.spaceUsabilityFromState
+import com.yzddmr6.prismspace.space.SpaceBridgeCause
+import com.yzddmr6.prismspace.space.SpaceState
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -52,5 +55,29 @@ class SpaceUsabilityTest {
             SpaceUsability.Unknown,
             spaceUsability(provisioned = true, running = true, unlocked = true, bridgeReady = null),
         )
+    }
+
+    @Test fun `classified state maps directly to action usability`() {
+        val userId = 18
+        assertEquals(SpaceUsability.Unknown, spaceUsabilityFromState(null, userId))
+        assertEquals(SpaceUsability.NotProvisioned, spaceUsabilityFromState(SpaceState.NoProfile, userId))
+        assertEquals(SpaceUsability.NotProvisioned, spaceUsabilityFromState(SpaceState.OrphanProfile(userId), userId))
+        assertEquals(SpaceUsability.Unknown, spaceUsabilityFromState(SpaceState.Provisioning(userId), userId))
+        assertEquals(SpaceUsability.BridgeNotReady, spaceUsabilityFromState(SpaceState.HalfProvisioned(userId, true), userId))
+        assertEquals(SpaceUsability.LockedNeedsUnlock, spaceUsabilityFromState(SpaceState.Locked(userId), userId))
+        assertEquals(SpaceUsability.Suspended, spaceUsabilityFromState(SpaceState.Inactive(userId), userId))
+        assertEquals(
+            SpaceUsability.BridgeNotReady,
+            spaceUsabilityFromState(SpaceState.BridgeDown(userId, SpaceBridgeCause.TimedOut), userId),
+        )
+        assertEquals(SpaceUsability.Usable, spaceUsabilityFromState(SpaceState.Healthy(userId), userId))
+    }
+
+    @Test fun `healthy remains usable without consulting an expiring bridge cache`() {
+        assertEquals(SpaceUsability.Usable, spaceUsabilityFromState(SpaceState.Healthy(18), 18))
+    }
+
+    @Test fun `snapshot for another user fails closed`() {
+        assertEquals(SpaceUsability.Unknown, spaceUsabilityFromState(SpaceState.Healthy(18), 22))
     }
 }

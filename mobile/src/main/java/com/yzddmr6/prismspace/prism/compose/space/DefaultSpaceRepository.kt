@@ -1,7 +1,6 @@
 package com.yzddmr6.prismspace.prism.compose.space
 
 import android.content.Context
-import com.yzddmr6.prismspace.analytics.DiagnosticLog
 import com.yzddmr6.prismspace.PrismNameManager
 import com.yzddmr6.prismspace.common.app.AppListProvider
 import com.yzddmr6.prismspace.data.PrismAppInfo
@@ -14,7 +13,6 @@ import com.yzddmr6.prismspace.space.SpaceState
 
 class DefaultSpaceRepository(private val appContext: Context) : SpaceRepository {
     private val provider get() = AppListProvider.getInstance<PrismAppListProvider>(appContext)
-    private val bridgeHealth = BridgeHealthRepository(appContext)
     private val stateRepository = SpaceStateRepository(appContext)
     // Space display names must follow the per-app language (Main + the profile default name).
     private val localized get() = PrismLocale.wrap(appContext)
@@ -50,34 +48,7 @@ class DefaultSpaceRepository(private val appContext: Context) : SpaceRepository 
 
     override fun usabilityOf(space: PrismSpace): SpaceUsability {
         if (space.kind == PrismSpaceKind.Main) return SpaceUsability.Usable
-        when (stateRepository.currentState() ?: return SpaceUsability.Unknown) {
-            SpaceState.NoProfile, is SpaceState.OrphanProfile -> return SpaceUsability.NotProvisioned
-            is SpaceState.Provisioning -> return SpaceUsability.Unknown
-            is SpaceState.HalfProvisioned, is SpaceState.BridgeDown -> return SpaceUsability.BridgeNotReady
-            is SpaceState.Locked -> return SpaceUsability.LockedNeedsUnlock
-            is SpaceState.Inactive -> return SpaceUsability.Suspended
-            is SpaceState.Healthy -> Unit
-        }
-        val handle = Users.getProfilesManagedByPrism()
-            .firstOrNull { it.toId() == space.userId }
-            ?: return SpaceUsability.NotProvisioned
-		return try {
-			val provisioned = Users.isProfileManagedByPrism(appContext, handle)
-			val running = Users.isProfileRunning(appContext, handle)
-			val quietMode = Users.isProfileQuietModeEnabled(appContext, handle)
-			val unlocked = appContext.getSystemService(android.os.UserManager::class.java)
-				?.isUserUnlocked(handle) == true
-			val base = spaceUsability(provisioned, running, unlocked, quietMode = quietMode)
-			if (base != SpaceUsability.Usable) return base
-			val bridgeReady = bridgeHealth.cachedHealth(handle)?.available
-			spaceUsability(provisioned, running, unlocked, bridgeReady, quietMode)
-		} catch (e: SecurityException) {
-            DiagnosticLog.w(TAG, "dual-space usability unavailable user=${handle.toId()}", e)
-            SpaceUsability.Unknown
-        } catch (e: RuntimeException) {
-            DiagnosticLog.w(TAG, "dual-space usability unavailable user=${handle.toId()}", e)
-            SpaceUsability.Unknown
-        }
+        return spaceUsabilityFromState(stateRepository.currentState(), space.userId)
     }
 
     override fun installedApps(space: PrismSpace): Collection<PrismAppInfo> {
@@ -91,9 +62,5 @@ class DefaultSpaceRepository(private val appContext: Context) : SpaceRepository 
 
     override fun cloneTargetSpaceCount(): Int {
         return 1 + Users.getProfilesManagedByPrism().size
-    }
-
-    private companion object {
-        const val TAG = "Prism.SpaceRepo"
     }
 }
