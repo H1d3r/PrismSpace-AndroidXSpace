@@ -19,7 +19,7 @@ internal fun <R> runProfileBridgeOperation(
     context: Context,
     tag: String,
     operation: String,
-    target: ProfileTarget? = BridgeTargets.profile(context),
+    target: ProfileTarget? = BridgeTargets.profile(),
     timeoutMs: Long? = null,
     command: ProfileCommand<R>,
 ): ProfileBridgeResult<R> {

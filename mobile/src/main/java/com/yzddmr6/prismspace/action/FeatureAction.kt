@@ -49,7 +49,7 @@ class FeatureActionActivity : CallerAwareActivity() {
                     this,
                     TAG,
                     "feature launch pkg=$pkg",
-                    target = BridgeTargets.profile(this, profile.toId()),
+                    target = BridgeTargets.profile(profile.toId()),
                     command = UnfreezeAndLaunchApp(pkg),
                 )) {
                     is ProfileBridgeResult.Value -> Unit

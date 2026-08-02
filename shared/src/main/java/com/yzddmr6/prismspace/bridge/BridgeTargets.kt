@@ -2,7 +2,7 @@ package com.yzddmr6.prismspace.bridge
 
 import android.content.Context
 import android.os.UserHandle
-import com.yzddmr6.prismspace.util.DevicePolicies
+import androidx.annotation.WorkerThread
 import com.yzddmr6.prismspace.util.UserHandles
 import com.yzddmr6.prismspace.util.Users
 import com.yzddmr6.prismspace.util.Users.Companion.toId
@@ -28,28 +28,34 @@ class ParentTarget private constructor(internal val handle: UserHandle) : Bridge
 }
 
 object BridgeTargets {
-    fun profile(context: Context): ProfileTarget? = Users.profile?.let { profile(context, it.toId()) }
+    fun profile(): ProfileTarget? = Users.profile?.let { profile(it.toId()) }
 
-    fun profile(context: Context, userId: Int): ProfileTarget? {
+    fun profile(userId: Int): ProfileTarget? {
         val handle = UserHandles.of(userId) ?: return null
         val valid = if (handle == Users.current()) {
-            !Users.isParentProfile() && DevicePolicies(context).isProfileOwner
+            !Users.isParentProfile() && Users.isCurrentProfileManagedByPrism()
         } else {
-            Users.isParentProfile() && isManagedProfileCurrent(context, handle)
+            Users.isParentProfile() && runCatching { Users.isProfileManagedByPrism(handle) }.getOrDefault(false)
         }
         return handle.takeIf { valid }?.let(ProfileTarget::validated)
     }
 
-    private fun isManagedProfileCurrent(context: Context, handle: UserHandle): Boolean {
-        if (runCatching { Users.isProfileManagedByPrism(context, handle) }.getOrDefault(false)) return true
-        runCatching { Users.refreshUsers(context) }.getOrElse { return false }
-        return runCatching { Users.isProfileManagedByPrism(context, handle) }.getOrDefault(false)
+    @WorkerThread
+    fun profileFresh(context: Context, userId: Int): ProfileTarget? {
+        runCatching { Users.refreshUsers(context) }.getOrElse { return null }
+        return profile(userId)
     }
 
-    fun parent(context: Context): ParentTarget? {
+    fun parent(): ParentTarget? {
         val parent = runCatching { Users.parentProfile }.getOrNull() ?: return null
         val valid = if (parent == Users.current()) Users.isParentProfile()
-        else !Users.isParentProfile() && DevicePolicies(context).isProfileOwner
+        else !Users.isParentProfile() && Users.isCurrentProfileManagedByPrism()
         return parent.takeIf { valid }?.let(ParentTarget::validated)
+    }
+
+    @WorkerThread
+    fun parentFresh(context: Context): ParentTarget? {
+        runCatching { Users.refreshUsers(context) }.getOrElse { return null }
+        return parent()
     }
 }

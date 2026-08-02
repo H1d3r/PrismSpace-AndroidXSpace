@@ -88,7 +88,7 @@ object PrismAppControl {
 			context,
 			TAG,
 			"unfreeze before launch pkg=$pkg",
-			target = BridgeTargets.profile(context, app.user.toId()),
+			target = BridgeTargets.profile(app.user.toId()),
 			timeoutMs = DEFAULT_SYNC_TIMEOUT_MS,
 			command = EnsureAppFreeToLaunch(pkg),
 		)) {
@@ -245,7 +245,7 @@ object PrismAppControl {
 		context,
 		TAG,
 		operation,
-		target = BridgeTargets.profile(context, profile.toId()),
+		target = BridgeTargets.profile(profile.toId()),
 		command = command,
 	)) {
 			is ProfileBridgeResult.Value -> result.value

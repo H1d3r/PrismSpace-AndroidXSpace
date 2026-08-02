@@ -5,6 +5,12 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.UserHandle
+import androidx.annotation.WorkerThread
+import com.yzddmr6.prismspace.bridge.Bridge
+import com.yzddmr6.prismspace.bridge.BridgeTargets
+import com.yzddmr6.prismspace.bridge.ParentTarget
+import com.yzddmr6.prismspace.bridge.SaveProfileName
+import com.yzddmr6.prismspace.shuttle.ShuttleOutcome
 import com.yzddmr6.prismspace.shared.R
 import com.yzddmr6.prismspace.util.DevicePolicies
 import com.yzddmr6.prismspace.util.OwnerUser
@@ -75,12 +81,15 @@ object PrismNameManager {
 	@ProfileUser @JvmStatic @JvmOverloads fun syncNameToParentProfile(
 		context: Context,
 		name: String = getName(context),
-	): Boolean {
+	): Boolean = syncNameToParentProfile(context, name, BridgeTargets.parent())
+
+	@ProfileUser @WorkerThread @JvmStatic fun syncNameToParentProfileAfterProvisioning(context: Context): Boolean =
+		syncNameToParentProfile(context, getName(context), BridgeTargets.parentFresh(context))
+
+	private fun syncNameToParentProfile(context: Context, name: String, target: ParentTarget?): Boolean {
 		val profile = Users.current()
-		val target = com.yzddmr6.prismspace.bridge.BridgeTargets.parent(context) ?: return false
-		return com.yzddmr6.prismspace.bridge.Bridge.inParent(context, target)
-			.execute(com.yzddmr6.prismspace.bridge.SaveProfileName(profile.toId(), name))
-			.let { it is com.yzddmr6.prismspace.shuttle.ShuttleOutcome.Value && it.value == true }
+		return target?.let { Bridge.inParent(context, it).execute(SaveProfileName(profile.toId(), name)) }
+			.let { it is ShuttleOutcome.Value && it.value == true }
 	}
 
 	class NameInitializer: BroadcastReceiver() {

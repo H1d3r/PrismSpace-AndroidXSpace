@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -70,13 +71,33 @@ class BridgeProtocolContractTest {
         assertEquals(listOf(first, second), accumulator.entries)
     }
 
-    @Test fun profileTargetRechecksARejectedCacheEntryAgainstCurrentUsers() {
+    @Test fun ordinaryTargetResolutionIsCachedAndFreshResolutionIsExplicit() {
         val source = File("src/main/java/com/yzddmr6/prismspace/bridge/BridgeTargets.kt").readText()
-        val helper = source.substringAfter("private fun isManagedProfileCurrent")
+        val ordinary = source.substringAfter("fun profile(userId: Int)")
+            .substringBefore("@WorkerThread")
+        val fresh = source.substringAfter("fun profileFresh")
             .substringBefore("fun parent")
+        val parent = source.substringAfter("fun parent()")
+            .substringBefore("@WorkerThread")
+        val freshParent = source.substringAfter("fun parentFresh")
 
-        assertTrue(helper.indexOf("Users.isProfileManagedByPrism") < helper.indexOf("Users.refreshUsers"))
-        assertTrue(helper.lastIndexOf("Users.isProfileManagedByPrism") > helper.indexOf("Users.refreshUsers"))
+        assertFalse(source.contains("fun profile(context: Context"))
+        assertFalse(source.contains("fun parent(context: Context"))
+        assertFalse(ordinary.contains("Users.refreshUsers"))
+        assertFalse(ordinary.contains("DevicePolicies"))
+        assertFalse(parent.contains("Users.refreshUsers"))
+        assertFalse(parent.contains("DevicePolicies"))
+        assertTrue(fresh.indexOf("Users.refreshUsers") < fresh.indexOf("return profile"))
+        assertTrue(freshParent.indexOf("Users.refreshUsers") < freshParent.indexOf("return parent"))
+    }
+
+    @Test fun currentProfileOwnershipIsCollectedBeforeTargetResolution() {
+        val users = File("src/main/java/com/yzddmr6/prismspace/util/Users.kt").readText()
+        val refresh = users.substringAfter("fun refreshUsers(context: Context)")
+            .substringBefore("fun isProfileRunning")
+
+        assertTrue(refresh.contains("sCurrentProfileManagedByPrism = runCatching { DevicePolicies(context).isProfileOwner }"))
+        assertTrue(users.contains("fun isCurrentProfileManagedByPrism() = sCurrentProfileManagedByPrism"))
     }
 
     private object FakeAppControlPort : AppControlPort {

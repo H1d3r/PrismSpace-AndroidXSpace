@@ -96,7 +96,7 @@ public class DelegatedAppOpsManager extends DerivedAppOpsManager {
 			if (! Users.isProfileManagedByPrism(mContext, user))
 				throw new IllegalArgumentException("User " + user_id + " is not managed by PrismSpace");
 
-			final ProfileTarget target = BridgeTargets.INSTANCE.profile(mContext, user_id);
+			final ProfileTarget target = BridgeTargets.INSTANCE.profile(user_id);
 			if (target == null) throw new IllegalArgumentException("Invalid managed profile " + user_id);
 			final ShuttleOutcome<Unit> outcome = Bridge.INSTANCE.inProfile(mContext, target)
 					.execute(new SetAppOpMode(pkg, op, mode, uid));

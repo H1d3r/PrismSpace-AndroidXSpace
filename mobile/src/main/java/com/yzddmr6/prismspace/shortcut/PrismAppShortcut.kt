@@ -116,7 +116,7 @@ object PrismAppShortcut {
 
 		if (! Users.isParentProfile()) {
 			val profileId = Users.currentId()
-			BridgeTargets.parent(context)?.let { target ->
+			BridgeTargets.parent()?.let { target ->
 				Bridge.inParent(context, target).execute(RemoveShortcutsInParent(pkg, profileId))
 			}
 		}
@@ -133,7 +133,7 @@ object PrismAppShortcut {
 		val dynamic = isDynamicLabelEnabled(context)
 		updateAll(context, dynamic)
 		Users.getProfilesManagedByPrism().forEach {
-			BridgeTargets.profile(context, it.toId())?.let { target ->
+			BridgeTargets.profile(it.toId())?.let { target ->
 				Bridge.inProfile(context, target).execute(UpdateAllShortcutsInProfile(dynamic))
 			}}
 	}
@@ -244,7 +244,7 @@ object PrismAppShortcut {
 
 			if (! Users.isParentProfile()) { // For cross-profile shortcut
 				val profile = Users.current()
-				BridgeTargets.parent(context)?.let { target ->
+				BridgeTargets.parent()?.let { target ->
 					Bridge.inParent(context, target).execute(RefreshShortcutInParent(pkg, profile.toId()))
 				}
 			}
@@ -312,7 +312,7 @@ object PrismAppShortcut {
 						).show()
 						return
 					}
-					val target = BridgeTargets.profile(context, profile.toId())
+					val target = BridgeTargets.profile(profile.toId())
 					// A home-screen tap gives this parent-side Activity foreground-launch authority. Android
 					// 16 blocks the profile provider process from starting an Activity after the Binder hop,
 					// so keep only the state mutation across the boundary and launch from this visible side.
@@ -513,7 +513,7 @@ class ShortcutsUpdater: BroadcastReceiver() {
 	override fun onReceive(context: Context, intent: Intent) {
 		if (SDK_INT >= O) try { // It's safe to not check the action, as the update is idempotent and does not depends on intent.
 			Users.refreshUsers(context)     // Ensure Users.parentProfile is initialized
-			val target = BridgeTargets.parent(context)
+			val target = BridgeTargets.parent()
 				?: return Unit.also { Log.w(TAG, "Failed to resolve parent target for shortcut refresh.") }
 			val dynamic = when (val outcome = Bridge.inParent(context, target).execute(QueryDynamicShortcutLabelEnabled)) {
 				is com.yzddmr6.prismspace.shuttle.ShuttleOutcome.Value -> outcome.value
@@ -542,7 +542,7 @@ internal object MobileShortcutPort : ShortcutPort {
 	}
 
 	override fun removeInParent(context: Context, packageName: String, profileUserId: Int): Boolean {
-		requireNotNull(BridgeTargets.profile(context, profileUserId)) { "Unmanaged profile $profileUserId" }
+		requireNotNull(BridgeTargets.profile(profileUserId)) { "Unmanaged profile $profileUserId" }
 		ShortcutManagerCompat.removeLongLivedShortcuts(
 			context,
 			listOf(PrismAppShortcut.getShortcutId(packageName, profileUserId, isCrossProfile = true)),
@@ -552,7 +552,7 @@ internal object MobileShortcutPort : ShortcutPort {
 
 	override fun refreshInParent(context: Context, packageName: String, profileUserId: Int): Boolean {
 		if (SDK_INT < O) return true
-		requireNotNull(BridgeTargets.profile(context, profileUserId)) { "Unmanaged profile $profileUserId" }
+		requireNotNull(BridgeTargets.profile(profileUserId)) { "Unmanaged profile $profileUserId" }
 		val profile = UserHandles.of(profileUserId)
 		val app = LauncherAppsCompat(context)
 			.getApplicationInfoNoThrows(packageName, MATCH_UNINSTALLED_PACKAGES, profile)

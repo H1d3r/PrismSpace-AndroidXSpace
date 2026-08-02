@@ -259,8 +259,8 @@ class FileBridgeService {
     ): FileTransferResult {
         val safeName = FileTransferPolicy.safeDisplayName(source.displayName)
         val target = when (direction) {
-            TransferDirection.ToProfile -> BridgeTargets.profile(context)
-            TransferDirection.ToMain -> BridgeTargets.parent(context).takeIf { !Users.isParentProfile() }
+            TransferDirection.ToProfile -> BridgeTargets.profile()
+            TransferDirection.ToMain -> BridgeTargets.parent().takeIf { !Users.isParentProfile() }
         } ?: return FileTransferResult(
             false,
             str(context, R.string.fb_transfer_space_unavailable),
@@ -895,7 +895,7 @@ class FileBridgeService {
         mimeType: String,
         relativePath: String,
     ): ProfileBridgeResult<String> {
-        val target = BridgeTargets.profile(context)
+        val target = BridgeTargets.profile()
         val session = when (val result = runDestinationBridgeOperation(
             context,
             TAG,

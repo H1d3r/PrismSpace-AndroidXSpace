@@ -95,6 +95,7 @@ class Users : PseudoContentProvider() {
 			sProfileCount = profiles.size
 			val profilesByPrism = ArrayList<UserHandle>(profiles.size)
 			parentProfile = profiles.firstOrNull() ?: CURRENT
+			sCurrentProfileManagedByPrism = false
 			if (parentProfile == CURRENT) {      // Running in parent profile
 				val uiModule = Modules.getMainLaunchActivity(context).packageName
 				val la = context.getSystemService<LauncherApps>()!!
@@ -107,9 +108,14 @@ class Users : PseudoContentProvider() {
 						Log.i(TAG, "Profile managed by PrismSpace: ${profile.toId()}")
 					} else Log.i(TAG, "Profile not managed by PrismSpace: ${profile.toId()}")
 				}
-			} else for (user in profiles.filterNot { it == parentProfile })
-				if (user != CURRENT) Log.w(TAG, "Skip sibling profile (may not managed by PrismSpace): ${user.toId()}")
-				else profilesByPrism.add(user).also { Log.i(TAG, "Profile managed by PrismSpace: ${user.toId()}") }
+			} else {
+				sCurrentProfileManagedByPrism = runCatching { DevicePolicies(context).isProfileOwner }.getOrDefault(false)
+				for (user in profiles.filterNot { it == parentProfile })
+					if (user != CURRENT) Log.w(TAG, "Skip sibling profile (may not managed by PrismSpace): ${user.toId()}")
+					else if (sCurrentProfileManagedByPrism) profilesByPrism.add(user).also {
+						Log.i(TAG, "Profile managed by PrismSpace: ${user.toId()}")
+					} else Log.w(TAG, "Current profile is not managed by PrismSpace: ${user.toId()}")
+			}
 
 			profile = profilesByPrism.lastOrNull()
 
@@ -143,13 +149,19 @@ class Users : PseudoContentProvider() {
 		@JvmStatic fun isParentProfile() = CURRENT_ID == parentProfile.toId()
 		@JvmStatic fun UserHandle?.isParentProfile() = this == parentProfile
 		@JvmStatic fun isParentProfile(userId: Int) = userId == parentProfile.toId()
+		@JvmStatic fun isCurrentProfileManagedByPrism() = sCurrentProfileManagedByPrism
 
 		@OwnerUser @JvmStatic fun isProfileManagedByPrism(context: Context, user: UserHandle): Boolean {
 			ensureParentProfile()
 			if (user.isParentProfile()) {
 				if (isParentProfile()) return DevicePolicies(context).isProfileOwner
 				throw IllegalArgumentException("Not working for profile parent user") }
-			return sProfilesManagedByPrism.contains(user)
+			return isProfileManagedByPrism(user)
+		}
+
+		@OwnerUser @JvmStatic fun isProfileManagedByPrism(user: UserHandle): Boolean {
+			ensureParentProfile()
+			return ! user.isParentProfile() && sProfilesManagedByPrism.contains(user)
 		}
 
 		/** Excluding parent profile */
@@ -194,6 +206,7 @@ class Users : PseudoContentProvider() {
 
 		private var mDebugBuild = false
 		private var sProfileCount: Int = 0
+		@Volatile private var sCurrentProfileManagedByPrism = false
 		private var sProfilesManagedByPrism: List<UserHandle> = emptyList() // Also safe if initialized in another process.
 		private const val PER_USER_RANGE = 100000
 		private const val TAG = "Prism.Users"

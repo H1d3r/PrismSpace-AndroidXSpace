@@ -131,7 +131,7 @@ import kotlinx.coroutines.launch
 				} else {
 					if (isParentProfileOwner(this) == true) { // The automatic way
 						val profile = Users.current()
-						BridgeTargets.parent(this)?.let { target ->
+						BridgeTargets.parent()?.let { target ->
 							Bridge.inParent(this, target).execute(StartProfileDeactivation(profile.toId()))
 						}
 					}
@@ -179,7 +179,7 @@ import kotlinx.coroutines.launch
 		}
 
 		private fun isParentProfileOwner(context: Context): Boolean? {
-			val target = BridgeTargets.parent(context) ?: return null
+			val target = BridgeTargets.parent() ?: return null
 			return when (val outcome = Bridge.inParent(context, target).execute(QueryParentIsProfileOwner)) {
 				is ShuttleOutcome.Value -> outcome.value
 				else -> null

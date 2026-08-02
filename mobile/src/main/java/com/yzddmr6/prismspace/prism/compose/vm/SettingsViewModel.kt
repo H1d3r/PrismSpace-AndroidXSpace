@@ -732,7 +732,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         }
         return try {
             DiagnosticLog.i(TAG, "dual-space diagnostic chunk collection start user=${profile.toId()}")
-            val target = BridgeTargets.profile(context, profile.toId())
+            val target = BridgeTargets.profile(profile.toId())
             val result = if (target == null) {
                 DiagnosticsCollectionResult.Failure(
                     "Dual-space diagnostic snapshot unavailable: managed profile target is invalid.",

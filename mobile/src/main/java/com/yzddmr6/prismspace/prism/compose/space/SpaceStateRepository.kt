@@ -286,7 +286,7 @@ private class SpaceStateFactCollector(private val appContext: Context) {
     }
 
     private fun exactProfileFacts(profile: UserHandle): ProfileProvisioningFactsDto? {
-        val target = BridgeTargets.profile(appContext, profile.toId()) ?: return null
+        val target = BridgeTargets.profile(profile.toId()) ?: return null
         return when (val result = Bridge.inProfile(appContext, target)
             .execute(QueryProfileProvisioningFacts, timeoutMs = 1_500L)) {
             is ShuttleOutcome.Value -> result.value

@@ -99,7 +99,7 @@ class ShuttleProvider: ContentProvider() {
 					!running -> ShuttleOutcome.Skipped("profile_not_running")
 					!unlocked -> ShuttleOutcome.Skipped("profile_locked")
 					!forwardGrant -> ShuttleOutcome.NotReady(ShuttleNotReadyCause.PermissionDenied)
-					else -> BridgeTargets.profile(context, profile.toId())
+					else -> BridgeTargets.profile(profile.toId())
 						?.let { com.yzddmr6.prismspace.bridge.Bridge.inProfile(context, it).execute(Ping, timeoutMs) }
 						?: ShuttleOutcome.Skipped("profile_missing")
 				}
@@ -140,7 +140,7 @@ class ShuttleProvider: ContentProvider() {
 		}
 
 		private fun initializeBackwardBridge(context: Context, profile: UserHandle) {
-			val target = BridgeTargets.profile(context, profile.toId()) ?: return
+			val target = BridgeTargets.profile(profile.toId()) ?: return
 			Bridge.inProfile(context, target).execute(EstablishBackwardGrant)
 		}
 

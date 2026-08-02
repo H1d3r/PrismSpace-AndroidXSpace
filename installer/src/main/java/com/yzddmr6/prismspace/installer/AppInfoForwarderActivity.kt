@@ -38,7 +38,7 @@ class AppInfoForwarderActivity : CallerAwareActivity() {
 		if (user != null && intent.action == Settings.ACTION_APPLICATION_DETAILS_SETTINGS) {  // For profiles other than default
 			intent.removeExtra(Intent.EXTRA_USER)
 			val pkg = intent.data?.takeIf { it.scheme == "package" }?.schemeSpecificPart
-			val target = BridgeTargets.profile(this, user.toId())
+			val target = BridgeTargets.profile(user.toId())
 			if (!pkg.isNullOrEmpty() && target != null) {
 				Bridge.inProfile(this, target).execute(OpenAppDetailsInProfile(pkg))
 			}

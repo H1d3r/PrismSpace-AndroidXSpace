@@ -239,7 +239,7 @@ class PrismAppClones(
 						context,
 						TAG,
 						"enable system app pkg=$pkg",
-						target = BridgeTargets.profile(context, target.toId()),
+						target = BridgeTargets.profile(target.toId()),
 						command = EnableSystemApp(pkg),
 					)) {
 						is ProfileBridgeResult.Value -> result.value == true

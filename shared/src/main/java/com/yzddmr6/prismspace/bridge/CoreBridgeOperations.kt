@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.preference.PreferenceManager
 import android.provider.Settings
+import androidx.annotation.WorkerThread
 import com.yzddmr6.prismspace.PrismNameManager
 import com.yzddmr6.prismspace.appops.AppOpsHelper
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
@@ -40,8 +41,9 @@ internal object CoreBridgeOperations {
 
     fun queryIsProfileOwner(context: Context) = DevicePolicies(context).isProfileOwner
 
+    @WorkerThread
     fun saveProfileName(context: Context, profileUserId: Int, name: String): Boolean {
-        requireNotNull(BridgeTargets.profile(context, profileUserId)) { "Unmanaged profile $profileUserId" }
+        requireNotNull(BridgeTargets.profileFresh(context, profileUserId)) { "Unmanaged profile $profileUserId" }
         PrismNameManager.saveProfileNameFromBridge(context, profileUserId, name)
         return true
     }
@@ -55,7 +57,7 @@ internal object CoreBridgeOperations {
     }
 
     fun startProfileDeactivation(context: Context, profileUserId: Int) {
-        requireNotNull(BridgeTargets.profile(context, profileUserId)) { "Unmanaged profile $profileUserId" }
+        requireNotNull(BridgeTargets.profile(profileUserId)) { "Unmanaged profile $profileUserId" }
         val implicit = Intent(ACTION_START_PROFILE_DEACTIVATION)
             .setPackage(context.packageName)
             .putExtra(EXTRA_PROFILE_USER_ID, profileUserId)

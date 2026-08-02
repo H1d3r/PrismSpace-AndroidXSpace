@@ -170,7 +170,7 @@ class PrismAppListProvider : AppListProvider<PrismAppInfo>() {
 	}
 
 	private fun queryProfileApps(profile: UserHandle): ShuttleOutcome<List<ProfileAppEntry>> {
-		val target = BridgeTargets.profile(context(), profile.toId())
+		val target = BridgeTargets.profile(profile.toId())
 			?: return ShuttleOutcome.Skipped("profile_missing")
 		val accumulator = ProfileAppPageAccumulator()
 		var pageIndex = 0

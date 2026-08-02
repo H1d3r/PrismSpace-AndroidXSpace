@@ -143,7 +143,7 @@ public class PrismSetup {
 	}
 
 	private static void requestProfileRemovalConfirmed(final Activity activity) {
-		final ParentTarget target = BridgeTargets.INSTANCE.parent(activity);
+		final ParentTarget target = BridgeTargets.INSTANCE.parent();
 		final ShuttleOutcome<Boolean> outcome = target == null ? null
 				: Bridge.INSTANCE.inParent(activity, target).execute(QueryParentIsProfileOwner.INSTANCE);
 		final Boolean parentIsProfileOwner = outcome instanceof ShuttleOutcome.Value

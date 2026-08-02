@@ -13,7 +13,7 @@ internal object ProfileRecoveryService {
             context,
             TAG,
             "incremental profile repair",
-            target = BridgeTargets.profile(context, profile.toId()),
+            target = BridgeTargets.profile(profile.toId()),
             command = TriggerIncrementalProvisioning,
         )
 
@@ -22,7 +22,7 @@ internal object ProfileRecoveryService {
             context,
             TAG,
             "profile-owner removal",
-            target = BridgeTargets.profile(context, profile.toId()),
+            target = BridgeTargets.profile(profile.toId()),
             command = WipeProfile,
         )
 

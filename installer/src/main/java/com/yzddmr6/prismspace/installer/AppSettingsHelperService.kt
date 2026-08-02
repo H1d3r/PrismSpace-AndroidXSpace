@@ -64,7 +64,7 @@ class AppSettingsHelperService: Service() {
 		if (intent.action == Intent.ACTION_PACKAGE_RESTARTED) {     // If triggered by system Settings, it will be followed by ACTION_QUERY_PACKAGE_RESTART immediately.
 			return Unit.also {
 				try {
-					BridgeTargets.parent(context)?.let { target ->
+					BridgeTargets.parent()?.let { target ->
 						Bridge.inParent(context, target).execute(NotifyPackageRestarted(pkg, uid, uptimeMillis))
 					}
 				} catch (e: RuntimeException) {

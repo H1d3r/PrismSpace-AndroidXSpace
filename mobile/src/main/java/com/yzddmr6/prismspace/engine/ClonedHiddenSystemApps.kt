@@ -45,7 +45,7 @@ import kotlinx.coroutines.launch
 			context,
 			TAG,
 			"migrate hidden system apps count=${pkgsToSuspend.size}",
-			target = BridgeTargets.profile(context, profile.hashCode()),
+			target = BridgeTargets.profile(profile.hashCode()),
 			command = SetPackagesSuspended(pkgsToSuspend.toList(), true),
 		)) {
 			is ProfileBridgeResult.Value -> result.value.orEmpty().apply {

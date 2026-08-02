@@ -193,7 +193,7 @@ public class PrismProvisioning extends IntentService {
 			Log.d(TAG, "Enable profile now.");
 			policies.execute(DevicePolicyManager::setProfileEnabled);
 		}
-		if (! PrismNameManager.syncNameToParentProfile(context))
+		if (! PrismNameManager.syncNameToParentProfileAfterProvisioning(context))
 			Log.w(TAG, "Failed to synchronize the profile name after provisioning.");
 		Analytics.$().event("profile_post_provision_done").send();
 
