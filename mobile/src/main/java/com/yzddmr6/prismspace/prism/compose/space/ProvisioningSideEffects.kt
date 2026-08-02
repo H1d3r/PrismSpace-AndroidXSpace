@@ -1,11 +1,7 @@
 package com.yzddmr6.prismspace.prism.compose.space
 
-import android.content.Context
-import android.provider.Settings
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
-import eu.chainfire.libsuperuser.Shell
 
-internal const val VERIFIER_SETTING = "verifier_verify_adb_installs"
 internal const val MAX_USERS_PROPERTY = "fw.max_users"
 
 internal data class RootProvisioningCommandInput(
@@ -74,10 +70,6 @@ internal fun buildRootProvisioningCommand(input: RootProvisioningCommandInput): 
     """.trimIndent()
 }
 
-internal fun verifierRestoreCommand(original: String?): String =
-    if (original == null) "settings delete global $VERIFIER_SETTING"
-    else "settings put global $VERIFIER_SETTING ${shellQuote(original)}"
-
 internal fun shellQuote(value: String): String = "'${value.replace("'", "'\"'\"'")}'"
 
 internal fun detachedRootProvisioningLauncher(command: String, outputPath: String): String =
@@ -92,91 +84,10 @@ internal fun provisioningCompleted(lines: List<String>?, userId: Int): Boolean =
 internal fun provisioningFailure(lines: List<String>?): String? =
     lines?.firstOrNull { it.startsWith("PRISM_PROVISION_FAILED ") }
 
-internal enum class PendingRestoreAction { ClearRecord, RequirePrivilege }
-
-internal fun pendingRestoreAction(original: String?, current: String?): PendingRestoreAction =
-    if (current == original) PendingRestoreAction.ClearRecord else PendingRestoreAction.RequirePrivilege
-
 internal object ProvisioningSideEffects {
-    private const val PREFS = "root_provisioning_side_effects"
-    private const val KEY_PENDING = "verifier_restore_pending"
-    private const val KEY_ORIGINAL_PRESENT = "verifier_original_present"
-    private const val KEY_ORIGINAL_VALUE = "verifier_original_value"
-    private const val KEY_ATTEMPT_TOKEN = "attempt_token"
     private const val TAG = "Prism.SpaceProvision"
-
-    fun verifierOriginal(context: Context): String? =
-        Settings.Global.getString(context.contentResolver, VERIFIER_SETTING)
 
     fun logMaxUsersWrite(original: String?, temporary: Int) {
         DiagnosticLog.i(TAG, "side_effect write key=$MAX_USERS_PROPERTY original=${original ?: "<unset>"} temporary=$temporary")
     }
-
-    /** Worker-thread preflight. It never calls su. */
-    @JvmStatic @Synchronized
-    fun hasPendingRestore(context: Context): Boolean {
-        val pending = readPending(context) ?: return false
-        if (!pendingRecordOwned(pending.token, prefs(context).getString(KEY_ATTEMPT_TOKEN, null))) return false
-        return when (pendingRestoreAction(pending.original, verifierOriginal(context))) {
-            PendingRestoreAction.ClearRecord -> {
-                val cleared = clearPendingIfOwned(context, pending.token)
-                DiagnosticLog.i(
-                    TAG,
-                    "side_effect startup verification already_restored original=${pending.original ?: "<unset>"} " +
-                        "record_cleared=$cleared",
-                )
-                false
-            }
-            PendingRestoreAction.RequirePrivilege -> {
-                DiagnosticLog.w(TAG, "side_effect startup recovery pending original=${pending.original ?: "<unset>"}")
-                true
-            }
-        }
-    }
-
-    /** Invoke only after an explicit foreground user confirmation. */
-    @JvmStatic @Synchronized
-    fun restorePendingAfterUserApproval(context: Context): Boolean {
-        val pending = readPending(context) ?: return true
-        if (!pendingRecordOwned(pending.token, prefs(context).getString(KEY_ATTEMPT_TOKEN, null))) return false
-        return runCatching {
-            Shell.SU.run(verifierRestoreCommand(pending.original))
-            val restored = verifierOriginal(context) == pending.original
-            val cleared = restored && clearPendingIfOwned(context, pending.token)
-            DiagnosticLog.i(
-                TAG,
-                "side_effect restore key=$VERIFIER_SETTING original=${pending.original ?: "<unset>"} " +
-                    "user_approved=true restored=$restored record_cleared=$cleared",
-            )
-            restored && cleared
-        }.onFailure {
-            DiagnosticLog.e(TAG, "side_effect user-approved recovery failed", it)
-        }.getOrDefault(false)
-    }
-
-    private fun readPending(context: Context): PendingRestore? {
-        val preferences = prefs(context)
-        if (!preferences.getBoolean(KEY_PENDING, false)) return null
-        val original = if (preferences.getBoolean(KEY_ORIGINAL_PRESENT, false)) {
-            preferences.getString(KEY_ORIGINAL_VALUE, "").orEmpty()
-        } else null
-        val token = preferences.getString(KEY_ATTEMPT_TOKEN, null) ?: LEGACY_PENDING_TOKEN
-        return PendingRestore(token, original)
-    }
-
-    private fun clearPendingIfOwned(context: Context, expectedToken: String): Boolean {
-        val preferences = prefs(context)
-        if (!pendingRecordOwned(expectedToken, preferences.getString(KEY_ATTEMPT_TOKEN, null))) return false
-        return preferences.edit().clear().commit()
-    }
-
-    private fun prefs(context: Context) = context.createDeviceProtectedStorageContext()
-        .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-
-    private data class PendingRestore(val token: String, val original: String?)
 }
-
-internal const val LEGACY_PENDING_TOKEN = "<legacy>"
-
-internal fun pendingRecordOwned(expectedToken: String, currentToken: String?): Boolean =
-    expectedToken == currentToken || expectedToken == LEGACY_PENDING_TOKEN && currentToken == null

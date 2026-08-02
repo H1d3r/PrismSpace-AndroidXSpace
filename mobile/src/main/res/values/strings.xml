@@ -73,12 +73,6 @@
     <string name="dialog_cannot_destroy_message">To remove the whole PrismSpace space, please open system \"Settings - Accounts\" and select \"Remove work profile\".</string>
     <string name="dialog_critical_app_warning">This app (or component) is critical for the Android system or other apps to work properly. If proceed, some apps or the whole system may become unstable or malfunctional.\n\nDo you really want to proceed?</string>
     <string name="dialog_space_setup_failed">Sorry, something went wrong in PrismSpace setup. (stage %1$d)</string>
-    <string name="provisioning_recovery_title">Finish interrupted Root setup</string>
-    <string name="provisioning_recovery_message">A previous Root setup ended before Android install verification was restored. Restore the original system setting before continuing. Root access is requested only after you tap Restore.</string>
-    <string name="provisioning_recovery_failed">The original Android install verification setting could not be restored. Root access may have been denied. Retry the restoration or exit PrismSpace; normal use will not continue while this recovery is pending.</string>
-    <string name="provisioning_recovery_action">Restore</string>
-    <string name="provisioning_recovery_retry">Retry</string>
-    <string name="provisioning_recovery_exit">Exit</string>
     <string name="dialog_root_setup_profile_exists">A PrismSpace clone space already exists on this device. To create it again, first remove the existing one from the main space, then try setup again.</string>
 
     <string name="action_continue">Continue</string>

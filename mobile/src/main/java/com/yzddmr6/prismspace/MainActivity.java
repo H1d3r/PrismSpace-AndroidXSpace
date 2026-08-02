@@ -3,7 +3,6 @@ package com.yzddmr6.prismspace;
 import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED;
 import static android.content.pm.PackageManager.DONT_KILL_APP;
 
-import android.app.AlertDialog;
 import android.app.SearchManager;
 import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
@@ -24,7 +23,6 @@ import com.yzddmr6.prismspace.analytics.Analytics.Property;
 import com.yzddmr6.prismspace.mobile.BuildConfig;
 import com.yzddmr6.prismspace.mobile.R;
 import com.yzddmr6.prismspace.prism.compose.host.PrismComposeHostFragment;
-import com.yzddmr6.prismspace.prism.compose.space.ProvisioningSideEffects;
 import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository;
 import com.yzddmr6.prismspace.setup.SetupActivity;
 import com.yzddmr6.prismspace.space.SpaceState;
@@ -55,7 +53,7 @@ public class MainActivity extends FragmentActivity {
 			return;
 		}
 		mIsDeviceOwner = new DevicePolicies(this).isProfileOrDeviceOwnerOnCallingUser();
-		resolvePendingProvisioningRecovery(savedInstanceState);
+		continueParentStartup(savedInstanceState);
 	}
 
 	private void continueParentStartup(final Bundle savedInstanceState) {
@@ -64,50 +62,6 @@ public class MainActivity extends FragmentActivity {
 			return;
 		}
 		resolveInitialRoute(savedInstanceState);
-	}
-
-	private void resolvePendingProvisioningRecovery(final Bundle savedInstanceState) {
-		new Thread(() -> {
-			try {
-				final boolean recoveryRequired = ProvisioningSideEffects.hasPendingRestore(getApplicationContext());
-				runOnUiThread(() -> {
-					if (isFinishing() || isDestroyed()) return;
-					if (recoveryRequired) showProvisioningRecoveryDialog(savedInstanceState, false);
-					else continueParentStartup(savedInstanceState);
-				});
-			} catch (final RuntimeException error) {
-				Log.e(TAG, "Interrupted provisioning recovery check failed", error);
-				runOnUiThread(() -> {
-					if (! isFinishing() && ! isDestroyed()) showProvisioningRecoveryDialog(savedInstanceState, true);
-				});
-			}
-		}, "Prism-provisioning-recovery-check").start();
-	}
-
-	private void showProvisioningRecoveryDialog(final Bundle savedInstanceState, final boolean previousFailure) {
-		new AlertDialog.Builder(this)
-				.setTitle(R.string.provisioning_recovery_title)
-				.setMessage(previousFailure
-						? R.string.provisioning_recovery_failed
-						: R.string.provisioning_recovery_message)
-				.setCancelable(false)
-				.setPositiveButton(previousFailure
-						? R.string.provisioning_recovery_retry
-						: R.string.provisioning_recovery_action,
-						(dialog, which) -> restorePendingProvisioningAfterApproval(savedInstanceState))
-				.setNegativeButton(R.string.provisioning_recovery_exit, (dialog, which) -> finish())
-				.show();
-	}
-
-	private void restorePendingProvisioningAfterApproval(final Bundle savedInstanceState) {
-		new Thread(() -> {
-			final boolean restored = ProvisioningSideEffects.restorePendingAfterUserApproval(getApplicationContext());
-			runOnUiThread(() -> {
-				if (isFinishing() || isDestroyed()) return;
-				if (restored) continueParentStartup(savedInstanceState);
-				else showProvisioningRecoveryDialog(savedInstanceState, true);
-			});
-		}, "Prism-provisioning-recovery").start();
 	}
 
 	private void resolveInitialRoute(final Bundle savedInstanceState) {

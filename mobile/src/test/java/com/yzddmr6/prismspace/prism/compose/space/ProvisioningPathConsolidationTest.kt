@@ -124,29 +124,6 @@ class ProvisioningPathConsolidationTest {
         assertEquals(1, implementationCount)
     }
 
-    @Test fun `pending restore records are cleared only by their owning attempt`() {
-        assertTrue(pendingRecordOwned("attempt-a", "attempt-a"))
-        assertFalse(pendingRecordOwned("attempt-a", "attempt-b"))
-        assertFalse(pendingRecordOwned("attempt-a", null))
-        assertTrue(pendingRecordOwned(LEGACY_PENDING_TOKEN, null))
-    }
-
-    @Test fun `pending recovery requests privilege only when the setting differs`() {
-        assertEquals(PendingRestoreAction.ClearRecord, pendingRestoreAction(original = null, current = null))
-        assertEquals(PendingRestoreAction.ClearRecord, pendingRestoreAction(original = "1", current = "1"))
-        assertEquals(PendingRestoreAction.RequirePrivilege, pendingRestoreAction(original = "1", current = "0"))
-        assertEquals(PendingRestoreAction.RequirePrivilege, pendingRestoreAction(original = null, current = "0"))
-    }
-
-    @Test fun `provider initialization never performs provisioning recovery or root`() {
-        val provider = File("src/main/java/com/yzddmr6/prismspace/bridge/MobileBridgePorts.kt").readText()
-        assertFalse(provider.contains("restorePending"))
-        assertFalse(provider.contains("Shell.SU"))
-        val activity = File("src/main/java/com/yzddmr6/prismspace/MainActivity.java").readText()
-        assertTrue(activity.contains("ProvisioningSideEffects.hasPendingRestore"))
-        assertTrue(activity.contains("ProvisioningSideEffects.restorePendingAfterUserApproval"))
-    }
-
     private fun command(
         maxUsersOriginal: String? = "4",
         packageName: String = "com.example",
