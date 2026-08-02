@@ -25,6 +25,23 @@ public class PrismProvisioningRevisionTest {
         assertFalse(PrismProvisioning.shouldRunOneTimePostProvisionMigration(11, 10));
     }
 
+    @Test public void explicitProfileRepairAdvancesEveryOlderState() {
+        assertTrue(PrismProvisioning.shouldAdvanceRevisionAfterExplicitRepair(false, 0, 10));
+        assertTrue(PrismProvisioning.shouldAdvanceRevisionAfterExplicitRepair(false, 1, 10));
+        assertTrue(PrismProvisioning.shouldAdvanceRevisionAfterExplicitRepair(false, 2, 10));
+        assertTrue(PrismProvisioning.shouldAdvanceRevisionAfterExplicitRepair(false, 9, 10));
+    }
+
+    @Test public void explicitRepairNeverWritesParentState() {
+        assertFalse(PrismProvisioning.shouldAdvanceRevisionAfterExplicitRepair(true, 0, 10));
+        assertFalse(PrismProvisioning.shouldAdvanceRevisionAfterExplicitRepair(true, 9, 10));
+    }
+
+    @Test public void explicitRepairDoesNotRewriteCurrentOrFutureState() {
+        assertFalse(PrismProvisioning.shouldAdvanceRevisionAfterExplicitRepair(false, 10, 10));
+        assertFalse(PrismProvisioning.shouldAdvanceRevisionAfterExplicitRepair(false, 11, 10));
+    }
+
     @Test public void firstManagedCompletionRunsPostProvisioning() {
         assertTrue(PrismProvisioning.shouldRunProfilePostProvisioning(
                 DeviceAdminReceiver.ACTION_PROFILE_PROVISIONING_COMPLETE, 0, 10));

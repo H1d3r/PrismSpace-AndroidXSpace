@@ -251,6 +251,11 @@ public class PrismProvisioning extends IntentService {
 		return state >= FIRST_COMPLETED_POST_PROVISION_REV && state < revision;
 	}
 
+	static boolean shouldAdvanceRevisionAfterExplicitRepair(final boolean runningInParent,
+			final int state, final int revision) {
+		return ! runningInParent && state < revision;
+	}
+
 	@Override public void onCreate() {
 		super.onCreate();
 		NotificationIds.Provisioning.startForeground(this, mForegroundNotification.get());
@@ -309,16 +314,23 @@ public class PrismProvisioning extends IntentService {
 	@OwnerUser @ProfileUser @WorkerThread public static void reprovisionManagedProfile(final Context context) {
 		final DevicePolicies policies = new DevicePolicies(context);
 		final boolean owner = Users.isParentProfile();
+		final SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
 		if (! owner) {
 			// Always perform all the required provisioning steps covered by stock ManagedProvisioning, in case something is missing there.
 			// This is also required for manual provision via ADB shell.
 			policies.execute(DevicePolicyManager::clearCrossProfileIntentFilters);
-			final int provision_type = PreferenceManager.getDefaultSharedPreferences(context).getInt(PREF_KEY_PROFILE_PROVISION_TYPE, 0);
+			final int provision_type = prefs.getInt(PREF_KEY_PROFILE_PROVISION_TYPE, 0);
 			if (provision_type == 1) ProfileOwnerManualProvisioning.start(context, policies);	// Simulate the stock managed profile provision
 			}
 			startProfileOwnerPostProvisioning(context, policies);
 			enableCriticalAppsIfNeeded(context, policies);
-			if (! owner) setupLauncherActivityInPrism(context);
+			if (! owner) {
+				setupLauncherActivityInPrism(context);
+				final int state = prefs.getInt(PREF_KEY_PROVISION_STATE, 0);
+				if (shouldAdvanceRevisionAfterExplicitRepair(owner, state, POST_PROVISION_REV)
+						&& ! prefs.edit().putInt(PREF_KEY_PROVISION_STATE, POST_PROVISION_REV).commit())
+					throw new IllegalStateException("Failed to persist completed profile repair revision");
+			}
 	}
 
 	public static void startDeviceAndProfileOwnerSharedPostProvisioning(final Context context, final DevicePolicies policies) {
