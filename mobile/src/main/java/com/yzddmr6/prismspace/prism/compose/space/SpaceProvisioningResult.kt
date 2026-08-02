@@ -7,6 +7,7 @@ sealed class CreateSpaceResult {
     object RootUnavailable : CreateSpaceResult()
     data class CapReached(val max: Int) : CreateSpaceResult()
     object ManagedProfileLimitReached : CreateSpaceResult()
+    object StateRefreshFailed : CreateSpaceResult()
     data class BlockedByState(val state: SpaceState) : CreateSpaceResult()
     data class Failed(val reason: String?, val analyticsPhase: Int = 2) : CreateSpaceResult()
 }
@@ -35,7 +36,8 @@ object RootSetupResultMapping {
         is CreateSpaceResult.BlockedByState -> RootSetupPresentation(RootSetupUiOutcome.ExistingProfile, null)
         CreateSpaceResult.RootUnavailable,
         is CreateSpaceResult.CapReached,
-        CreateSpaceResult.ManagedProfileLimitReached -> RootSetupPresentation(RootSetupUiOutcome.Error, 1)
+        CreateSpaceResult.ManagedProfileLimitReached,
+        CreateSpaceResult.StateRefreshFailed -> RootSetupPresentation(RootSetupUiOutcome.Error, 1)
         is CreateSpaceResult.Failed -> RootSetupPresentation(RootSetupUiOutcome.Error, result.analyticsPhase)
     }
 }

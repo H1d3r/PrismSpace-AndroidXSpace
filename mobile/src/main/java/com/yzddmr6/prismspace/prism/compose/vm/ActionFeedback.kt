@@ -53,6 +53,7 @@ private fun zhTemplate(id: Int): String = when (id) {
     R.string.lz_vm_create_root_unavailable -> "需要 Root 权限才能创建空间，请先在设置中启用 Root"
     R.string.lz_vm_create_cap_reached -> "已达本设备空间上限（最多 %1\$d 个用户），无法再创建"
     R.string.lz_vm_create_managed_profile_limit -> "本设备系统仅允许一个双开空间（已达系统工作资料上限），无法再创建"
+    R.string.lz_setvm_state_refresh_failed -> "无法确认双开空间的最新状态，请稍后重试。未执行任何更改。"
     R.string.lz_vm_create_failed -> "创建空间失败：%1\$s，可重试"
     R.string.lz_vm_delete_success -> "已删除该双开空间"
     R.string.lz_vm_delete_root_unavailable -> "普通模式无法直接删除双开空间，请在系统设置中移除工作资料；启用 Root 后可一键删除。"

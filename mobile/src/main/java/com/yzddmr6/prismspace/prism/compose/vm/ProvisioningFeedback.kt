@@ -16,6 +16,8 @@ fun provisioningFeedback(result: CreateSpaceResult, res: StringResolver = zhFall
         DestroyFeedback(res(R.string.lz_vm_create_cap_reached, arrayOf(result.max)), isError = true, routeToSystemRemoval = false)
     CreateSpaceResult.ManagedProfileLimitReached ->
         DestroyFeedback(res(R.string.lz_vm_create_managed_profile_limit, emptyArray()), isError = true, routeToSystemRemoval = false)
+    CreateSpaceResult.StateRefreshFailed ->
+        DestroyFeedback(res(R.string.lz_setvm_state_refresh_failed, emptyArray()), isError = true, routeToSystemRemoval = false)
     is CreateSpaceResult.BlockedByState -> DestroyFeedback(
         res(
             if (result.state is SpaceState.OrphanProfile) R.string.lz_vm_create_blocked_orphan
@@ -47,7 +49,8 @@ fun specificRootSetupFailure(
     res: StringResolver = zhFallback,
 ): String? = when (result) {
     is CreateSpaceResult.CapReached,
-    CreateSpaceResult.ManagedProfileLimitReached -> provisioningFeedback(result, res).message
+    CreateSpaceResult.ManagedProfileLimitReached,
+    CreateSpaceResult.StateRefreshFailed -> provisioningFeedback(result, res).message
     else -> null
 }
 

@@ -47,9 +47,9 @@ object SpaceProvisioningEngine {
 
     suspend fun createSpace(context: Context): CreateSpaceResult = withContext(Dispatchers.IO) {
         val stateRepository = SpaceStateRepository(context)
-        stateRepository.refresh("root_create_preflight")
         if (!ExperimentalFlags.isMultiProfileEnabled(context)) {
             val preflight = stateRepository.preflightCreate()
+                ?: return@withContext CreateSpaceResult.StateRefreshFailed
             if (preflight != SpaceState.NoProfile) {
                 DiagnosticLog.w(TAG, "root create blocked by state=$preflight")
                 return@withContext CreateSpaceResult.BlockedByState(preflight)

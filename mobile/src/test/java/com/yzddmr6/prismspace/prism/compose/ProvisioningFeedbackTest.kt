@@ -53,4 +53,10 @@ class ProvisioningFeedbackTest {
         assertEquals("本设备系统仅允许一个双开空间（已达系统工作资料上限），无法再创建", f.message)
         assertTrue(f.isError)
     }
+    @Test fun `state refresh failure stops creation with retryable feedback`() {
+        val f = provisioningFeedback(CreateSpaceResult.StateRefreshFailed)
+        assertEquals("无法确认双开空间的最新状态，请稍后重试。未执行任何更改。", f.message)
+        assertTrue(f.isError)
+        assertFalse(f.routeToSystemRemoval)
+    }
 }

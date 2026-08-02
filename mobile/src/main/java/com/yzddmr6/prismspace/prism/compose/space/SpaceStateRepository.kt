@@ -38,7 +38,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -62,14 +61,11 @@ class SpaceStateRepository(context: Context) {
 
     suspend fun refresh(reason: String): Boolean = store.refresh(reason)
 
-    /** Creation is the only read path allowed to wait for initial fact collection. */
-    suspend fun preflightCreate(): SpaceState {
-        store.refreshAndRead("preflight_create")?.let { return it }
-        return (state.first { it is SpaceSnapshot.Loaded } as SpaceSnapshot.Loaded).state
-    }
+    /** A creation attempt is authorized only by its own successful fact collection. */
+    suspend fun preflightCreate(): SpaceState? = store.refreshAndRead("preflight_create")
 
     /** Java bridge for legacy callers. Invoke from a worker thread only. */
-    fun preflightCreateBlocking(): SpaceState = runBlocking { preflightCreate() }
+    fun preflightCreateBlocking(): SpaceState? = runBlocking { preflightCreate() }
 
     /** Initial Activity routing may wait off-main, but must not guess if collection keeps failing. */
     fun awaitInitialStateBlocking(timeoutMs: Long): SpaceState? = runBlocking {

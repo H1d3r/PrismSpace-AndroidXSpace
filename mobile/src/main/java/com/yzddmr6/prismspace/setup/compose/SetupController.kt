@@ -47,6 +47,14 @@ class SetupController(
         activity.lifecycleScope.launch {
             if (!ExperimentalFlags.isMultiProfileEnabled(activity)) {
                 when (SpaceStateRepository(activity.applicationContext).preflightCreate()) {
+                    null -> {
+                        stateVm.setUiState(SetupUiState.Error(
+                            messageRes = R.string.lz_setvm_state_refresh_failed,
+                            messageParams = null,
+                            extraActionRes = null,
+                        ))
+                        return@launch
+                    }
                     SpaceState.NoProfile -> Unit
                     is SpaceState.OrphanProfile -> {
                         stateVm.setUiState(SetupUiState.Error(

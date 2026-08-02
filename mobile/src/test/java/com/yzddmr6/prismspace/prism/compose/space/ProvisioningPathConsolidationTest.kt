@@ -77,6 +77,7 @@ class ProvisioningPathConsolidationTest {
             CreateSpaceResult.RootUnavailable,
             CreateSpaceResult.CapReached(4),
             CreateSpaceResult.ManagedProfileLimitReached,
+            CreateSpaceResult.StateRefreshFailed,
         ).forEach {
             assertEquals(
                 RootSetupPresentation(RootSetupUiOutcome.Error, 1),
@@ -94,6 +95,10 @@ class ProvisioningPathConsolidationTest {
         assertEquals(
             "本设备系统仅允许一个双开空间（已达系统工作资料上限），无法再创建",
             specificRootSetupFailure(CreateSpaceResult.ManagedProfileLimitReached),
+        )
+        assertEquals(
+            "无法确认双开空间的最新状态，请稍后重试。未执行任何更改。",
+            specificRootSetupFailure(CreateSpaceResult.StateRefreshFailed),
         )
         assertEquals(null, specificRootSetupFailure(CreateSpaceResult.Failed("install", analyticsPhase = 2)))
     }
