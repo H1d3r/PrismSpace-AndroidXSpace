@@ -6,6 +6,9 @@ require_device_test_environment
 
 case "${1:-}" in
   precondition|cleanup) : ;;
-  execute) device_adb shell getprop ro.product.model ;;
+  execute)
+    device_adb shell getprop ro.product.model
+    printf 'repository_root=%s\n' "$PRISM_DEVICE_REPOSITORY_ROOT"
+    ;;
   *) exit 2 ;;
 esac

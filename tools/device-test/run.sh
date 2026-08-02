@@ -577,6 +577,7 @@ export_scenario_environment() {
   export PRISM_DEVICE_RUN_DIR="$RUN_DIR"
   export PRISM_DEVICE_SCENARIO_DIR="$scenario_dir"
   export PRISM_DEVICE_TEST_COMMON="$DEVICE_TEST_ROOT/lib/common.sh"
+  export PRISM_DEVICE_REPOSITORY_ROOT="$REPOSITORY_ROOT"
 }
 
 LAST_ACTION_CODE=0

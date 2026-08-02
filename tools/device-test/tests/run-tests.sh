@@ -115,6 +115,7 @@ test_success_and_configured_adb() {
   assert_file_exists "$evidence/preflight/users.stdout" || return
   assert_contains "$case_root/fake-adb.log" "-P 5038 devices -l" || return
   assert_contains "$case_root/fake-adb.log" "-P 5038 -s fixture-device shell getprop" || return
+  assert_contains "$evidence/scenarios/fixture-device-adb/execute.stdout" "repository_root=$case_root" || return
 }
 
 test_missing_and_malformed_serial_do_not_contact_adb() {
@@ -378,6 +379,7 @@ test_help_and_shell_syntax() {
     "$SOURCE_HARNESS_ROOT/run.sh" \
     "$SOURCE_HARNESS_ROOT/lib/common.sh" \
     "$SOURCE_HARNESS_ROOT/scenarios/foundation-device-facts.sh" \
+    "$SOURCE_HARNESS_ROOT/scenarios/healthy-debug-core.sh" \
     "$TESTS_ROOT/fake-adb.sh" \
     "$TESTS_ROOT/fixtures/scenarios/"*.sh || return
   local output

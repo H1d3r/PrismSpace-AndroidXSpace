@@ -1070,8 +1070,15 @@ internal object MobileFileBridgePort : FileBridgePort {
 
     override fun runSelfTest(context: Context, marker: ByteArray): SelfTestResultDto? {
         val cloneUri = context.writeDownload(SELF_TEST_CLONE_FILE, SELF_TEST_MIME_TEXT, marker)
-        val bytes = context.contentResolver.openInputStream(Uri.parse(cloneUri))?.use { it.readBytes() } ?: return null
-        return SelfTestResultDto(bytes, cloneUri)
+        val uri = Uri.parse(cloneUri)
+        return try {
+            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
+            SelfTestResultDto(bytes, cloneUri)
+        } finally {
+            check(context.contentResolver.delete(uri, null, null) > 0) {
+                "Unable to delete profile file-bridge self-test object: $cloneUri"
+            }
+        }
     }
 
     override fun installCrossProfileForwarding(context: Context, kind: CrossProfileForwardingKind): Boolean {

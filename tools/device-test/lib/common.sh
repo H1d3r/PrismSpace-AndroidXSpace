@@ -12,7 +12,8 @@ require_device_test_environment() {
     PRISM_DEVICE_SERIAL \
     PRISM_DEVICE_ADB_TIMEOUT_SECONDS \
     PRISM_DEVICE_RUN_DIR \
-    PRISM_DEVICE_SCENARIO_DIR; do
+    PRISM_DEVICE_SCENARIO_DIR \
+    PRISM_DEVICE_REPOSITORY_ROOT; do
     if [[ -z "${!name:-}" ]]; then
       echo "Missing device-test environment: $name" >&2
       return 2
