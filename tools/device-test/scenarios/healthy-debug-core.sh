@@ -117,7 +117,9 @@ precondition() {
   fi
 
   local owners_file="$PRISM_DEVICE_SCENARIO_DIR/device-policy-owners.txt"
-  trim_cr < "$PRISM_DEVICE_RUN_DIR/preflight/device-policy-owners.stdout" > "$owners_file"
+  device_adb shell "dumpsys device_policy | sed -n '1,/^  Admin Services:/p'" \
+    | trim_cr > "$owners_file"
+  require_nonempty_file "$owners_file" "current device-policy owners"
   local -a profile_ids=()
   while IFS= read -r profile_id; do
     profile_ids+=("$profile_id")
@@ -261,7 +263,7 @@ execute() {
   local instrumentation_code
   set +e
   device_adb shell \
-    "am instrument -w -r $TEST_PACKAGE/androidx.test.runner.AndroidJUnitRunner" \
+    "am instrument -w -r -e class com.yzddmr6.prismspace.device.CoreDeviceRegressionTest,com.yzddmr6.prismspace.prism.service.FileBridgeSelfTest $TEST_PACKAGE/androidx.test.runner.AndroidJUnitRunner" \
     | trim_cr > "$instrumentation_output"
   instrumentation_code=${PIPESTATUS[0]}
   set -e

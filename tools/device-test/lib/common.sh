@@ -42,3 +42,23 @@ require_nonempty_file() {
     return 1
   fi
 }
+
+require_destructive_authorization() {
+  require_device_test_environment || return
+  if [[ "${PRISM_DEVICE_ALLOW_DESTRUCTIVE:-0}" != "1" ]]; then
+    echo "Destructive scenario requires --allow-destructive" >&2
+    return 1
+  fi
+  if [[ -z "${PRISM_DEVICE_EXPECTED_FINGERPRINT:-}" ]]; then
+    echo "Destructive scenario requires --expected-fingerprint" >&2
+    return 1
+  fi
+  if [[ -z "${PRISM_DEVICE_OBSERVED_FINGERPRINT:-}" ]]; then
+    echo "Destructive scenario is missing the observed device fingerprint" >&2
+    return 1
+  fi
+  if [[ "$PRISM_DEVICE_EXPECTED_FINGERPRINT" != "$PRISM_DEVICE_OBSERVED_FINGERPRINT" ]]; then
+    echo "Destructive fingerprint mismatch" >&2
+    return 1
+  fi
+}

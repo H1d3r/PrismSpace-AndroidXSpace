@@ -5,6 +5,8 @@ readonly TESTS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SOURCE_HARNESS_ROOT="$(cd "$TESTS_ROOT/.." && pwd)"
 readonly TEMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/prism-device-test-contract-XXXXXX")"
 
+source "$SOURCE_HARNESS_ROOT/lib/release-attestation.sh"
+
 PASSED=0
 FAILED=0
 
@@ -139,7 +141,98 @@ test_missing_and_malformed_serial_do_not_contact_adb() {
       --serial fixture-device --adb "$fake_adb" --adb-server-port "$invalid_port" >/dev/null 2>&1
     assert_eq "2" "$?" "invalid ADB port '$invalid_port' exit" || return
   done
+  FAKE_ADB_LOG="$log" "$case_root/tools/device-test/run.sh" \
+    --serial fixture-device \
+    --adb "$fake_adb" \
+    --allow-destructive \
+    --expected-fingerprint 'bad fingerprint' >/dev/null 2>&1
+  assert_eq "2" "$?" "malformed fingerprint exit" || return
+  FAKE_ADB_LOG="$log" "$case_root/tools/device-test/run.sh" \
+    --serial fixture-device --adb "$fake_adb" --allow-destructive=maybe >/dev/null 2>&1
+  assert_eq "2" "$?" "malformed destructive acknowledgement exit" || return
   assert_eq "" "$(<"$log")" "invalid ADB port log" || return
+}
+
+test_destructive_authorization_is_exact() {
+  local case_root
+  case_root="$(new_case destructive-guard)"
+  local expected="fixture/device/build:15/TEST/1:userdebug/test-keys"
+
+  local missing_evidence="$case_root/missing-evidence"
+  run_case_harness "$case_root" fixture-destructive-guard "$missing_evidence" \
+    --expected-fingerprint "$expected" >/dev/null 2>&1
+  assert_eq "1" "$?" "missing destructive acknowledgement exit" || return
+  assert_file_absent "$missing_evidence/scenarios/fixture-destructive-guard/execute.stdout" || return
+  assert_contains "$missing_evidence/summary.properties" "destructive.allowed=0" || return
+
+  local mismatch_evidence="$case_root/mismatch-evidence"
+  run_case_harness "$case_root" fixture-destructive-guard "$mismatch_evidence" \
+    --allow-destructive \
+    --expected-fingerprint "fixture/device/other:15/TEST/1:userdebug/test-keys" >/dev/null 2>&1
+  assert_eq "1" "$?" "destructive fingerprint mismatch exit" || return
+  assert_file_absent "$mismatch_evidence/scenarios/fixture-destructive-guard/execute.stdout" || return
+
+  local pass_evidence="$case_root/pass-evidence"
+  run_case_harness "$case_root" fixture-destructive-guard "$pass_evidence" \
+    --allow-destructive \
+    --expected-fingerprint "$expected" >/dev/null 2>&1 || return
+  assert_contains "$pass_evidence/summary.properties" "status=PASS" || return
+  assert_contains "$pass_evidence/summary.properties" "destructive.allowed=1" || return
+  assert_contains "$pass_evidence/summary.properties" "destructive.expected_fingerprint=$expected" || return
+  assert_contains "$pass_evidence/scenarios/fixture-destructive-guard/execute.stdout" "destructive-executed" || return
+}
+
+write_attestation_fixture() {
+  local path="$1"
+  local revision="$2"
+  local clone_status="$3"
+  {
+    printf 'format.version=1\n'
+    printf 'repository.revision=%s\n' "$revision"
+    printf 'device.serial=fixture-device\n'
+    printf 'device.fingerprint=fixture/device/build:15/TEST/1:userdebug/test-keys\n'
+    printf 'candidate.sha256=%064d\n' 0
+    printf 'normal.managed_provisioning=PASS\n'
+    printf 'normal.clone_package_installer=%s\n' "$clone_status"
+    printf 'normal.storage_access_framework=PASS\n'
+    printf 'normal.unknown_sources_guidance=PASS\n'
+    printf 'normal.pause_unlock_recovery=PASS\n'
+    printf 'operator=fixture\n'
+    printf 'completed.at.utc=2026-08-02T00:00:00Z\n'
+  } > "$path"
+}
+
+test_release_attestation_is_exact_and_complete() {
+  local valid="$TEMP_ROOT/attestation-valid.properties"
+  local expected_hash
+  expected_hash="$(printf '%064d' 0)"
+  write_attestation_fixture "$valid" revision-a PASS
+  validate_release_attestation \
+    "$valid" revision-a fixture-device \
+    fixture/device/build:15/TEST/1:userdebug/test-keys "$expected_hash" || return
+
+  validate_release_attestation \
+    "$valid" revision-b fixture-device \
+    fixture/device/build:15/TEST/1:userdebug/test-keys "$expected_hash" >/dev/null 2>&1
+  assert_eq "1" "$?" "stale attestation revision exit" || return
+
+  local incomplete="$TEMP_ROOT/attestation-incomplete.properties"
+  write_attestation_fixture "$incomplete" revision-a NOT_RUN
+  validate_release_attestation \
+    "$incomplete" revision-a fixture-device \
+    fixture/device/build:15/TEST/1:userdebug/test-keys "$expected_hash" >/dev/null 2>&1
+  assert_eq "1" "$?" "incomplete attestation exit" || return
+
+  printf 'repositoryXrevision=must-not-match-dotted-key\n' >> "$valid"
+  validate_release_attestation \
+    "$valid" revision-a fixture-device \
+    fixture/device/build:15/TEST/1:userdebug/test-keys "$expected_hash" || return
+
+  printf 'repository.revision=revision-a\n' >> "$valid"
+  validate_release_attestation \
+    "$valid" revision-a fixture-device \
+    fixture/device/build:15/TEST/1:userdebug/test-keys "$expected_hash" >/dev/null 2>&1
+  assert_eq "1" "$?" "duplicate attestation binding exit" || return
 }
 
 test_default_adb_port_is_omitted() {
@@ -377,9 +470,9 @@ test_interruption_runs_cleanup() {
 test_help_and_shell_syntax() {
   bash -n \
     "$SOURCE_HARNESS_ROOT/run.sh" \
-    "$SOURCE_HARNESS_ROOT/lib/common.sh" \
-    "$SOURCE_HARNESS_ROOT/scenarios/foundation-device-facts.sh" \
-    "$SOURCE_HARNESS_ROOT/scenarios/healthy-debug-core.sh" \
+    "$SOURCE_HARNESS_ROOT/release-gate.sh" \
+    "$SOURCE_HARNESS_ROOT/lib/"*.sh \
+    "$SOURCE_HARNESS_ROOT/scenarios/"*.sh \
     "$TESTS_ROOT/fake-adb.sh" \
     "$TESTS_ROOT/fixtures/scenarios/"*.sh || return
   local output
@@ -403,6 +496,8 @@ run_test() {
 
 run_test "success and configured ADB" test_success_and_configured_adb
 run_test "serial validation" test_missing_and_malformed_serial_do_not_contact_adb
+run_test "destructive authorization" test_destructive_authorization_is_exact
+run_test "release attestation" test_release_attestation_is_exact_and_complete
 run_test "default ADB port" test_default_adb_port_is_omitted
 run_test "unavailable device" test_unavailable_device_fails_preflight
 run_test "unavailable ADB evidence" test_unavailable_adb_leaves_failure_evidence

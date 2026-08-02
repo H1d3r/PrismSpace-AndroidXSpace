@@ -11,6 +11,8 @@ SUITE="foundation"
 ARTIFACTS_PATH=""
 ADB_TIMEOUT_SECONDS=30
 ACTION_TIMEOUT_SECONDS=120
+ALLOW_DESTRUCTIVE=0
+EXPECTED_FINGERPRINT=""
 LOCK_ROOT="${PRISM_DEVICE_TEST_LOCK_ROOT:-${TMPDIR:-/tmp}/prismspace-device-test-locks}"
 
 RUN_DIR=""
@@ -54,6 +56,8 @@ Options:
   --artifacts PATH             New evidence directory; must not already exist
   --adb-timeout-seconds N      Per-ADB-command timeout (default: 30)
   --action-timeout-seconds N   Per-scenario-action timeout (default: 120)
+  --allow-destructive          Explicitly authorize destructive scenarios
+  --expected-fingerprint TEXT  Exact selected-device build fingerprint
   -h, --help                   Show this help
 
 Initial host support: Bash 4+ on Linux/WSL with GNU flock and timeout.
@@ -112,6 +116,15 @@ parse_arguments() {
         ACTION_TIMEOUT_SECONDS="$2"
         shift 2
         ;;
+      --allow-destructive)
+        ALLOW_DESTRUCTIVE=1
+        shift
+        ;;
+      --expected-fingerprint)
+        require_option_value "$1" "${2:-}"
+        EXPECTED_FINGERPRINT="$2"
+        shift 2
+        ;;
       -h|--help)
         usage
         exit 0
@@ -149,6 +162,11 @@ parse_arguments() {
   fi
   if [[ ! "$ACTION_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
     error "--action-timeout-seconds must be a positive integer"
+    exit 2
+  fi
+  if [[ -n "$EXPECTED_FINGERPRINT" &&
+        ! "$EXPECTED_FINGERPRINT" =~ ^[A-Za-z0-9._/:+=,@-]+$ ]]; then
+    error "invalid expected fingerprint"
     exit 2
   fi
 }
@@ -283,6 +301,8 @@ write_summary() {
     printf 'device.serial=%s\n' "$(escape_property "$SERIAL")"
     printf 'adb.executable=%s\n' "$(escape_property "$ADB_EXECUTABLE")"
     printf 'adb.server_port=%s\n' "$(escape_property "$ADB_SERVER_PORT")"
+    printf 'destructive.allowed=%s\n' "$ALLOW_DESTRUCTIVE"
+    printf 'destructive.expected_fingerprint=%s\n' "$(escape_property "$EXPECTED_FINGERPRINT")"
     printf 'started.at.utc=%s\n' "$STARTED_AT_UTC"
     printf 'finished.at.utc=%s\n' "$finished_at"
     printf 'duration.ms=%s\n' "$duration_ms"
@@ -578,6 +598,9 @@ export_scenario_environment() {
   export PRISM_DEVICE_SCENARIO_DIR="$scenario_dir"
   export PRISM_DEVICE_TEST_COMMON="$DEVICE_TEST_ROOT/lib/common.sh"
   export PRISM_DEVICE_REPOSITORY_ROOT="$REPOSITORY_ROOT"
+  export PRISM_DEVICE_ALLOW_DESTRUCTIVE="$ALLOW_DESTRUCTIVE"
+  export PRISM_DEVICE_EXPECTED_FINGERPRINT="$EXPECTED_FINGERPRINT"
+  export PRISM_DEVICE_OBSERVED_FINGERPRINT="$DEVICE_FINGERPRINT"
 }
 
 LAST_ACTION_CODE=0
