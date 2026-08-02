@@ -107,6 +107,14 @@ Android 7.0 及以上系统。设备上不能已有其他工作资料或工作�
 
 不需要。普通模式可以完成创建空间、克隆应用、文件传输和安装的全部流程。Shizuku/Root 提供自动克隆等增强能力。
 
+**PrismSpace 能与 Dhizuku 等 Device Owner 工具同时使用吗？**
+
+不能同时启用。Android 当前不允许设备所有者（Device Owner）与工作资料共存，且互斥是双向的；Root 或其他特权模式也无法绕过这项平台规则。
+
+PrismSpace 不能通过“请求 Dhizuku 权限”解决该限制。Dhizuku 能创建的是独立的次级用户，不是 PrismSpace 架构依赖的工作资料，无法提供相同的跨资料交互和管理能力。
+
+如需使用 PrismSpace，请先按对应工具的说明停用 Device Owner，然后返回 PrismSpace 创建双开空间。双开空间存在期间，也无法再启用 Dhizuku 等 Device Owner 类工具；如果更需要这类工具，请保留其 Device Owner 状态，不创建双开空间。
+
 **空间创建失败怎么办？**
 
 部分设备厂商限制了工作资料功能。请确认设备没有已激活的其他工作空间，然后在设置 → 导出诊断日志中获取详细信息，随 issue 一起提交以便排查。
@@ -138,4 +146,3 @@ PrismSpace 以 **GNU GPL v3.0** 分发，见 [LICENSE](LICENSE)。
 <div align="center">
 <img src="docs/brand/wechat-qrcode.png" alt="公众号二维码" width="360">
 </div>
-
