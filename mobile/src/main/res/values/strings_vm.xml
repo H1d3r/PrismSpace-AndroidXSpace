@@ -79,6 +79,7 @@
 
     <!-- PrismRootStatus labels -->
     <string name="lz_vm_root_status_not_detected">Not detected</string>
+    <string name="lz_vm_root_status_unavailable">Unavailable</string>
     <string name="lz_vm_root_status_available_disabled">Available but off</string>
     <string name="lz_vm_root_status_enabled">Enabled</string>
 </resources>

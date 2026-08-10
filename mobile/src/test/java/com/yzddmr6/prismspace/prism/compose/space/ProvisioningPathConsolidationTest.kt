@@ -104,10 +104,27 @@ class ProvisioningPathConsolidationTest {
     }
 
     @Test fun `all deletion entrances use the same pure route decision`() {
-        assertEquals(SpaceDeletionRoute.Self, deletionRoute(currentUserId = 22, targetUserId = 22, useRoot = false))
-        assertEquals(SpaceDeletionRoute.Self, deletionRoute(currentUserId = 22, targetUserId = 22, useRoot = true))
-        assertEquals(SpaceDeletionRoute.Root, deletionRoute(currentUserId = 0, targetUserId = 22, useRoot = true))
-        assertEquals(SpaceDeletionRoute.Bridge, deletionRoute(currentUserId = 0, targetUserId = 22, useRoot = false))
+        fun facts(
+            current: Int = 0,
+            owned: Boolean = true,
+            healthy: Boolean = true,
+            mode: com.yzddmr6.prismspace.prism.compose.vm.PrismMode = com.yzddmr6.prismspace.prism.compose.vm.PrismMode.Normal,
+            rootReady: Boolean = false,
+        ) = SpaceDeletionFacts(current, 22, owned, healthy, mode, rootReady)
+
+        assertEquals(SpaceDeletionRoute.Self, deletionRoute(facts(current = 22)))
+        assertEquals(SpaceDeletionRoute.Root, deletionRoute(facts(
+            mode = com.yzddmr6.prismspace.prism.compose.vm.PrismMode.Root,
+            rootReady = true,
+        )))
+        assertEquals(SpaceDeletionRoute.Bridge, deletionRoute(facts(
+            mode = com.yzddmr6.prismspace.prism.compose.vm.PrismMode.Root,
+            rootReady = false,
+        )))
+        assertEquals(SpaceDeletionRoute.Refuse, deletionRoute(facts(owned = false)))
+        assertEquals(SpaceDeletionRoute.Refuse, deletionRoute(facts(healthy = false)))
+        assertEquals(SpaceDeletionRoute.Bridge, deletionRetryRoute(DeleteSpaceResult.RootUnavailable, facts()))
+        assertEquals(SpaceDeletionRoute.Refuse, deletionRetryRoute(DeleteSpaceResult.Failed("ambiguous"), facts()))
 
         listOf(
             File("src/main/java/com/yzddmr6/prismspace/prism/compose/vm/SpaceViewModel.kt"),

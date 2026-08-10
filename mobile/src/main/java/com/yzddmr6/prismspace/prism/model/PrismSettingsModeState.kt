@@ -57,6 +57,7 @@ enum class PrismShizukuAdbStatus(val labelRes: Int) {
 
 enum class PrismRootStatus(val labelRes: Int) {
     NotDetected(R.string.lz_vm_root_status_not_detected),
+    Unavailable(R.string.lz_vm_root_status_unavailable),
     AvailableButDisabled(R.string.lz_vm_root_status_available_disabled),
     Enabled(R.string.lz_vm_root_status_enabled),
 }

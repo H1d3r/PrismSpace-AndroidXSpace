@@ -124,9 +124,7 @@ private const val GITHUB_REPO = "yzddmr6/PrismSpace"
 /**
  * Pure mapper: given boolean flags, builds the SettingsUiModel.
  * selectedMode is the user's explicit choice.
- * isActive on each row reflects selectedMode, not live re-detection.
- * Gating (shizukuAvailable/rootAvailable) only determines what modes CAN be
- * selected — it doesn't retroactively change the checkmark once selected.
+ * Selection reflects persisted user intent; status text and capability availability reflect runtime facts.
  */
 internal fun mapSettingsUiModel(
     profileOwner: Boolean,
@@ -137,22 +135,30 @@ internal fun mapSettingsUiModel(
     selectedMode: PrismMode = PrismMode.Normal,
     res: StringResolver = zhFallback,
 ): SettingsUiModel {
-    // Mode card body depends on profile-owner and Shizuku authorization state.
+    val shizukuCapable = shizukuAuthorized && capabilityState.shizuku is CapabilityAvailability.Available
+    val rootCapable = capabilityState.root is CapabilityAvailability.Available
+    val preferredReady = when (selectedMode) {
+        PrismMode.Normal -> true
+        PrismMode.Shizuku -> shizukuCapable
+        PrismMode.Root -> rootCapable
+    }
+    val selectedTitle = when (selectedMode) {
+        PrismMode.Normal -> modeState.normal.title
+        PrismMode.Shizuku -> modeState.shizukuAdb.title
+        PrismMode.Root -> modeState.root.title
+    }
     val modeBody = when {
         !profileOwner -> res(R.string.lz_setvm_mode_body_not_created, emptyArray())
-        shizukuAuthorized -> res(R.string.lz_setvm_mode_body_shizuku, emptyArray())
+        !preferredReady -> res(R.string.lz_setvm_mode_body_preference_unavailable, arrayOf(selectedTitle))
+        selectedMode == PrismMode.Shizuku -> res(R.string.lz_setvm_mode_body_shizuku, emptyArray())
+        selectedMode == PrismMode.Root -> res(R.string.lz_setvm_mode_body_root, emptyArray())
         else -> res(R.string.lz_setvm_mode_body_normal, emptyArray())
     }
     val level = when {
         !profileOwner -> PrismLevel.Error
-        shizukuAuthorized -> PrismLevel.Ok
+        !preferredReady -> PrismLevel.Warn
         else -> PrismLevel.Ok
     }
-
-    // isActive follows the USER's selectedMode choice (single source of truth).
-    // Capability availability is still used for gating, but not for the checkmark.
-    val shizukuCapable = capabilityState.shizuku is CapabilityAvailability.Available
-    val rootCapable = capabilityState.root is CapabilityAvailability.Available
 
     return SettingsUiModel(
         modeTitle = res(R.string.lz_setvm_mode_title, emptyArray()),
@@ -169,13 +175,13 @@ internal fun mapSettingsUiModel(
             title = modeState.shizukuAdb.title,
             summary = modeState.shizukuAdb.summary,
             statusLabel = modeState.shizukuAdb.status,
-            isActive = selectedMode == PrismMode.Shizuku && shizukuCapable,
+            isActive = selectedMode == PrismMode.Shizuku,
         ),
         rootMode = SettingsModeRow(
             title = modeState.root.title,
             summary = modeState.root.summary,
             statusLabel = modeState.root.status,
-            isActive = selectedMode == PrismMode.Root && rootCapable,
+            isActive = selectedMode == PrismMode.Root,
         ),
         selectedMode = selectedMode,
         spaceActionTitle = if (profileOwner) {
@@ -257,7 +263,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun handleShizukuAction() {
         val available = isShizukuAvailable()
-        val authorized = isShizukuAuthorized(available)
+        val authorized = isShizukuAuthorized()
         val action = SettingsActionPlanner.shizukuAction(available, authorized)
         when (action) {
             com.yzddmr6.prismspace.prism.model.ShizukuSettingsAction.OpenManager -> openShizukuManager()
@@ -324,9 +330,9 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     private data class ReleaseInfo(val version: String, val notes: String, val url: String)
 
     fun checkShizuku(): Boolean {
-        val available = isShizukuAvailable()
-        val authorized = isShizukuAuthorized(available)
+        val authorized = isShizukuAuthorized()
         if (authorized) {
+            capRepo.markShizukuReady()
             capRepo.setSelectedMode(PrismMode.Shizuku)
             setFeedback(str(R.string.lz_setvm_shizuku_connected), isError = false)
             refreshCapabilities()
@@ -359,9 +365,11 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
             if (result) {
+                capRepo.markRootReady()
                 capRepo.setSelectedMode(PrismMode.Root)
                 setFeedback(str(R.string.lz_setvm_root_granted), isError = false)
             } else {
+                capRepo.markRootUnavailable()
                 // Keep current mode unchanged — do NOT switch to Root on failure
                 setFeedback(str(R.string.lz_setvm_root_denied), isError = true)
             }
@@ -592,7 +600,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             val result = SpaceDeletionCoordinator.delete(
                 getApplication(),
                 space,
-                useRoot = capRepo.selectedMode.value == PrismMode.Root,
+                capabilities = capRepo,
             )
             val fb = provisioningFeedback(result, res)
             if (result == DeleteSpaceResult.Success) {
@@ -680,7 +688,8 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         val context: Context = getApplication()
         val presentation = presentSpace(spaceState)
         val shizukuAvailable = isShizukuAvailable()
-        val shizukuAuthorized = isShizukuAuthorized(shizukuAvailable)
+        val runtime = capRepo.runtimeSnapshot()
+        val shizukuAuthorized = runtime.shizukuReady
         val profileOwner = presentation.hasProfile && presentation.kind != SpacePresentationKind.Orphan
         DiagnosticLog.d(
             TAG,
@@ -695,7 +704,13 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                 shizukuAvailable -> PrismShizukuAdbStatus.WaitingAuthorization
                 else -> PrismShizukuAdbStatus.NotRunning
             },
-            root = PrismRootStatus.NotDetected,
+            root = when (runtime.rootReadiness) {
+                is RootReadiness.ReadyUntil -> if (runtime.preferredMode == PrismMode.Root) {
+                    PrismRootStatus.Enabled
+                } else PrismRootStatus.AvailableButDisabled
+                RootReadiness.Unknown -> PrismRootStatus.NotDetected
+                RootReadiness.Unavailable -> PrismRootStatus.Unavailable
+            },
             res = prismResolver(context),
         )
 
@@ -706,8 +721,8 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             shizukuAvailable = shizukuAvailable,
             shizukuReady = shizukuAuthorized,
             adbReady = false,
-            rootDetected = false,
-            rootEnabled = false,
+            rootDetected = runtime.rootReady,
+            rootEnabled = runtime.rootReady && runtime.preferredMode == PrismMode.Root,
         )
 
         val current = _uiState.value
@@ -718,7 +733,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             shizukuAvailable = shizukuAvailable,
             modeState = modeState,
             capabilityState = capabilityState,
-            selectedMode = capRepo.selectedMode.value,
+            selectedMode = runtime.preferredMode,
             res = prismResolver(getApplication()),
         )
         val freezeState = observeSpaceFreezeState(context, presentation.kind)
@@ -885,8 +900,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun isShizukuAvailable(): Boolean = ShizukuUtil.isAvailable()
 
-    private fun isShizukuAuthorized(available: Boolean = isShizukuAvailable()): Boolean =
-        ShizukuUtil.isAuthorized()
+    private fun isShizukuAuthorized(): Boolean = ShizukuUtil.isAuthorized()
 }
 
 private const val TAG = "Prism.SettingsVM"

@@ -4,6 +4,8 @@
     <string name="lz_setvm_mode_title">Current mode</string>
     <string name="lz_setvm_mode_body_not_created">Dual space not created. Please finish initial setup first.</string>
     <string name="lz_setvm_mode_body_shizuku">Shizuku/Sui mode active. Enhanced capabilities enabled.</string>
+    <string name="lz_setvm_mode_body_root">Root mode is ready for enhanced operations.</string>
+    <string name="lz_setvm_mode_body_preference_unavailable">%1$s is selected but is not currently ready. Equivalent operations use Normal mode when safe.</string>
     <string name="lz_setvm_mode_body_normal">Normal mode. Core dual-app features available.</string>
 
     <!-- SettingsViewModel: mode switching feedback -->

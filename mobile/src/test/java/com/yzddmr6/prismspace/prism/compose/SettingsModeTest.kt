@@ -108,7 +108,7 @@ class SettingsModeTest {
     }
 
     // ---------------------------------------------------------------------------
-    // Root mode active only when selectedMode=Root and root is capable
+    // Selection remains visible independently from current readiness.
     // ---------------------------------------------------------------------------
     @Test
     fun `rootMode isActive when selected and root capability Available`() {
@@ -123,6 +123,25 @@ class SettingsModeTest {
         assertTrue("Root mode must be active when selectedMode=Root and capable", model.rootMode.isActive)
         assertFalse("Shizuku mode must not be active", model.shizukuAdbMode.isActive)
         assertFalse("Normal mode must not be active when Root selected", model.normalMode.isActive)
+    }
+
+    @Test
+    fun `stale Root preference remains selected while status says unavailable`() {
+        val model = mapSettingsUiModel(
+            profileOwner = true,
+            shizukuAuthorized = false,
+            shizukuAvailable = false,
+            modeState = PrismSettingsModeState.from(
+                PrismShizukuAdbStatus.NotRunning,
+                PrismRootStatus.Unavailable,
+                res = { id, _ -> if (id == com.yzddmr6.prismspace.mobile.R.string.lz_vm_root_status_unavailable) "当前不可用" else id.toString() },
+            ),
+            capabilityState = capState(rootEnabled = false),
+            selectedMode = PrismMode.Root,
+        )
+
+        assertTrue(model.rootMode.isActive)
+        assertEquals("当前不可用", model.rootMode.statusLabel)
     }
 
     // ---------------------------------------------------------------------------

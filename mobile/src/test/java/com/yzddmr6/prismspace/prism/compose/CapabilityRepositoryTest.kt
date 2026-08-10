@@ -4,6 +4,7 @@ import com.yzddmr6.prismspace.prism.compose.vm.CapabilityRepository
 import com.yzddmr6.prismspace.prism.compose.vm.DefaultCapabilityRepository
 import com.yzddmr6.prismspace.prism.compose.vm.ModeStore
 import com.yzddmr6.prismspace.prism.compose.vm.PrismMode
+import com.yzddmr6.prismspace.prism.compose.vm.RootReadiness
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Test
@@ -15,9 +16,10 @@ class CapabilityRepositoryTest {
         override fun save(mode: PrismMode) { stored = mode }
     }
 
-    @Test fun initialMode_isShizuku_whenShizukuAuthorized() {
+    @Test fun firstRunIsNormalEvenWhenShizukuIsAuthorized() {
         val repo = DefaultCapabilityRepository(shizukuAuthorized = { true })
-        assertEquals(PrismMode.Shizuku, repo.selectedMode.value)
+        assertEquals(PrismMode.Normal, repo.selectedMode.value)
+        assertEquals(true, repo.runtimeSnapshot().shizukuReady)
     }
     @Test fun initialMode_isNormal_whenShizukuNotAuthorized() {
         val repo = DefaultCapabilityRepository(shizukuAuthorized = { false })
@@ -51,5 +53,35 @@ class CapabilityRepositoryTest {
         val repo = DefaultCapabilityRepository(shizukuAuthorized = { false }, modeStore = store)
         repo.setSelectedMode(PrismMode.Shizuku)
         assertEquals(PrismMode.Shizuku, store.stored)
+    }
+
+    @Test fun rootReadinessIsProcessLocalNonPromptingAndExpires() {
+        var now = 100L
+        var shizukuChecks = 0
+        val repo = DefaultCapabilityRepository(
+            shizukuAuthorized = { shizukuChecks++; true },
+            elapsedRealtime = { now },
+            rootReadyTtlMs = 50L,
+        )
+
+        assertEquals(RootReadiness.Unknown, repo.runtimeSnapshot().rootReadiness)
+        repo.markRootReady()
+        assertEquals(RootReadiness.ReadyUntil(150L), repo.runtimeSnapshot().rootReadiness)
+        now = 150L
+        assertEquals(RootReadiness.Unknown, repo.runtimeSnapshot().rootReadiness)
+        assertEquals(3, shizukuChecks)
+    }
+
+    @Test fun capabilityLossInvalidatesOnlyRuntimeFactNotPreference() {
+        val store = FakeModeStore(PrismMode.Root)
+        val repo = DefaultCapabilityRepository(shizukuAuthorized = { true }, modeStore = store)
+        repo.markRootReady()
+        repo.markRootUnavailable()
+        repo.markShizukuUnavailable()
+
+        val snapshot = repo.runtimeSnapshot()
+        assertEquals(PrismMode.Root, snapshot.preferredMode)
+        assertEquals(RootReadiness.Unavailable, snapshot.rootReadiness)
+        assertEquals(false, snapshot.shizukuReady)
     }
 }

@@ -118,6 +118,7 @@
     <!-- Chinese for the new PrismSpace strings whose English default lives in values/ -->
     <string name="toast_clone_root_unavailable">需要 Root 授权才能自动克隆。请在设置中启用 Root，或改用 Shizuku / Play / 文件方式。</string>
     <string name="toast_clone_file_sync_transferring">正在把安装包传输到双开空间…</string>
+    <string name="toast_clone_file_sync_fallback">%1$s 当前不可用，已改用普通模式准备安装包…</string>
     <string name="dialog_title_clone_file_sync">安装包已复制到双开空间</string>
     <string name="dialog_clone_file_sync_done">完整安装包已复制到双开空间的 Download/PrismSpace。打开双开空间安装入口后，用 Android 系统安装器确认安装。若要从系统文件管理器直接安装单个 APK，请先允许文件管理器安装未知应用。</string>
 </resources>

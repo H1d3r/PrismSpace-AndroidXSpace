@@ -82,12 +82,15 @@ private fun zhTemplate(id: Int): String = when (id) {
     R.string.lz_vm_shizuku_status_waiting -> "等待授权"
     R.string.lz_vm_shizuku_status_ready -> "可用"
     R.string.lz_vm_root_status_not_detected -> "未检测"
+    R.string.lz_vm_root_status_unavailable -> "当前不可用"
     R.string.lz_vm_root_status_available_disabled -> "可用但关闭"
     R.string.lz_vm_root_status_enabled -> "已启用"
     // SettingsViewModel mapSettingsUiModel (pure, tested) mode card
     R.string.lz_setvm_mode_title -> "当前模式"
     R.string.lz_setvm_mode_body_not_created -> "双开空间未创建，请先完成初始设置。"
     R.string.lz_setvm_mode_body_shizuku -> "Shizuku 模式可用，增强能力已启用。"
+    R.string.lz_setvm_mode_body_root -> "Root 模式当前可用，可执行增强操作。"
+    R.string.lz_setvm_mode_body_preference_unavailable -> "已选择%1\$s，但当前不可用；在语义等价且安全时会改用普通模式。"
     R.string.lz_setvm_mode_body_normal -> "普通模式运行中，核心双开功能可用。"
     else -> ""
 }

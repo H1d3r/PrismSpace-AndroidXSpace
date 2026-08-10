@@ -10,6 +10,7 @@ import com.yzddmr6.prismspace.util.Modules
 import com.yzddmr6.prismspace.util.UserHandles
 import com.yzddmr6.prismspace.util.Users
 import com.yzddmr6.prismspace.prism.compose.settings.ExperimentalFlags
+import com.yzddmr6.prismspace.prism.compose.vm.CapabilityRepositoryProvider
 import com.yzddmr6.prismspace.space.SpaceState
 import eu.chainfire.libsuperuser.Shell
 import kotlinx.coroutines.Dispatchers
@@ -24,7 +25,13 @@ object SpaceProvisioningEngine {
 
     private const val DEFAULT_MAX_USERS_SETPROP = 10  // historical fw.max_users AOSP default; used only when the real cap is Unknown
 
-    private fun rootOk(): Boolean = isRootOutput(Shell.SU.run("id"))
+    private fun rootOk(context: Context): Boolean {
+        val available = isRootOutput(Shell.SU.run("id"))
+        CapabilityRepositoryProvider.get(context).let {
+            if (available) it.markRootReady() else it.markRootUnavailable()
+        }
+        return available
+    }
 
     private fun maxUsersProperty(): String? =
         (Hacks.SystemProperties_get.invoke(MAX_USERS_PROPERTY).statically() as? String)?.takeIf { it.isNotBlank() }
@@ -55,7 +62,7 @@ object SpaceProvisioningEngine {
                 return@withContext CreateSpaceResult.BlockedByState(preflight)
             }
         }
-        if (!rootOk()) return@withContext CreateSpaceResult.RootUnavailable
+        if (!rootOk(context)) return@withContext CreateSpaceResult.RootUnavailable
         val probe = probeMaxSpaces()
         (probe as? SpaceCapProbe.Known)
             ?.takeIf { it.current >= it.max }
@@ -119,7 +126,7 @@ object SpaceProvisioningEngine {
     }
 
     suspend fun deleteSpace(context: Context, space: PrismSpace): DeleteSpaceResult = withContext(Dispatchers.IO) {
-        if (!rootOk()) return@withContext DeleteSpaceResult.RootUnavailable
+        if (!rootOk(context)) return@withContext DeleteSpaceResult.RootUnavailable
         val output = Shell.SU.run(buildVerifiedRootRemovalCommand(space.userId, Modules.MODULE_ENGINE))
         if (rootRemovalOwnerMismatch(output)) {
             DiagnosticLog.w(TAG, "root delete refused: owner mismatch user=${space.userId}")

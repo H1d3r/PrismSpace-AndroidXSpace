@@ -87,6 +87,7 @@
     <string name="toast_cannot_clone">Sorry, unable to clone %1$s.</string>
     <string name="toast_clone_root_unavailable">Root access is required for automatic cloning. Enable Root in Settings, or use Shizuku / Play / file methods instead.</string>
     <string name="toast_clone_file_sync_transferring">Transferring the installer to the dual space…</string>
+    <string name="toast_clone_file_sync_fallback">%1$s is not currently ready. Using Normal mode to prepare the installer instead…</string>
     <string name="dialog_title_clone_file_sync">Installer copied to dual space</string>
     <string name="dialog_clone_file_sync_done">The full installer was copied to Download/PrismSpace in the dual space. Open the dual-space install entry and confirm with Android\'s system installer. To install a single APK from the system file manager, allow that file manager to install unknown apps first.</string>
     <string name="toast_shortcut_failed">Failed to create the shortcut</string>

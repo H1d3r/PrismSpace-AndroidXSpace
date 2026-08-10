@@ -38,6 +38,7 @@ import com.yzddmr6.prismspace.prism.compose.vm.ActionFeedback
 import com.yzddmr6.prismspace.prism.compose.vm.AppFeedbackBus
 import com.yzddmr6.prismspace.prism.compose.vm.CapabilityRepositoryProvider
 import com.yzddmr6.prismspace.prism.compose.vm.PrismMode
+import com.yzddmr6.prismspace.prism.compose.vm.prismModeLabelRes
 import com.yzddmr6.prismspace.prism.compose.vm.ShizukuUtil
 import com.yzddmr6.prismspace.controller.PrismAppControl.launchSystemAppSettings
 import com.yzddmr6.prismspace.controller.PrismAppControl.unfreezeInitiallyFrozenSystemApp
@@ -116,7 +117,9 @@ class PrismAppClones(
 
 		// REQUEST_INSTALL_PACKAGES is disallowed on Google Play Store, thus removed in the Google Play packaging.
 		val isShizukuAvailable = ShizukuUtil.isAvailable()
-		val isShizukuReady = ShizukuUtil.isAuthorized()
+		val capabilityRepo = CapabilityRepositoryProvider.get(context)
+		val runtime = capabilityRepo.runtimeSnapshot()
+		val isShizukuReady = runtime.shizukuReady
 
 		val fragment = ModelBottomSheetFragment()
 		val alp = PrismAppListProvider.getInstance(context)
@@ -128,8 +131,8 @@ class PrismAppClones(
 
 		// Root availability follows the chosen run mode (set in Settings, which already granted su) — we do
 		// NOT probe su here, to avoid a root prompt on every clone. Shizuku/Play use non-prompting checks.
-		val selectedRunMode = CapabilityRepositoryProvider.get(context).selectedMode.value
-		val isRootReady = selectedRunMode == PrismMode.Root
+		val selectedRunMode = runtime.preferredMode
+		val isRootModeReady = selectedRunMode == PrismMode.Root && runtime.rootReady
 		// Run mode is authoritative: Shizuku is selectable only when the user actually chose Shizuku
 		// mode (and it's connected). In 普通模式 the row stays visible but greyed with a 「去启用」 jump to
 		// run-mode settings (discovery funnel), so 普通模式 can no longer silently use Shizuku. (Root is
@@ -148,15 +151,15 @@ class PrismAppClones(
 				else loc.getString(R.string.lz_app_method_shizuku_summary_waiting),
 				available = isShizukuModeReady, showEnableGuide = true),
 			CloneModeOption(MODE_ROOT, loc.getString(R.string.lz_app_method_root_title),
-				if (isRootReady) loc.getString(R.string.lz_app_method_root_summary_ready)
+				if (isRootModeReady) loc.getString(R.string.lz_app_method_root_summary_ready)
 				else loc.getString(R.string.lz_app_method_root_summary_not_enabled),
-				available = isRootReady, showEnableGuide = true),
+				available = isRootModeReady, showEnableGuide = true),
 		)
 		// Default method respects the selected run mode. Fall back to the always-available file-sync if the
 		// mode's privileged method isn't ready yet.
 		val defaultMode = when (selectedRunMode) {
-			PrismMode.Root -> if (isRootReady) MODE_ROOT else MODE_INSTALLER
-			PrismMode.Shizuku -> if (isShizukuReady) MODE_SHIZUKU else MODE_INSTALLER
+			PrismMode.Root -> if (isRootModeReady) MODE_ROOT else MODE_INSTALLER
+			PrismMode.Shizuku -> if (isShizukuModeReady) MODE_SHIZUKU else MODE_INSTALLER
 			else -> MODE_INSTALLER
 		}
 
@@ -171,14 +174,14 @@ class PrismAppClones(
 	 * Headless clone for the batch flow: clone into the single dual space using the install
 	 * method implied by the user's configured run mode — no per-app selector sheet. The batch caller
 	 * confirms once up front; running install method/capability fallback is still handled by
-	 * [cloneRoute] inside [cloneApp] (e.g. Shizuku-selected-but-not-granted degrades to file sync).
+	 * [planCloneRoute] inside [cloneApp] (e.g. Shizuku-selected-but-not-granted degrades to file sync).
 	 *
-	 * Mode follows [CapabilityRepository.selectedMode] — the single source of truth — rather than
+	 * Mode follows [CapabilityRepository.runtimeSnapshot] — the single source of truth — rather than
 	 * re-detecting here, so it can never disagree with what Settings shows.
 	 */
 	fun requestSilently(): CloneRequestOutcome {
 		val target = PrismNameManager.getAllNames(context).keys.firstOrNull() ?: return CloneRequestOutcome.Unavailable
-		val mode = when (CapabilityRepositoryProvider.get(context).selectedMode.value) {
+		val mode = when (CapabilityRepositoryProvider.get(context).runtimeSnapshot().preferredMode) {
 			PrismMode.Root -> MODE_ROOT
 			PrismMode.Shizuku -> MODE_SHIZUKU
 			else -> MODE_INSTALLER   // 普通模式 → 文件同步
@@ -207,10 +210,21 @@ class PrismAppClones(
 	private suspend fun cloneApp(source: PrismAppInfo, target: UserHandle, mode: @AppCloneMode Int) {
 		val context = source.context(); val pkg = source.packageName
 		DiagnosticLog.i(TAG, "cloneApp start pkg=$pkg targetUser=${target.toId()} mode=$mode system=${source.isSystem}")
-		val route = cloneRoute(target.isParentProfile(), source.isSystem, mode,
-				{ isInstallerUsable() }, { ShizukuUtil.isAuthorized() }, { mode == MODE_ROOT })
-		DiagnosticLog.i(TAG, "cloneApp route pkg=$pkg targetUser=${target.toId()} route=$route")
-			when (route) {
+		val capabilityRepo = CapabilityRepositoryProvider.get(context)
+		val runtime = capabilityRepo.runtimeSnapshot()
+		val plan = planCloneRoute(
+			target.isParentProfile(),
+			source.isSystem,
+			mode,
+			{ isInstallerUsable() },
+			CloneRuntimeReadiness(runtime.shizukuReady, runtime.rootReady),
+		)
+		DiagnosticLog.i(
+			TAG,
+			"cloneApp route pkg=$pkg targetUser=${target.toId()} requestedMode=$mode " +
+				"actual=${plan.route} fallback=${plan.usedNormalFallback}",
+		)
+			when (plan.route) {
 				CloneRoute.PARENT_INSTALLER -> {
 					@Suppress("DEPRECATION") // Only works in parent profile due to a bug in AOSP.
 					activity.startActivityForResult(Intent(Intent.ACTION_INSTALL_PACKAGE, Uri.fromParts("package", pkg, null)), 1)
@@ -219,22 +233,34 @@ class PrismAppClones(
 
 				CloneRoute.ROOT -> {
 					analytics().event("clone_root").with(Analytics.Param.ITEM_ID, pkg).send()
-					val ok = withContext(Dispatchers.IO) {
-						val out = Shell.SU.run("pm install-existing --user ${target.toId()} $pkg")
-						out != null && out.any { it.contains("installed for user", ignoreCase = true) }
+					val output = withContext(Dispatchers.IO) {
+						Shell.SU.run("pm install-existing --user ${target.toId()} $pkg")
 					}
+					val rootAvailable = !output.isNullOrEmpty()
+					if (rootAvailable) capabilityRepo.markRootReady() else capabilityRepo.markRootUnavailable()
+					val ok = output?.any { it.contains("installed for user", ignoreCase = true) } == true
 					if (ok) {
 						PrismAppListProvider.getInstance(context).refreshPackage(pkg, target, true)
 						onCloneStateChanged()
 						feedback(PrismLocale.wrap(context).getString(R.string.toast_successfully_cloned, source.label))
 					} else {
-						feedback(PrismLocale.wrap(context).getString(R.string.toast_clone_root_unavailable), isError = true)
+						val localized = PrismLocale.wrap(context)
+						feedback(
+							if (rootAvailable) localized.getString(R.string.toast_cannot_clone, source.label)
+							else localized.getString(R.string.toast_clone_root_unavailable),
+							isError = true,
+						)
 					}
 					return
 				}
 
 				CloneRoute.FILE_SYNC -> {
-					cloneViaFileSync(context, source)
+					val fallbackFrom = when (plan.requestedEnhancedRoute) {
+						CloneRoute.ROOT -> PrismMode.Root
+						CloneRoute.SHIZUKU -> PrismMode.Shizuku
+						else -> null
+					}
+					cloneViaFileSync(context, source, fallbackFrom)
 					return
 				}
 
@@ -307,10 +333,12 @@ class PrismAppClones(
 										"exceptionClass=${result.exceptionClass} message=${result.message}",
 								)
 								if (result.resultCode == 1) {
+									capabilityRepo.markShizukuReady()
 									PrismAppListProvider.getInstance(context).refreshPackage(pkg, target, true)
 									onCloneStateChanged()
 									feedback(PrismLocale.wrap(context).getString(R.string.toast_successfully_cloned, source.label))
 								} else {
+									if (!ShizukuUtil.isAuthorized()) capabilityRepo.markShizukuUnavailable()
 									fail(result.userFacingReason())
 								}
 							}
@@ -319,6 +347,7 @@ class PrismAppClones(
 						override fun onServiceDisconnected(name: ComponentName?) {
 							DiagnosticLog.i(TAG, "Shizuku service disconnected before completion pkg=$pkg targetUser=${target.toId()} name=$name")
 							if (done.compareAndSet(false, true)) {
+								capabilityRepo.markShizukuUnavailable()
 								main.removeCallbacksAndMessages(null)
 								fail("service_disconnected")
 							}
@@ -326,6 +355,7 @@ class PrismAppClones(
 					}
 					main.postDelayed({
 						if (done.compareAndSet(false, true)) {
+							capabilityRepo.markShizukuUnavailable()
 							runCatching { Shizuku.unbindUserService(args, conn, true) }
 							fail("service_timeout")
 						}
@@ -336,6 +366,7 @@ class PrismAppClones(
 					} catch (e: Throwable) {
 						DiagnosticLog.e(TAG, "Shizuku bindUserService failed for $pkg", e)
 						if (done.compareAndSet(false, true)) {
+							capabilityRepo.markShizukuUnavailable()
 							main.removeCallbacksAndMessages(null)
 							fail(e.javaClass.simpleName.ifBlank { "bind_failed" })
 						}
@@ -360,7 +391,7 @@ class PrismAppClones(
 		 * and open a profile-side entry where the user can confirm installation
 		 * with Android's normal package installer.
 		 */
-		private fun cloneViaFileSync(context: Context, source: PrismAppInfo) {
+		private fun cloneViaFileSync(context: Context, source: PrismAppInfo, fallbackFrom: PrismMode?) {
 			analytics().event("clone_file_sync").with(Analytics.Param.ITEM_ID, pkg).send()
 			val appInfo = source as ApplicationInfo
 			// base + every split so split apps install as a complete package set.
@@ -372,7 +403,15 @@ class PrismAppClones(
 				feedback(PrismLocale.wrap(context).getString(R.string.toast_cannot_clone, source.label), isError = true)
 				return
 			}
-			feedback(PrismLocale.wrap(context).getString(R.string.toast_clone_file_sync_transferring))
+			val localized = PrismLocale.wrap(context)
+			feedback(if (fallbackFrom == null) {
+				localized.getString(R.string.toast_clone_file_sync_transferring)
+			} else {
+				localized.getString(
+					R.string.toast_clone_file_sync_fallback,
+					localized.getString(prismModeLabelRes(fallbackFrom)),
+				)
+			})
 			vm.viewModelScope.launch {
 				val bridge = FileBridgeService()
 				suspend fun importOnce() = withContext(Dispatchers.IO) {

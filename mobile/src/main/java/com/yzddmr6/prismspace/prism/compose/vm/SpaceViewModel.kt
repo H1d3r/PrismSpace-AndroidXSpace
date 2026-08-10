@@ -421,7 +421,7 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
             val result = SpaceDeletionCoordinator.delete(
                 getApplication(),
                 space,
-                useRoot = capabilityRepo.selectedMode.value == PrismMode.Root,
+                capabilities = capabilityRepo,
             )
             val fb = provisioningFeedback(result, res)
             if (result == DeleteSpaceResult.Success) {

@@ -74,6 +74,9 @@ class SpaceStateRepository(context: Context) {
     /** A creation attempt is authorized only by its own successful fact collection. */
     suspend fun preflightCreate(): SpaceState? = store.refreshAndRead("preflight_create")
 
+    /** A destructive route is authorized only by facts collected for that exact attempt. */
+    suspend fun preflightDelete(): SpaceState? = store.refreshAndRead("preflight_delete")
+
     /** Java bridge for legacy callers. Invoke from a worker thread only. */
     fun preflightCreateBlocking(): SpaceState? = runBlocking { preflightCreate() }
 

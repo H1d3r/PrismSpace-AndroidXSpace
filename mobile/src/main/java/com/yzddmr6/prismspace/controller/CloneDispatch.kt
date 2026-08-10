@@ -7,6 +7,15 @@ package com.yzddmr6.prismspace.controller
  */
 enum class CloneRoute { PARENT_INSTALLER, SYSTEM_ENABLE, SHIZUKU, ROOT, FILE_SYNC }
 
+data class CloneRuntimeReadiness(val shizukuReady: Boolean, val rootReady: Boolean)
+
+data class CloneRoutePlan(
+	val route: CloneRoute,
+	val requestedEnhancedRoute: CloneRoute? = null,
+) {
+	val usedNormalFallback: Boolean get() = route == CloneRoute.FILE_SYNC && requestedEnhancedRoute != null
+}
+
 /**
  * Four-method clone model for a non-system user app cloned from main space to dual space:
  *  - ROOT      : `pm install-existing` via su (auto, needs root granted).
@@ -15,17 +24,18 @@ enum class CloneRoute { PARENT_INSTALLER, SYSTEM_ENABLE, SHIZUKU, ROOT, FILE_SYN
  * The package-scheme installer route is unreachable for user apps under Android 16 managed
  * profiles, so normal mode uses file sync and foreground user confirmation instead.
  */
-fun cloneRoute(
+fun planCloneRoute(
 	isParentProfileTarget: Boolean,
 	isSourceSystemApp: Boolean,
 	mode: Int,                                  // @PrismAppClones.AppCloneMode
 	installerUsable: () -> Boolean,
-	shizukuPermissionGranted: () -> Boolean,
-	rootGranted: () -> Boolean = { false },
-): CloneRoute = when {
-	isParentProfileTarget && installerUsable()                          -> CloneRoute.PARENT_INSTALLER
-	isSourceSystemApp                                                   -> CloneRoute.SYSTEM_ENABLE
-	mode == PrismAppClones.MODE_ROOT && rootGranted()                  -> CloneRoute.ROOT
-	mode == PrismAppClones.MODE_SHIZUKU && shizukuPermissionGranted()  -> CloneRoute.SHIZUKU
-	else                                                                -> CloneRoute.FILE_SYNC
+	readiness: CloneRuntimeReadiness,
+): CloneRoutePlan = when {
+	isParentProfileTarget && installerUsable() -> CloneRoutePlan(CloneRoute.PARENT_INSTALLER)
+	isSourceSystemApp -> CloneRoutePlan(CloneRoute.SYSTEM_ENABLE)
+	mode == PrismAppClones.MODE_ROOT && readiness.rootReady -> CloneRoutePlan(CloneRoute.ROOT, CloneRoute.ROOT)
+	mode == PrismAppClones.MODE_SHIZUKU && readiness.shizukuReady -> CloneRoutePlan(CloneRoute.SHIZUKU, CloneRoute.SHIZUKU)
+	mode == PrismAppClones.MODE_ROOT -> CloneRoutePlan(CloneRoute.FILE_SYNC, CloneRoute.ROOT)
+	mode == PrismAppClones.MODE_SHIZUKU -> CloneRoutePlan(CloneRoute.FILE_SYNC, CloneRoute.SHIZUKU)
+	else -> CloneRoutePlan(CloneRoute.FILE_SYNC)
 }

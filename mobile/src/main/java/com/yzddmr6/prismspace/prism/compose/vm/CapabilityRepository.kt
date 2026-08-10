@@ -18,6 +18,25 @@ import kotlinx.coroutines.flow.StateFlow
 interface CapabilityRepository {
     val selectedMode: StateFlow<PrismMode>
     fun setSelectedMode(mode: PrismMode)
+    fun runtimeSnapshot(): RuntimeCapabilitySnapshot
+    fun markRootReady()
+    fun markRootUnavailable()
+    fun markShizukuReady()
+    fun markShizukuUnavailable()
+}
+
+sealed interface RootReadiness {
+    object Unknown : RootReadiness
+    object Unavailable : RootReadiness
+    data class ReadyUntil(val expiresAtElapsedMs: Long) : RootReadiness
+}
+
+data class RuntimeCapabilitySnapshot(
+    val preferredMode: PrismMode,
+    val shizukuReady: Boolean,
+    val rootReadiness: RootReadiness,
+) {
+    val rootReady: Boolean get() = rootReadiness is RootReadiness.ReadyUntil
 }
 
 /**
@@ -50,15 +69,52 @@ class SharedPrefsModeStore(context: Context) : ModeStore {
 class DefaultCapabilityRepository(
     private val shizukuAuthorized: () -> Boolean = { ShizukuUtil.isAuthorized() },
     private val modeStore: ModeStore = NoopModeStore,
+    private val elapsedRealtime: () -> Long = { System.nanoTime() / 1_000_000L },
+    private val rootReadyTtlMs: Long = DEFAULT_ROOT_READY_TTL_MS,
 ) : CapabilityRepository {
-    // Persisted choice wins; otherwise fall back to the original detect-once default.
-    private val _selectedMode = MutableStateFlow(
-        modeStore.load() ?: if (shizukuAuthorized()) PrismMode.Shizuku else PrismMode.Normal
-    )
+    private val _selectedMode = MutableStateFlow(modeStore.load() ?: PrismMode.Normal)
+    private var rootReadiness: RootReadiness = RootReadiness.Unknown
+    private var shizukuInvalidated = false
+
     override val selectedMode: StateFlow<PrismMode> = _selectedMode
+
     override fun setSelectedMode(mode: PrismMode) {
         _selectedMode.value = mode
         modeStore.save(mode)
+    }
+
+    @Synchronized override fun runtimeSnapshot(): RuntimeCapabilitySnapshot {
+        val now = elapsedRealtime()
+        val root = when (val cached = rootReadiness) {
+            is RootReadiness.ReadyUntil -> if (now < cached.expiresAtElapsedMs) cached else RootReadiness.Unknown
+            else -> cached
+        }
+        rootReadiness = root
+        return RuntimeCapabilitySnapshot(
+            preferredMode = _selectedMode.value,
+            shizukuReady = !shizukuInvalidated && runCatching(shizukuAuthorized).getOrDefault(false),
+            rootReadiness = root,
+        )
+    }
+
+    @Synchronized override fun markRootReady() {
+        rootReadiness = RootReadiness.ReadyUntil(elapsedRealtime() + rootReadyTtlMs)
+    }
+
+    @Synchronized override fun markRootUnavailable() {
+        rootReadiness = RootReadiness.Unavailable
+    }
+
+    @Synchronized override fun markShizukuReady() {
+        shizukuInvalidated = false
+    }
+
+    @Synchronized override fun markShizukuUnavailable() {
+        shizukuInvalidated = true
+    }
+
+    private companion object {
+        const val DEFAULT_ROOT_READY_TTL_MS = 2 * 60 * 1_000L
     }
 }
 
