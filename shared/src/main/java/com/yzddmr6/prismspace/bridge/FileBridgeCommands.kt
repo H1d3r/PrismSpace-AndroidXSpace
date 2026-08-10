@@ -122,6 +122,13 @@ data class ImportApkSet(
 }
 
 @Parcelize
+data class CompleteClonePreparation(val packageName: String) : ParentCommand<Boolean> {
+    override val id get() = "file.complete_clone_preparation"
+    override fun encodeResult(result: Boolean, out: Bundle) = out.putBoolean(RESULT, result)
+    override fun decodeResult(src: Bundle) = src.getBoolean(RESULT)
+}
+
+@Parcelize
 data object QueryLatestVisibleImage : ProfileCommand<ProfileMediaEntryDto?> {
     override val id get() = "file.query_latest_visible_image"
     override fun encodeResult(result: ProfileMediaEntryDto?, out: Bundle) = out.putParcelable(RESULT, result)
@@ -185,6 +192,7 @@ internal val FILE_BRIDGE_COMMAND_SAMPLES: List<BridgeCommand<*>> = listOf(
     FinishWriteSession(BridgeFileStore.Downloads, "content://target"),
     AbortWriteSession(BridgeFileStore.Downloads, "content://target"),
     ImportApkSet(listOf("/base.apk"), "label", "pkg", "Download/PrismSpace"),
+    CompleteClonePreparation("pkg"),
     QueryLatestVisibleImage,
     OpenImagePickerInProfile,
     OpenLatestForRead(BridgeFileStore.Downloads),

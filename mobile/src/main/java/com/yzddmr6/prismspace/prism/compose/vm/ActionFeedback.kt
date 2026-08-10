@@ -33,6 +33,7 @@ private fun zhTemplate(id: Int): String = when (id) {
     R.string.lz_vm_chip_frozen -> "已冻结"
     R.string.lz_vm_chip_running -> "运行中"
     R.string.lz_vm_chip_cloned -> "已双开"
+    R.string.lz_vm_chip_pending_install -> "待安装"
     R.string.lz_vm_chip_not_cloned -> "未双开"
     R.string.lz_vm_batch_progress -> "正在处理 %1\$d/%2\$d…"
     R.string.lz_vm_creating_space -> "正在创建双开空间…"

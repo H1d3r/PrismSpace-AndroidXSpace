@@ -41,6 +41,9 @@ import com.yzddmr6.prismspace.prism.compose.theme.PrismSpacing
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceRow
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceSegment
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceViewModel
+import com.yzddmr6.prismspace.prism.compose.vm.ActionFeedback
+import com.yzddmr6.prismspace.prism.compose.vm.AppFeedbackBus
+import com.yzddmr6.prismspace.prism.service.FileBridgeService
 import com.yzddmr6.prismspace.prism.ui.PrismAppsViewModel
 import com.yzddmr6.prismspace.shortcut.PrismAppShortcut
 import kotlinx.coroutines.launch
@@ -192,6 +195,17 @@ fun AppActionSheet(
                     ) {
                         dismiss()
                         onJumpDual()
+                    }
+                } else if (row.prepared) {
+                    SheetAction(
+                        icon = PrismIcons.Add,
+                        title = stringResource(R.string.lz_app_continue_install),
+                    ) {
+                        dismiss()
+                        if (activity != null) {
+                            val result = FileBridgeService().openProfileInstallEntry(activity)
+                            if (!result.success) AppFeedbackBus.emit(ActionFeedback(result.message, true))
+                        }
                     }
                 } else {
                     SheetAction(

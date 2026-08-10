@@ -21,10 +21,11 @@ class SpaceMapTest {
         launchable: Boolean = true,
         system: Boolean = false,
         cloned: Boolean = false,
+        prepared: Boolean = false,
         critical: Boolean = false,
     ) = SpaceAppInput(
         pkg = pkg, label = label, frozen = frozen, suspended = suspended,
-        launchable = launchable, system = system, cloned = cloned,
+        launchable = launchable, system = system, cloned = cloned, prepared = prepared,
         segment = SpaceSegment.Dual,
         critical = critical,
     )
@@ -37,9 +38,10 @@ class SpaceMapTest {
         launchable: Boolean = true,
         system: Boolean = false,
         cloned: Boolean = false,
+        prepared: Boolean = false,
     ) = SpaceAppInput(
         pkg = pkg, label = label, frozen = frozen, suspended = suspended,
-        launchable = launchable, system = system, cloned = cloned,
+        launchable = launchable, system = system, cloned = cloned, prepared = prepared,
         segment = SpaceSegment.Main,
     )
 
@@ -93,6 +95,14 @@ class SpaceMapTest {
         val rows = mapRows(listOf(mainInput(cloned = false)))
         assertEquals("未双开", rows[0].chipText)
         assertFalse(rows[0].chipOk)
+    }
+
+    @Test
+    fun `main prepared app is pending rather than cloned`() {
+        val row = mapRows(listOf(mainInput(cloned = false, prepared = true))).single()
+        assertEquals("待安装", row.chipText)
+        assertFalse(row.chipOk)
+        assertTrue(row.prepared)
     }
 
     @Test

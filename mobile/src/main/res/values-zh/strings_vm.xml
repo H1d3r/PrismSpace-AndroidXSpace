@@ -4,6 +4,7 @@
     <string name="lz_vm_chip_frozen">已冻结</string>
     <string name="lz_vm_chip_running">运行中</string>
     <string name="lz_vm_chip_cloned">已双开</string>
+    <string name="lz_vm_chip_pending_install">待安装</string>
     <string name="lz_vm_chip_not_cloned">未双开</string>
 
     <!-- SpaceViewModel: batch progress -->

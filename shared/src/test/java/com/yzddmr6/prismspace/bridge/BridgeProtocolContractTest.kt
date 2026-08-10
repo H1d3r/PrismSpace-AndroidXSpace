@@ -141,6 +141,7 @@ class BridgeProtocolContractTest {
             packageName: String,
             cloneLocation: String,
         ): String? = null
+        override fun completeClonePreparation(context: Context, packageName: String) = true
         override fun queryLatestVisibleImage(context: Context): ProfileMediaEntryDto? = null
         override fun openImagePicker(context: Context) = true
         override fun openLatestForRead(context: Context, store: BridgeFileStore): ReadSessionDto? = null

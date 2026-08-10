@@ -92,9 +92,12 @@ class PrismAppClones(
 	private val onCloneStateChanged: () -> Unit = {},
 ) {
 
-	fun request() {
+	fun request(): CloneRequestOutcome {
 		val names = PrismNameManager.getAllNames(context)
-		check(names.isNotEmpty()) { "No PrismSpace" }
+		if (names.isEmpty()) {
+			feedback(PrismLocale.wrap(context).getString(R.string.fb_need_create_space), isError = true)
+			return CloneRequestOutcome.Unavailable
+		}
 		// Clone is one-way 主→双 only: never list the parent (main) profile as a copy target.
 		// You can't clone an app onto the space it already lives in.
 		val targets: MutableMap<UserHandle, String> = LinkedHashMap(names)
@@ -161,6 +164,7 @@ class PrismAppClones(
 			val mode = remember { mutableStateOf(defaultMode) }
 			dialog.compose(options, mode) { fragment.dismiss(); AppLaunchSignals.signalOpenRunMode() }
 		}
+		return CloneRequestOutcome.Started
 	}
 
 	/**
@@ -172,14 +176,15 @@ class PrismAppClones(
 	 * Mode follows [CapabilityRepository.selectedMode] — the single source of truth — rather than
 	 * re-detecting here, so it can never disagree with what Settings shows.
 	 */
-	fun requestSilently() {
-		val target = PrismNameManager.getAllNames(context).keys.firstOrNull() ?: return
+	fun requestSilently(): CloneRequestOutcome {
+		val target = PrismNameManager.getAllNames(context).keys.firstOrNull() ?: return CloneRequestOutcome.Unavailable
 		val mode = when (CapabilityRepositoryProvider.get(context).selectedMode.value) {
 			PrismMode.Root -> MODE_ROOT
 			PrismMode.Shizuku -> MODE_SHIZUKU
 			else -> MODE_INSTALLER   // 普通模式 → 文件同步
 		}
 		makeAppAvailable(target, mode)
+		return CloneRequestOutcome.Started
 	}
 
 	/** Either by unfreezing initially frozen (system) app, enabling disabled system app, or clone user app. */
@@ -404,6 +409,8 @@ class PrismAppClones(
 					}
 					return@launch
 				}
+				ClonePreparationStore.add(context, pkg)
+				onCloneStateChanged()
 
 				// Record the outgoing half in the main-space history as "label-package";
 				// the dual half is recorded inside importApksToProfile.
@@ -422,7 +429,7 @@ class PrismAppClones(
 					)
 					if (!openResult.success) feedback(openResult.message, isError = true)
 				}
-				.setNegativeButton(android.R.string.ok, null).show()
+				.setNegativeButton(R.string.lz_app_filesync_install_later, null).show()
 			}
 		}
 
@@ -465,3 +472,5 @@ internal data class PrivilegedCloneReply(
 }
 
 private const val TAG = "Prism.AC"
+
+enum class CloneRequestOutcome { Started, Unavailable }

@@ -39,6 +39,7 @@ interface FileBridgePort {
         packageName: String,
         cloneLocation: String,
     ): String?
+    fun completeClonePreparation(context: Context, packageName: String): Boolean
     fun queryLatestVisibleImage(context: Context): ProfileMediaEntryDto?
     fun openImagePicker(context: Context): Boolean
     fun openLatestForRead(context: Context, store: BridgeFileStore): ReadSessionDto?

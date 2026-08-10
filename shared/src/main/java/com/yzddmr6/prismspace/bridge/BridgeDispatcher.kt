@@ -40,6 +40,9 @@ internal object BridgeDispatcher {
             is ImportApkSet -> fileBridge(command) {
                 importApkSet(context, command.paths, command.label, command.packageName, command.cloneLocation)
             }
+            is CompleteClonePreparation -> fileBridge(command) {
+                completeClonePreparation(context, command.packageName)
+            }
             QueryLatestVisibleImage -> fileBridge(QueryLatestVisibleImage) { queryLatestVisibleImage(context) }
             OpenImagePickerInProfile -> fileBridge(OpenImagePickerInProfile) { openImagePicker(context) }
             is OpenLatestForRead -> fileBridge(command) { openLatestForRead(context, command.store) }

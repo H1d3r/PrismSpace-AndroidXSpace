@@ -13,6 +13,7 @@ import com.yzddmr6.prismspace.analytics.DiagnosticLog
 import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.controller.PrismAppClones
 import com.yzddmr6.prismspace.controller.PrismAppControl
+import com.yzddmr6.prismspace.controller.ClonePreparationStore
 import com.yzddmr6.prismspace.controller.UserCloneRegistry
 import com.yzddmr6.prismspace.data.PrismAppListProvider
 import com.yzddmr6.prismspace.engine.LaunchResult
@@ -67,6 +68,7 @@ internal data class SpaceAppInput(
     val launchable: Boolean,
     val system: Boolean,
     val cloned: Boolean,       // true = this main-space app is also in dual profile
+    val prepared: Boolean = false,
     val segment: SpaceSegment,
     val critical: Boolean = false,
 )
@@ -83,6 +85,7 @@ data class SpaceRow(
     val launchable: Boolean,
     val system: Boolean,
     val cloned: Boolean,
+    val prepared: Boolean,
     val segment: SpaceSegment,
     val chipText: String,      // status label for the chip
     val chipOk: Boolean,       // true → ok-green, false → muted/warn
@@ -108,6 +111,7 @@ internal fun mapRows(inputs: List<SpaceAppInput>, res: StringResolver = zhFallba
             else res(R.string.lz_vm_chip_running, emptyArray()) to true
         SpaceSegment.Main ->
             if (app.cloned) res(R.string.lz_vm_chip_cloned, emptyArray()) to true
+            else if (app.prepared) res(R.string.lz_vm_chip_pending_install, emptyArray()) to false
             else res(R.string.lz_vm_chip_not_cloned, emptyArray()) to false
     }
     SpaceRow(
@@ -118,6 +122,7 @@ internal fun mapRows(inputs: List<SpaceAppInput>, res: StringResolver = zhFallba
         launchable = app.launchable,
         system    = app.system,
         cloned    = app.cloned,
+        prepared  = app.prepared,
         segment   = app.segment,
         chipText  = chipText,
         chipOk    = chipOk,
@@ -571,10 +576,11 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
                                         )
                                         // Headless clone: no per-app selector; mode follows the configured
                                         // run mode. Batch is confirmed once before this loop.
-                                    PrismAppClones(activity, prismAppsVm, app).requestSilently()
+                                    if (PrismAppClones(activity, prismAppsVm, app).requestSilently() ==
+                                        com.yzddmr6.prismspace.controller.CloneRequestOutcome.Started
+                                    ) succeeded++ else failures.add(pkg)
                                     }
                                     kotlinx.coroutines.delay(200)
-                                    succeeded++
                                 }
                             }.onFailure { failures.add(pkg) }
                         }
@@ -857,6 +863,7 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
             }, res)
 
         val dualPkgs: Set<String> = allDualApps.map { it.packageName }.toSet()
+        val pendingClonePkgs = ClonePreparationStore.reconcileInstalled(context, dualPkgs)
         val mainAppsList = spaceRepo.installedApps(spaceRepo.mainSpace())
             .filter { it.isInstalled && it.enabled && it.packageName != context.packageName }
             .sortedBy { it.label.toString().lowercase() }
@@ -873,6 +880,7 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
                     installedInDual = app.packageName in dualPkgs,
                     systemCloneMarked = UserCloneRegistry.contains(context, app.packageName),
                 ),
+                prepared  = app.packageName in pendingClonePkgs,
                 segment   = SpaceSegment.Main,
                 critical  = app.isCritical,
             )

@@ -4,6 +4,7 @@
     <string name="lz_vm_chip_frozen">Frozen</string>
     <string name="lz_vm_chip_running">Running</string>
     <string name="lz_vm_chip_cloned">Cloned</string>
+    <string name="lz_vm_chip_pending_install">Ready to install</string>
     <string name="lz_vm_chip_not_cloned">Not cloned</string>
 
     <!-- SpaceViewModel: batch progress -->

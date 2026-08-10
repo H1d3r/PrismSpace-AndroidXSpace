@@ -30,6 +30,8 @@
     <string name="lz_app_method_root_summary_not_enabled">未启用 Root 模式（去设置启用后可自动安装）</string>
     <string name="lz_app_filesync_open_install_entry">打开双开空间安装入口</string>
     <string name="lz_app_filesync_allow_file_manager">授权系统文件管理器</string>
+    <string name="lz_app_filesync_install_later">稍后安装</string>
+    <string name="lz_app_continue_install">继续安装</string>
     <string name="lz_app_clone_shizuku_failed">Shizuku 克隆失败（%1$s）。请检查 Shizuku/Sui 授权，或改用文件同步安装。</string>
 
     <!-- DeleteSpaceSheets -->

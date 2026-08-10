@@ -3,6 +3,7 @@ package com.yzddmr6.prismspace.prism.service
 import android.app.Activity
 import android.app.admin.DevicePolicyManager.FLAG_MANAGED_CAN_ACCESS_PARENT
 import android.content.ComponentName
+import android.content.ContentProviderOperation
 import android.content.ContentValues
 import android.content.ContentResolver
 import android.content.ContentUris
@@ -42,6 +43,7 @@ import com.yzddmr6.prismspace.bridge.TransferHistoryDto
 import com.yzddmr6.prismspace.bridge.WritePerAppShareMarker
 import com.yzddmr6.prismspace.bridge.WriteSessionDto
 import com.yzddmr6.prismspace.engine.CrossProfile
+import com.yzddmr6.prismspace.controller.ClonePreparationStore
 import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.prism.model.PerAppFileSharePolicy
 import com.yzddmr6.prismspace.prism.model.PerAppFileShareSpec
@@ -56,6 +58,7 @@ import java.io.OutputStream
 import java.io.File
 import java.io.FileNotFoundException
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.UUID
 import java.nio.charset.StandardCharsets
 
 data class FileBridgeSelfTestResult(
@@ -493,13 +496,12 @@ class FileBridgeService {
      */
     fun importApksToProfile(context: Context, apkFiles: List<java.io.File>, label: String, packageName: String): FileTransferResult {
         return try {
-            val paths = ArrayList(apkFiles.filter { it.canRead() }.map { it.absolutePath })
-            if (paths.isEmpty()) return FileTransferResult(
+            val paths = completeReadableApkPaths(apkFiles) ?: return FileTransferResult(
                 false,
                 str(context, R.string.fb_apk_unreadable),
                 failureReason = FileTransferFailureReason.SourceUnreadable,
             )
-            val safeBase = FileTransferPolicy.safeDisplayName("$label-$packageName")
+            val safeBase = FileTransferPolicy.safeDisplayName(packageName)
             val cloneLocation = "Download/PrismSpace"
             val firstUriResult = runProfileBridgeOperation(
                 context,
@@ -520,6 +522,14 @@ class FileBridgeService {
             DiagnosticLog.e(TAG, "apks import failed", e)
             FileTransferResult(false, e.message ?: str(context, R.string.fb_apk_transfer_failed), failureReason = FileTransferFailureReason.IOError)
         }
+    }
+
+    internal fun completeReadableApkPaths(
+        apkFiles: List<File>,
+        canRead: (File) -> Boolean = File::canRead,
+    ): ArrayList<String>? {
+        if (apkFiles.isEmpty() || apkFiles.any { !canRead(it) }) return null
+        return ArrayList(apkFiles.map(File::getAbsolutePath))
     }
 
     fun importImageToProfileGallery(context: Context, sourceUri: Uri): FileTransferResult {
@@ -1028,20 +1038,21 @@ internal object MobileFileBridgePort : FileBridgePort {
         cloneLocation: String,
     ): String? {
         require(paths.size <= MAX_APK_PATH_COUNT) { "APK set exceeds $MAX_APK_PATH_COUNT entries" }
-        val safeBase = FileTransferPolicy.safeDisplayName("$label-$packageName")
-        var first: String? = null
-        paths.forEachIndexed { index, path ->
-            val name = if (index == 0) "$safeBase.apk" else "$safeBase.split$index.apk"
-            val uri = AndroidFileBridgeDownloadStore(context).insertFromFile(
-                name,
-                "application/vnd.android.package-archive",
-                File(path),
-                FileBridgeDownloadWriter.DEFAULT_RELATIVE_PATH,
-            )
-            if (first == null) first = uri
-        }
+        val safeBase = FileTransferPolicy.safeDisplayName(packageName)
+        val legacySafeBase = FileTransferPolicy.safeDisplayName("$label-$packageName")
+        val first = ApkSuitePublisher(AndroidApkSuiteStore(context)).replace(
+            paths,
+            safeBase,
+            FileBridgeDownloadWriter.DEFAULT_RELATIVE_PATH,
+            previousSafeBases = setOf(safeBase, legacySafeBase),
+        )
         TransferHistoryStore.record(context, label, cloneLocation, false, packageName)
         return first
+    }
+
+    override fun completeClonePreparation(context: Context, packageName: String): Boolean {
+        ClonePreparationStore.remove(context, packageName)
+        return true
     }
 
     override fun queryLatestVisibleImage(context: Context): ProfileMediaEntryDto? =
@@ -1358,6 +1369,68 @@ internal interface FileBridgeDownloadStore {
     fun insert(displayName: String, mimeType: String, bytes: ByteArray, relativePath: String): String
 }
 
+internal object ApkSuiteNames {
+    fun canonical(safeBase: String, index: Int): String =
+        if (index == 0) "$safeBase.apk" else "$safeBase.split$index.apk"
+
+    fun pending(safeBase: String, token: String, index: Int): String =
+        ".$safeBase.prism-pending-$token-$index.apk"
+
+    fun isPublishedFor(safeBase: String, displayName: String): Boolean {
+        val base = Regex.escape(safeBase)
+        return Regex("^$base(?:\\.split\\d+)?(?: \\(\\d+\\))?\\.apk$").matches(displayName) ||
+            Regex("^$base \\(\\d+\\)(?:\\.split\\d+)?\\.apk$").matches(displayName)
+    }
+
+    fun isPendingFor(safeBase: String, displayName: String): Boolean =
+        Regex("^\\.${Regex.escape(safeBase)}\\.prism-pending-[A-Za-z0-9-]+-\\d+\\.apk$").matches(displayName)
+}
+
+internal data class StagedApk(val uri: String, val canonicalName: String)
+internal data class PublishedApk(val uri: String, val displayName: String)
+
+internal interface ApkSuiteStore {
+    fun stage(sourcePath: String, pendingName: String, canonicalName: String, relativePath: String): StagedApk
+    fun existingFor(safeBase: String, relativePath: String): List<PublishedApk>
+    fun replaceAtomically(previous: List<PublishedApk>, staged: List<StagedApk>)
+    fun abort(staged: StagedApk)
+}
+
+internal class ApkSuitePublisher(
+    private val store: ApkSuiteStore,
+    private val tokenFactory: () -> String = { UUID.randomUUID().toString() },
+) {
+    fun replace(
+        paths: List<String>,
+        safeBase: String,
+        relativePath: String,
+        previousSafeBases: Set<String> = setOf(safeBase),
+    ): String? {
+        require(paths.isNotEmpty()) { "APK suite is empty" }
+        val token = tokenFactory()
+        val previous = previousSafeBases
+            .flatMap { store.existingFor(it, relativePath) }
+            .distinctBy(PublishedApk::uri)
+        val staged = ArrayList<StagedApk>(paths.size)
+        try {
+            paths.forEachIndexed { index, sourcePath ->
+                val canonical = ApkSuiteNames.canonical(safeBase, index)
+                staged += store.stage(
+                    sourcePath,
+                    ApkSuiteNames.pending(safeBase, token, index),
+                    canonical,
+                    relativePath,
+                )
+            }
+            store.replaceAtomically(previous, staged)
+            return staged.first().uri
+        } catch (error: Throwable) {
+            staged.forEach { runCatching { store.abort(it) } }
+            throw error
+        }
+    }
+}
+
 internal class FileBridgeMediaWriter(private val store: FileBridgeMediaStore) {
 
     fun write(
@@ -1502,34 +1575,6 @@ private class AndroidFileBridgeDownloadStore(private val context: Context) : Fil
         return uri.toString()
     }
 
-    /** Stream from a source File (read locally inside this — the profile — process) into a MediaStore
-     *  Downloads entry. No full-memory load, no Binder byte limit. Used by the file-sync clone path to copy a
-     *  shared, world-readable /data/app APK into the dual space for manual install. */
-    fun insertFromFile(displayName: String, mimeType: String, src: java.io.File, relativePath: String): String {
-        // No pre-delete: cloning the same app twice now yields "App (1).apk" instead of destroying the first.
-        val resolver = context.contentResolver
-        val values = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
-            put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
-                put(MediaStore.MediaColumns.IS_PENDING, 1)
-            }
-        }
-        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-            ?: error("Unable to create Downloads entry")
-        src.inputStream().use { input ->
-            resolver.openOutputStream(uri)?.use { output -> input.copyTo(output, 64 * 1024) }
-                ?: error("Unable to open Downloads output stream")
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            resolver.update(uri, ContentValues().apply {
-                put(MediaStore.MediaColumns.IS_PENDING, 0)
-            }, null, null)
-        }
-        return uri.toString()
-    }
-
     fun insertFromStream(displayName: String, mimeType: String, input: InputStream, relativePath: String): String {
         val resolver = context.contentResolver
         val session = resolver.openPendingWriteSession(
@@ -1607,6 +1652,81 @@ private class AndroidFileBridgeDownloadStore(private val context: Context) : Fil
 
     private companion object {
         private const val PRISM_RELATIVE_PATH = "Download/PrismSpace/"
+    }
+}
+
+private class AndroidApkSuiteStore(private val context: Context) : ApkSuiteStore {
+    private val resolver get() = context.contentResolver
+    private val collection get() = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+
+    override fun stage(
+        sourcePath: String,
+        pendingName: String,
+        canonicalName: String,
+        relativePath: String,
+    ): StagedApk {
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, pendingName)
+            put(MediaStore.MediaColumns.MIME_TYPE, "application/vnd.android.package-archive")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+        }
+        val uri = resolver.insert(collection, values) ?: error("Unable to stage APK")
+        try {
+            File(sourcePath).inputStream().use { input ->
+                resolver.openOutputStream(uri)?.use { output -> input.copyTo(output, STREAM_BUFFER_SIZE) }
+                    ?: error("Unable to open staged APK output")
+            }
+        } catch (error: Throwable) {
+            runCatching { resolver.delete(uri, null, null) }
+            throw error
+        }
+        return StagedApk(uri.toString(), canonicalName)
+    }
+
+    override fun existingFor(safeBase: String, relativePath: String): List<PublishedApk> {
+        val projection = arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME)
+        val selection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            "${MediaStore.MediaColumns.RELATIVE_PATH}=? AND (${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ? OR ${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?)"
+        } else {
+            "${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ? OR ${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?"
+        }
+        val args = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            arrayOf(relativePath, "$safeBase%.apk", ".$safeBase.prism-pending-%.apk")
+        } else {
+            arrayOf("$safeBase%.apk", ".$safeBase.prism-pending-%.apk")
+        }
+        return buildList {
+            resolver.query(collection, projection, selection, args, null)?.use { cursor ->
+                val idColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+                val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+                while (cursor.moveToNext()) {
+                    val name = cursor.getString(nameColumn)
+                    if (ApkSuiteNames.isPublishedFor(safeBase, name) || ApkSuiteNames.isPendingFor(safeBase, name)) {
+                        add(PublishedApk(ContentUris.withAppendedId(collection, cursor.getLong(idColumn)).toString(), name))
+                    }
+                }
+            }
+        }
+    }
+
+    override fun replaceAtomically(previous: List<PublishedApk>, staged: List<StagedApk>) {
+        val operations = ArrayList<ContentProviderOperation>(previous.size + staged.size)
+        previous.forEach { operations += ContentProviderOperation.newDelete(Uri.parse(it.uri)).build() }
+        staged.forEach { apk ->
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, apk.canonicalName)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) put(MediaStore.MediaColumns.IS_PENDING, 0)
+            }
+            operations += ContentProviderOperation.newUpdate(Uri.parse(apk.uri)).withValues(values).build()
+        }
+        resolver.applyBatch(MediaStore.AUTHORITY, operations)
+    }
+
+    override fun abort(staged: StagedApk) {
+        resolver.delete(Uri.parse(staged.uri), null, null)
     }
 }
 
