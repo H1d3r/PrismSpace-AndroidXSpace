@@ -20,6 +20,7 @@
     <string name="prism_settings_language">Language</string>
     <string name="prism_language_system">Follow system</string>
     <string name="prism_language_zh">简体中文</string>
+    <string name="prism_language_zh_tw">繁體中文</string>
     <string name="prism_language_en">English</string>
 
 
@@ -63,22 +64,17 @@
     <string name="prism_help_main_space_title">Main-space management</string>
     <string name="prism_help_main_space_body">Main-space management gives PrismSpace device-wide control, not just clone-space control. Use it only if you need features such as freezing main-space apps or applying ADB protection to the whole device.\n\nThis is optional. Clone-space app copy and launch do not require main-space management.</string>
 
-    <string name="action_rescind">Rescind</string>
 
 
 
     <string name="dialog_title_warning">WARNING</string>
     <string name="dialog_reactivate_message">PrismSpace was unexpectedly deactivated, please grant the Device Admin permission to re-activate.</string>
-    <string name="dialog_destroy_message">Are you sure you want to destroy the whole PrismSpace? You will LOSE ALL THE DATA in PrismSpace.\n\nDon\'t worry, apps and data outside PrismSpace will NEVER be affected.</string>
-    <string name="dialog_destroy_message_for_managed_user">If main space is also managed by PrismSpace, you cannot re-create PrismSpace space unless the control for main space is rescinded.\n\nAre you sure you still want to destroy the PrismSpace?</string>
-    <string name="dialog_rescind_message">Are you sure to rescind?\n\nYou will have to go through the setup flow again to bring it back, that means PrismSpace space and all accounts must be removed first if your device is not rooted.</string>
     <string name="dialog_cannot_destroy_message">To remove the whole PrismSpace space, please open system \"Settings - Accounts\" and select \"Remove work profile\".</string>
     <string name="dialog_critical_app_warning">This app (or component) is critical for the Android system or other apps to work properly. If proceed, some apps or the whole system may become unstable or malfunctional.\n\nDo you really want to proceed?</string>
     <string name="dialog_space_setup_failed">Sorry, something went wrong in PrismSpace setup. (stage %1$d)</string>
     <string name="dialog_root_setup_profile_exists">A PrismSpace clone space already exists on this device. To create it again, first remove the existing one from the main space, then try setup again.</string>
 
     <string name="action_continue">Continue</string>
-    <string name="action_destroy">Destroy</string>
 
     <string name="prompt_disable_sys_app_as_removal">System app can only be disabled. It\'s similar to the removal of an installed app.\n\nPrismSpace has no privilege to do that, instead you will be redirected to the system settings app, there you can click the \"DISABLE\" button to proceed.</string>
     <string name="toast_enable_disabled_system_app">Please re-enable this clone.</string>

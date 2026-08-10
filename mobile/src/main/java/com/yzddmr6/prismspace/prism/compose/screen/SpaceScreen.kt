@@ -68,12 +68,10 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavHostController
 import com.yzddmr6.prismspace.prism.compose.component.AppActionSheet
 import com.yzddmr6.prismspace.prism.compose.component.DeleteFinalSheet
 import com.yzddmr6.prismspace.prism.compose.component.DeleteWarningSheet
 import com.yzddmr6.prismspace.prism.compose.component.DisabledAlpha
-import com.yzddmr6.prismspace.prism.compose.component.ExperimentalUnsupportedSheet
 import com.yzddmr6.prismspace.prism.compose.component.PrismIcons
 import com.yzddmr6.prismspace.prism.compose.component.SpaceSegmentChips
 import com.yzddmr6.prismspace.prism.compose.nav.AppLaunchSignals
@@ -101,13 +99,12 @@ import com.yzddmr6.prismspace.util.UserHandles
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SpaceScreen(nav: NavHostController) {
+fun SpaceScreen() {
     val vm: SpaceViewModel = viewModel()
     val prismAppsVm: PrismAppsViewModel = viewModel()
     val uiState by vm.uiState.collectAsState()
     val pendingUninstall by vm.pendingUninstallRequest.collectAsState()
     val context = LocalContext.current
-    LaunchedEffect(Unit) { vm.syncExperimentalFlag() }
     val activity = context as? FragmentActivity
     val uninstallLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         vm.onUninstallActivityResult(result.resultCode)
@@ -225,7 +222,6 @@ fun SpaceScreen(nav: NavHostController) {
                         systemAppsOpen = false
                         vm.selectSpace(it)
                     },
-                    onCreate = { vm.createSpace() },
                     onSearchChanged = {
                         if (systemAppsOpen) systemSearchQuery = it else searchQuery = it
                     },
@@ -295,10 +291,6 @@ fun SpaceScreen(nav: NavHostController) {
                 },
             )
         }
-    }
-
-    uiState.experimentalCreateBlocked?.let { info ->
-        ExperimentalUnsupportedSheet(info = info, onDismiss = { vm.clearExperimentalCreateBlocked() })
     }
 
     if (showDeleteWarning && selectedDualSpace != null) {
@@ -650,7 +642,6 @@ private fun SpaceToolbar(
     menuExpanded: Boolean,
     onSelectMain: () -> Unit,
     onSelectDual: (String) -> Unit,
-    onCreate: () -> Unit,
     onSearchChanged: (String) -> Unit,
     onOpenSystemApps: () -> Unit,
     onCloseSystemApps: () -> Unit,
@@ -673,13 +664,11 @@ private fun SpaceToolbar(
             spaces = uiState.spaces,
             selectedMain = uiState.segment == SpaceSegment.Main,
             selectedDualId = selectedDualChipId(uiState.segment, uiState.selectedDualSpaceId, uiState.spaces),
-            showCreate = uiState.experimentalMultiProfile,
         )
         SpaceSegmentChips(
             chips = chips,
             onSelectMain = onSelectMain,
             onSelectDual = onSelectDual,
-            onCreate = onCreate,
         )
 
         Spacer(modifier = Modifier.height(PrismSpacing.Sm))
@@ -952,7 +941,6 @@ private fun AppCard(
     onLongClick: () -> Unit,
 ) {
     val extra = LocalPrismExtraColors.current
-    val context = LocalContext.current
     val chipBg = if (row.chipOk) extra.okContainer else MaterialTheme.colorScheme.surfaceVariant
     val chipFg = if (row.chipOk) extra.ok else MaterialTheme.colorScheme.onSurfaceVariant
 

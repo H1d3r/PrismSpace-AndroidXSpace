@@ -13,16 +13,13 @@ class AppPolicyModelTest {
         assertEquals(BackgroundPolicy.SystemDefault, policy.background)
         assertEquals(NetworkPolicy.SystemDefault, policy.network)
         assertEquals(NotificationPolicy.SystemDefault, policy.notifications)
-        assertEquals("隔离", policy.fileAccessSummary)
-        assertEquals("系统默认", policy.backgroundSummary)
-        assertEquals("系统默认", policy.networkSummary)
     }
 
     @Test fun profileOwnerActionsAreAvailableWithoutShizukuOrRoot() {
         val state = CapabilityState(
             normal = CapabilityAvailability.Available,
-            shizuku = CapabilityAvailability.NeedsSetup("Shizuku 未连接"),
-            root = CapabilityAvailability.Unsupported("Root 不可用"),
+            shizuku = CapabilityAvailability.NeedsSetup,
+            root = CapabilityAvailability.Unsupported,
             profileOwner = CapabilityAvailability.Available,
         )
 
@@ -34,8 +31,8 @@ class AppPolicyModelTest {
     @Test fun enhancedIsolationRequiresShizukuAdbBeforeRootFallback() {
         val state = CapabilityState(
             normal = CapabilityAvailability.Available,
-            shizuku = CapabilityAvailability.NeedsSetup("Shizuku 未连接"),
-            root = CapabilityAvailability.AvailableButDisabled("Root 可用但未启用"),
+            shizuku = CapabilityAvailability.NeedsSetup,
+            root = CapabilityAvailability.AvailableButDisabled,
             profileOwner = CapabilityAvailability.Available,
         )
 
@@ -44,7 +41,6 @@ class AppPolicyModelTest {
         val sharedMedia = AppPolicyPlanner.availability(PolicyAction.ConfigureSharedMedia, state)
 
         assertTrue(network is CapabilityAvailability.NeedsSetup)
-        assertEquals("需要 Shizuku/ADB；Root 仅作为兜底", (network as CapabilityAvailability.NeedsSetup).reason)
         assertTrue(background is CapabilityAvailability.NeedsSetup)
         assertTrue(sharedMedia is CapabilityAvailability.NeedsSetup)
     }
@@ -53,7 +49,7 @@ class AppPolicyModelTest {
         val state = CapabilityState(
             normal = CapabilityAvailability.Available,
             shizuku = CapabilityAvailability.Available,
-            root = CapabilityAvailability.Unsupported("Root 不可用"),
+            root = CapabilityAvailability.Unsupported,
             profileOwner = CapabilityAvailability.Available,
         )
 

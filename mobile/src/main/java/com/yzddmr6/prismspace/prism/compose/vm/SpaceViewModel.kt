@@ -17,22 +17,16 @@ import com.yzddmr6.prismspace.controller.ClonePreparationStore
 import com.yzddmr6.prismspace.controller.UserCloneRegistry
 import com.yzddmr6.prismspace.data.PrismAppListProvider
 import com.yzddmr6.prismspace.engine.LaunchResult
-import com.yzddmr6.prismspace.prism.compose.settings.ExperimentalFlags
-import com.yzddmr6.prismspace.prism.compose.space.CreateSpaceResult
 import com.yzddmr6.prismspace.prism.compose.space.DeleteSpaceResult
-import com.yzddmr6.prismspace.prism.compose.space.ExperimentalBlockInfo
 import com.yzddmr6.prismspace.prism.compose.space.PrismSpace
 import com.yzddmr6.prismspace.prism.compose.space.PrismSpaceKind
 import com.yzddmr6.prismspace.prism.compose.space.resolveSpaceSelection
-import com.yzddmr6.prismspace.prism.compose.space.SpaceCapProbe
-import com.yzddmr6.prismspace.prism.compose.space.SpaceProvisioningEngine
 import com.yzddmr6.prismspace.prism.compose.space.SpaceDeletionCoordinator
 import com.yzddmr6.prismspace.prism.compose.space.SpaceRepository
 import com.yzddmr6.prismspace.prism.compose.space.SpaceRepositoryProvider
 import com.yzddmr6.prismspace.prism.compose.space.SpaceSnapshot
 import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository
 import com.yzddmr6.prismspace.prism.compose.space.SpaceUsability
-import com.yzddmr6.prismspace.prism.compose.space.experimentalBlockInfo
 import com.yzddmr6.prismspace.setup.PrismSetup
 import com.yzddmr6.prismspace.util.Users
 import com.yzddmr6.prismspace.util.Users.Companion.toId
@@ -102,7 +96,7 @@ data class SpaceRow(
 //   else       → "未双开" (muted)
 // ---------------------------------------------------------------------------
 
-internal fun mapRows(inputs: List<SpaceAppInput>, res: StringResolver = zhFallback): List<SpaceRow> = inputs.map { app ->
+internal fun mapRows(inputs: List<SpaceAppInput>, res: StringResolver): List<SpaceRow> = inputs.map { app ->
     val (chipText, chipOk) = when (app.segment) {
         SpaceSegment.Dual ->
             // Truthful badge: 已冻结 covers both freeze mechanisms and any lingering
@@ -214,27 +208,6 @@ internal fun applyListTransform(
 }
 
 // ---------------------------------------------------------------------------
-// Compat alias kept so existing SpaceUiStateTest still compiles
-// (SpaceUiStateTest uses SpaceAppInput with 4 fields + mapSpaceRows)
-// ---------------------------------------------------------------------------
-
-internal data class SpaceAppInput4(
-    val pkg: String,
-    val label: String,
-    val frozen: Boolean,
-    val launchable: Boolean,
-)
-
-internal fun mapSpaceRows(apps: List<SpaceAppInput4>): List<SpaceRow> =
-    mapRows(apps.map { a ->
-        SpaceAppInput(
-            pkg = a.pkg, label = a.label, frozen = a.frozen, suspended = false,
-            launchable = a.launchable, system = false, cloned = false,
-            segment = SpaceSegment.Dual,
-        )
-    })
-
-// ---------------------------------------------------------------------------
 // UI state — one per segment
 // ---------------------------------------------------------------------------
 
@@ -264,9 +237,7 @@ data class SpaceUiState(
     val spaces: List<PrismSpace> = emptyList(),
     val feedbackMessage: String? = null,
     val feedbackIsError: Boolean = false,
-    val experimentalMultiProfile: Boolean = false,
     val dualUsability: SpaceUsability = SpaceUsability.Unknown,
-    val experimentalCreateBlocked: ExperimentalBlockInfo? = null,
     val mainCopyLostPackage: String? = null,
 ) {
     val current: SpaceSegmentState get() = if (segment == SpaceSegment.Dual) dual else main
@@ -367,51 +338,8 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
 
     fun reportTransientError(message: String) { setFeedback(message, isError = true) }
 
-    fun createSpace() {
-        val res: StringResolver = prismResolver(getApplication())
-        viewModelScope.launch {
-            setFeedback(res(R.string.lz_vm_creating_space, emptyArray()), isError = false)
-            val r = SpaceProvisioningEngine.createSpace(getApplication())
-            if (r is CreateSpaceResult.CapReached || r is CreateSpaceResult.ManagedProfileLimitReached) {
-                val duals = _uiState.value.spaces.filter { it.kind == PrismSpaceKind.Dual }
-                val primary = duals.firstOrNull()
-                _uiState.value = _uiState.value.copy(
-                    feedbackMessage = null, feedbackIsError = false,
-                    experimentalCreateBlocked = experimentalBlockInfo(
-                        primary?.displayName ?: res(R.string.lz_vm_default_space_name, emptyArray()),
-                        primary?.userId ?: -1,
-                        duals.size,
-                        res,
-                    ),
-                )
-                return@launch
-            }
-            val fb = provisioningFeedback(r, res)
-            setFeedback(fb.message, isError = fb.isError)
-            if (r is CreateSpaceResult.Success) {
-                _uiState.value = _uiState.value.copy(
-                    segment = SpaceSegment.Dual,
-                    selectedDualSpaceId = null,
-                )
-            }
-            refresh()
-        }
-    }
-
-    fun clearExperimentalCreateBlocked() {
-        _uiState.value = _uiState.value.copy(experimentalCreateBlocked = null)
-    }
-
     fun clearMainCopyLostWarning() {
         _uiState.value = _uiState.value.copy(mainCopyLostPackage = null)
-    }
-
-    /** Re-read the experimental flag only (cheap; for screen re-entry — the
-     *  flag may have been toggled on the Settings tab while we were away). */
-    fun syncExperimentalFlag() {
-        _uiState.value = _uiState.value.copy(
-            experimentalMultiProfile = ExperimentalFlags.isMultiProfileEnabled(getApplication()),
-        )
     }
 
     fun deleteSpace(activity: Activity, space: PrismSpace) {
@@ -430,13 +358,6 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
             setFeedback(fb.message, isError = fb.isError)
             if (fb.routeToSystemRemoval) PrismSetup.promptManualRemoval(activity)
             refresh()
-        }
-    }
-
-    fun probeSpaceCap(onResult: (SpaceCapProbe) -> Unit) {
-        viewModelScope.launch {
-            val probe = withContext(Dispatchers.IO) { SpaceProvisioningEngine.probeMaxSpaces() }
-            onResult(probe)
         }
     }
 
@@ -477,7 +398,6 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
             main = pair.main.toSegmentState(),
             systemApps = pair.systemApps.toSegmentState(),
             spaces = allSpaces,
-            experimentalMultiProfile = ExperimentalFlags.isMultiProfileEnabled(getApplication()),
             dualUsability = dualUsability,
         )
     }

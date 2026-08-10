@@ -3,7 +3,6 @@ package com.yzddmr6.prismspace;
 import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED;
 import static android.content.pm.PackageManager.DONT_KILL_APP;
 
-import android.app.SearchManager;
 import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Context;
@@ -12,7 +11,6 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.os.Bundle;
-import android.os.UserHandle;
 import android.util.Log;
 
 import androidx.core.view.WindowCompat;
@@ -149,14 +147,6 @@ public class MainActivity extends FragmentActivity {
 		setContentView(R.layout.activity_main);
 		if (savedInstanceState != null) return;
 		final PrismComposeHostFragment fragment = new PrismComposeHostFragment();
-		final Intent intent = getIntent();
-		if (Intent.ACTION_SEARCH.equals(intent.getAction())) {
-			final Bundle arguments = new Bundle();
-			arguments.putString(SearchManager.QUERY, intent.getStringExtra(SearchManager.QUERY));
-			final UserHandle user = intent.getParcelableExtra(Intent.EXTRA_USER);
-			if (user != null) arguments.putParcelable(Intent.EXTRA_USER, user);
-			fragment.setArguments(arguments);
-		}
 		getSupportFragmentManager().beginTransaction().replace(R.id.container, fragment).commit();
 		performOverallAnalyticsIfNeeded();
 	}

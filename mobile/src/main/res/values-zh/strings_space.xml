@@ -58,10 +58,6 @@
     <string name="lz_space_empty_dual_unknown_hint">请到设置中修复双开空间</string>
     <string name="lz_space_empty_dual_none_hint">到「主空间」点按应用，克隆到双开空间</string>
     <string name="lz_space_empty_none_hint">调整筛选或搜索条件</string>
-    <string name="lz_space_new_space">＋新建空间</string>
-    <string name="lz_space_exp_title">多 profile 是实验性功能</string>
-    <string name="lz_space_exp_dismiss">我知道了</string>
-    <string name="lz_space_exp_body">当前：%1$s（用户 %2$d） · 双开空间 %3$d/1\n\n本设备系统对每个主用户的工作/克隆资料配额为 1，写死于系统，Root 与企业策略均不能解除。多 profile 仅在解除该配额的定制 ROM 上可用，属实验性。\n\n你仍可在现有双开空间内继续双开更多不同的应用。</string>
     <string name="lz_space_main_copy_lost_title">主空间应用已不存在</string>
     <string name="lz_space_main_copy_lost_body">完成 %1$s 的系统卸载流程后，检测到它在主空间中的副本已不存在。这是 Android 当前返回的真实状态；如有需要，请从备份恢复应用及其数据。</string>
 

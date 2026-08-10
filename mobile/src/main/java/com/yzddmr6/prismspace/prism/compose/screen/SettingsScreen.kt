@@ -42,7 +42,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavHostController
 import com.yzddmr6.prismspace.prism.compose.component.AboutSheet
 import com.yzddmr6.prismspace.prism.compose.component.ActionRow
 import com.yzddmr6.prismspace.prism.compose.component.DeleteFinalSheet
@@ -69,7 +68,7 @@ import com.yzddmr6.prismspace.util.PrismLocale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(nav: NavHostController) {
+fun SettingsScreen() {
     val vm: SettingsViewModel = viewModel()
     val uiState by vm.uiState.collectAsState()
     val context = LocalContext.current
@@ -220,6 +219,7 @@ fun SettingsScreen(nav: NavHostController) {
                 val curLang = PrismLocale.getStored(context)
                 val langLabel = when (curLang) {
                     PrismLocale.ZH -> stringResource(R.string.prism_language_zh)
+                    PrismLocale.ZH_TW -> stringResource(R.string.prism_language_zh_tw)
                     PrismLocale.EN -> stringResource(R.string.prism_language_en)
                     else -> stringResource(R.string.prism_language_system)
                 }
@@ -301,6 +301,7 @@ fun SettingsScreen(nav: NavHostController) {
         val options = listOf(
             PrismLocale.SYSTEM to stringResource(R.string.prism_language_system),
             PrismLocale.ZH to stringResource(R.string.prism_language_zh),
+            PrismLocale.ZH_TW to stringResource(R.string.prism_language_zh_tw),
             PrismLocale.EN to stringResource(R.string.prism_language_en),
         )
         AlertDialog(

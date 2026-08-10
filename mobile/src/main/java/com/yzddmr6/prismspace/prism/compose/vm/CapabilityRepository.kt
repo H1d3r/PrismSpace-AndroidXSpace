@@ -54,7 +54,7 @@ object NoopModeStore : ModeStore {
     override fun save(mode: PrismMode) {}
 }
 
-/** Default SharedPreferences-backed store (credential-protected — mirrors [ExperimentalFlags]). */
+/** Default credential-protected SharedPreferences-backed store. */
 class SharedPrefsModeStore(context: Context) : ModeStore {
     private val prefs = PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
     override fun load(): PrismMode? =

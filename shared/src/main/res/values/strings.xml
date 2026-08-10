@@ -12,7 +12,7 @@
 
     <string name="prompt_failed_preserving_app_ops">App Ops was not preserved due to internal error.</string>
 
-    <string name="notification_profile_shuttle_pending_title">Cross-land functionality is limited</string>
+    <string name="notification_profile_shuttle_pending_title">Dual-space functionality is limited</string>
     <string name="notification_profile_shuttle_pending_text">Tap to restore</string>
 
     <string name="mainland_name">main space</string>

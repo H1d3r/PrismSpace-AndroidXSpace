@@ -40,8 +40,8 @@ object TransferRecordActions {
 }
 
 /**
- * Persists the file-transfer history per user (SharedPreferences-backed, mirrors [ExperimentalFlags]
- * / SharedPrefsModeStore). The receiver records here when a share is imported into this space; the
+ * Persists the file-transfer history per user in credential-protected SharedPreferences. The receiver
+ * records here when a share is imported into this space; the
  * Files page reads it. Per-user by construction: each profile's PrismSpace has its own prefs, so the
  * main space shows main imports and the dual space shows dual imports.
  */

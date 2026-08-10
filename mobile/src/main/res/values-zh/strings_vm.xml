@@ -48,11 +48,6 @@
     <!-- Shared fallback for unknown reasons -->
     <string name="lz_vm_unknown_error">未知错误</string>
 
-    <!-- DestroyProfileFeedback -->
-    <string name="lz_vm_destroy_in_progress">正在删除双开空间…</string>
-    <string name="lz_vm_destroy_not_profile_owner">无管理权限，需在系统设置中手动移除双开空间</string>
-    <string name="lz_vm_destroy_failed">删除失败：%1$s，空间未被破坏，可重试</string>
-
     <!-- LaunchFeedback -->
     <string name="lz_vm_launch_space_not_ready">双开空间尚未就绪，请在设置中检查空间状态或权限模式</string>
     <string name="lz_vm_launch_app_missing">%1$s 在该空间没有可启动入口</string>

@@ -15,7 +15,6 @@ import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.setup.PrismSetup
 import com.yzddmr6.prismspace.setup.SetupViewModel
 import com.yzddmr6.prismspace.util.Activities
-import com.yzddmr6.prismspace.prism.compose.settings.ExperimentalFlags
 import com.yzddmr6.prismspace.prism.compose.space.SpaceProvisioningTracker
 import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository
 import com.yzddmr6.prismspace.space.SpaceState
@@ -45,33 +44,31 @@ class SetupController(
         if (stateVm.provisioningLaunched || stateVm.uiState.value is SetupUiState.Checking) return
         stateVm.setUiState(SetupUiState.Checking)
         activity.lifecycleScope.launch {
-            if (!ExperimentalFlags.isMultiProfileEnabled(activity)) {
-                when (SpaceStateRepository(activity.applicationContext).preflightCreate()) {
-                    null -> {
-                        stateVm.setUiState(SetupUiState.Error(
-                            messageRes = R.string.lz_setvm_state_refresh_failed,
-                            messageParams = null,
-                            extraActionRes = null,
-                        ))
-                        return@launch
-                    }
-                    SpaceState.NoProfile -> Unit
-                    is SpaceState.OrphanProfile -> {
-                        stateVm.setUiState(SetupUiState.Error(
-                            messageRes = R.string.setup_error_orphan_profile,
-                            messageParams = null,
-                            extraActionRes = R.string.button_setup_help,
-                        ))
-                        return@launch
-                    }
-                    else -> {
-                        stateVm.setUiState(SetupUiState.Error(
-                            messageRes = R.string.setup_error_existing_space_state,
-                            messageParams = null,
-                            extraActionRes = R.string.button_setup_help,
-                        ))
-                        return@launch
-                    }
+            when (SpaceStateRepository(activity.applicationContext).preflightCreate()) {
+                null -> {
+                    stateVm.setUiState(SetupUiState.Error(
+                        messageRes = R.string.lz_setvm_state_refresh_failed,
+                        messageParams = null,
+                        extraActionRes = null,
+                    ))
+                    return@launch
+                }
+                SpaceState.NoProfile -> Unit
+                is SpaceState.OrphanProfile -> {
+                    stateVm.setUiState(SetupUiState.Error(
+                        messageRes = R.string.setup_error_orphan_profile,
+                        messageParams = null,
+                        extraActionRes = R.string.button_setup_help,
+                    ))
+                    return@launch
+                }
+                else -> {
+                    stateVm.setUiState(SetupUiState.Error(
+                        messageRes = R.string.setup_error_existing_space_state,
+                        messageParams = null,
+                        extraActionRes = R.string.button_setup_help,
+                    ))
+                    return@launch
                 }
             }
             val errorVm = SetupViewModel.checkManagedProvisioningPrerequisites(activity, stateVm.incompleteSetupAcked)

@@ -26,7 +26,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.yzddmr6.prismspace.mobile.R
-import com.yzddmr6.prismspace.prism.compose.space.ExperimentalBlockInfo
 import com.yzddmr6.prismspace.prism.compose.theme.PrismSpacing
 import kotlinx.coroutines.launch
 
@@ -178,43 +177,6 @@ internal fun RepairConfirmSheet(onConfirm: () -> Unit, onDismiss: () -> Unit) {
                     enabled = !confirming,
                     modifier = Modifier.weight(1f),
                 ) { Text(stringResource(R.string.lz_app_start_repair)) }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-internal fun ExperimentalUnsupportedSheet(
-    info: ExperimentalBlockInfo,
-    onDismiss: () -> Unit,
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val scope = rememberCoroutineScope()
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-    ) {
-        Column(modifier = Modifier.padding(horizontal = PrismSpacing.Lg).padding(bottom = PrismSpacing.Xl)) {
-            Text(
-                text = info.title,
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(bottom = PrismSpacing.Md),
-            )
-            Text(
-                text = info.body,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = PrismSpacing.Xl),
-            )
-            Button(
-                onClick = {
-                    scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(info.dismiss)
             }
         }
     }

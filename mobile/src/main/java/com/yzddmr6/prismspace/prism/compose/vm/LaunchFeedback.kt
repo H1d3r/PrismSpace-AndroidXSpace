@@ -8,7 +8,7 @@ import com.yzddmr6.prismspace.mobile.R
  *  @property isError true for all non-Ok results. */
 data class LaunchFeedback(val message: String, val isError: Boolean)
 
-fun launchFeedback(result: LaunchResult, appLabel: String, res: StringResolver = zhFallback): LaunchFeedback = when (result) {
+fun launchFeedback(result: LaunchResult, appLabel: String, res: StringResolver): LaunchFeedback = when (result) {
     LaunchResult.Ok -> LaunchFeedback("", isError = false)
     LaunchResult.SpaceNotReady ->
         LaunchFeedback(res(R.string.lz_vm_launch_space_not_ready, emptyArray()), isError = true)

@@ -3,6 +3,7 @@ package com.yzddmr6.prismspace.prism.compose
 import com.yzddmr6.prismspace.prism.compose.component.PrismLevel
 import com.yzddmr6.prismspace.prism.compose.vm.PrismMode
 import com.yzddmr6.prismspace.prism.compose.vm.mapSettingsUiModel
+import com.yzddmr6.prismspace.prism.compose.vm.testZhResolver
 import com.yzddmr6.prismspace.prism.model.CapabilityAvailability
 import com.yzddmr6.prismspace.prism.model.CapabilityState
 import com.yzddmr6.prismspace.prism.model.PrismRootStatus
@@ -32,6 +33,7 @@ class SettingsModeTest {
     private fun modeState(shizuku: PrismShizukuAdbStatus) = PrismSettingsModeState.from(
         shizuku = shizuku,
         root = PrismRootStatus.NotDetected,
+        res = testZhResolver,
     )
 
     private fun capState(
@@ -41,12 +43,12 @@ class SettingsModeTest {
     ) = CapabilityState(
         normal = CapabilityAvailability.Available,
         shizuku = if (shizukuReady) CapabilityAvailability.Available
-                  else CapabilityAvailability.NeedsSetup("Shizuku 未连接"),
-        adb = CapabilityAvailability.NeedsSetup("ADB 未授权"),
+                  else CapabilityAvailability.NeedsSetup,
+        adb = CapabilityAvailability.NeedsSetup,
         root = if (rootEnabled) CapabilityAvailability.Available
-               else CapabilityAvailability.Unsupported("Root 不可用"),
+               else CapabilityAvailability.Unsupported,
         profileOwner = if (profileOwner) CapabilityAvailability.Available
-                       else CapabilityAvailability.NeedsSetup("双开空间未创建"),
+                       else CapabilityAvailability.NeedsSetup,
     )
 
     // ---------------------------------------------------------------------------
@@ -57,7 +59,6 @@ class SettingsModeTest {
         val model = mapSettingsUiModel(
             profileOwner = true,
             shizukuAuthorized = false,
-            shizukuAvailable = false,
             modeState = modeState(PrismShizukuAdbStatus.NotRunning),
             capabilityState = capState(),
             selectedMode = PrismMode.Normal,
@@ -79,7 +80,6 @@ class SettingsModeTest {
         val model = mapSettingsUiModel(
             profileOwner = true,
             shizukuAuthorized = false,
-            shizukuAvailable = false,
             modeState = modeState(PrismShizukuAdbStatus.NotRunning),
             capabilityState = capState(shizukuReady = false),
             selectedMode = PrismMode.Normal, // mode was NOT changed because Shizuku not ready
@@ -96,7 +96,6 @@ class SettingsModeTest {
         val model = mapSettingsUiModel(
             profileOwner = true,
             shizukuAuthorized = true,
-            shizukuAvailable = true,
             modeState = modeState(PrismShizukuAdbStatus.Ready),
             capabilityState = capState(shizukuReady = true),
             selectedMode = PrismMode.Shizuku,
@@ -115,7 +114,6 @@ class SettingsModeTest {
         val model = mapSettingsUiModel(
             profileOwner = true,
             shizukuAuthorized = false,
-            shizukuAvailable = false,
             modeState = modeState(PrismShizukuAdbStatus.NotRunning),
             capabilityState = capState(rootEnabled = true),
             selectedMode = PrismMode.Root,
@@ -130,7 +128,6 @@ class SettingsModeTest {
         val model = mapSettingsUiModel(
             profileOwner = true,
             shizukuAuthorized = false,
-            shizukuAvailable = false,
             modeState = PrismSettingsModeState.from(
                 PrismShizukuAdbStatus.NotRunning,
                 PrismRootStatus.Unavailable,
@@ -152,7 +149,6 @@ class SettingsModeTest {
         val model = mapSettingsUiModel(
             profileOwner = true,
             shizukuAuthorized = false,
-            shizukuAvailable = false,
             modeState = modeState(PrismShizukuAdbStatus.NotRunning),
             capabilityState = capState(rootEnabled = true),
             selectedMode = PrismMode.Normal, // user chose Normal even though root capable
@@ -170,7 +166,6 @@ class SettingsModeTest {
         val model = mapSettingsUiModel(
             profileOwner = true,
             shizukuAuthorized = false,
-            shizukuAvailable = false,
             modeState = modeState(PrismShizukuAdbStatus.NotRunning),
             capabilityState = capState(),
             selectedMode = PrismMode.Normal,
@@ -188,7 +183,6 @@ class SettingsModeTest {
         val model = mapSettingsUiModel(
             profileOwner = false,
             shizukuAuthorized = false,
-            shizukuAvailable = false,
             modeState = modeState(PrismShizukuAdbStatus.NotRunning),
             capabilityState = capState(profileOwner = false),
         )
@@ -207,7 +201,6 @@ class SettingsModeTest {
         val model = mapSettingsUiModel(
             profileOwner = true,
             shizukuAuthorized = false,
-            shizukuAvailable = false,
             modeState = modeState(PrismShizukuAdbStatus.NotRunning),
             capabilityState = capState(),
         )

@@ -38,7 +38,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavHostController
 import android.widget.Toast
 import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.prism.compose.component.ActionRow
@@ -59,7 +58,7 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FilesScreen(nav: NavHostController) {
+fun FilesScreen() {
     val vm: FilesViewModel = viewModel()
     val context = LocalContext.current
     val activity = context as? Activity

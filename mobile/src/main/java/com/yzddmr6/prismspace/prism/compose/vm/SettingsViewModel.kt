@@ -15,7 +15,6 @@ import com.yzddmr6.prismspace.controller.PrismAppControl
 import com.yzddmr6.prismspace.controller.UserCloneRegistry
 import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.prism.compose.component.PrismLevel
-import com.yzddmr6.prismspace.prism.compose.settings.ExperimentalFlags
 import com.yzddmr6.prismspace.prism.compose.space.BridgeHealthRepository
 import com.yzddmr6.prismspace.prism.compose.space.DeleteSpaceResult
 import com.yzddmr6.prismspace.prism.compose.space.SpaceDeletionCoordinator
@@ -85,7 +84,6 @@ data class SettingsUiModel(
     val spaceFreezeState: SpaceFreezeState = SpaceFreezeState.Unknown,
     // Single source of truth for which mode the user has selected
     val selectedMode: PrismMode = PrismMode.Normal,
-    val experimentalMultiProfile: Boolean = false,
     // Non-null when an update check found a newer release.
     val updateInfo: UpdateInfo? = null,
     val spaceActionTitle: String = "",
@@ -129,11 +127,10 @@ private const val GITHUB_REPO = "yzddmr6/PrismSpace"
 internal fun mapSettingsUiModel(
     profileOwner: Boolean,
     shizukuAuthorized: Boolean,
-    shizukuAvailable: Boolean,
     modeState: PrismSettingsModeState,
     capabilityState: CapabilityState,
     selectedMode: PrismMode = PrismMode.Normal,
-    res: StringResolver = zhFallback,
+    res: StringResolver,
 ): SettingsUiModel {
     val shizukuCapable = shizukuAuthorized && capabilityState.shizuku is CapabilityAvailability.Available
     val rootCapable = capabilityState.root is CapabilityAvailability.Available
@@ -450,11 +447,6 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         data class Error(val detail: String) : SuspendResult()
     }
 
-    fun setExperimentalMultiProfile(enabled: Boolean) {
-        ExperimentalFlags.setMultiProfileEnabled(getApplication(), enabled)
-        _uiState.value = _uiState.value?.copy(experimentalMultiProfile = enabled)
-    }
-
     // ---------------------------------------------------------------------------
     // Create/repair entry point. When the profile is absent, this opens the normal setup
     // wizard. When it exists but is paused/locked, it asks Android to bring that profile back.
@@ -718,7 +710,6 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         // Home shows the configured mode via CapabilityRepository.
         val capabilityState = CapabilityService().buildState(
             profileOwner = profileOwner,
-            shizukuAvailable = shizukuAvailable,
             shizukuReady = shizukuAuthorized,
             adbReady = false,
             rootDetected = runtime.rootReady,
@@ -730,7 +721,6 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         val result = mapSettingsUiModel(
             profileOwner = profileOwner,
             shizukuAuthorized = shizukuAuthorized,
-            shizukuAvailable = shizukuAvailable,
             modeState = modeState,
             capabilityState = capabilityState,
             selectedMode = runtime.preferredMode,
@@ -742,7 +732,6 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             feedbackMessage = current?.feedbackMessage,
             feedbackIsError = current?.feedbackIsError ?: false,
             spaceFreezeState = freezeState,
-            experimentalMultiProfile = ExperimentalFlags.isMultiProfileEnabled(getApplication()),
             spaceActionTitle = spaceAction.title,
             spaceActionSummary = spaceAction.summary,
             spaceActionNeedsConfirmation = spaceAction.needsConfirmation,

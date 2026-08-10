@@ -6,8 +6,14 @@ import com.yzddmr6.prismspace.prism.compose.space.CreateSpaceResult
 import com.yzddmr6.prismspace.prism.compose.space.DeleteSpaceResult
 import com.yzddmr6.prismspace.space.SpaceState
 
+data class DestroyFeedback(
+    val message: String,
+    val isError: Boolean,
+    val routeToSystemRemoval: Boolean,
+)
+
 /** Single source of all provisioning user-facing text. Pure (no Android). */
-fun provisioningFeedback(result: CreateSpaceResult, res: StringResolver = zhFallback): DestroyFeedback = when (result) {
+fun provisioningFeedback(result: CreateSpaceResult, res: StringResolver): DestroyFeedback = when (result) {
     is CreateSpaceResult.Success ->
         DestroyFeedback(res(R.string.lz_vm_create_success, emptyArray()), isError = false, routeToSystemRemoval = false)
     CreateSpaceResult.RootUnavailable ->
@@ -31,7 +37,7 @@ fun provisioningFeedback(result: CreateSpaceResult, res: StringResolver = zhFall
         DestroyFeedback(res(R.string.lz_vm_create_failed, arrayOf(result.reason?.takeIf { it.isNotBlank() } ?: res(R.string.lz_vm_unknown_error, emptyArray()))), isError = true, routeToSystemRemoval = false)
 }
 
-fun provisioningFeedback(result: DeleteSpaceResult, res: StringResolver = zhFallback): DestroyFeedback = when (result) {
+fun provisioningFeedback(result: DeleteSpaceResult, res: StringResolver): DestroyFeedback = when (result) {
     DeleteSpaceResult.Success ->
         DestroyFeedback(res(R.string.lz_vm_delete_success, emptyArray()), isError = false, routeToSystemRemoval = false)
     DeleteSpaceResult.RootUnavailable ->
@@ -46,7 +52,7 @@ fun provisioningFeedback(result: DeleteSpaceResult, res: StringResolver = zhFall
  * diagnostic copy; all other failures keep the existing stage-specific presentation. */
 fun specificRootSetupFailure(
     result: CreateSpaceResult,
-    res: StringResolver = zhFallback,
+    res: StringResolver,
 ): String? = when (result) {
     is CreateSpaceResult.CapReached,
     CreateSpaceResult.ManagedProfileLimitReached,

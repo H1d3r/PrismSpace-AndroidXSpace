@@ -48,11 +48,6 @@
     <!-- Shared fallback for unknown reasons -->
     <string name="lz_vm_unknown_error">Unknown error</string>
 
-    <!-- DestroyProfileFeedback -->
-    <string name="lz_vm_destroy_in_progress">Deleting dual space…</string>
-    <string name="lz_vm_destroy_not_profile_owner">No management permission; the dual space must be removed manually in system Settings</string>
-    <string name="lz_vm_destroy_failed">Deletion failed: %1$s. The space was not destroyed; you can retry</string>
-
     <!-- LaunchFeedback -->
     <string name="lz_vm_launch_space_not_ready">The dual space is not ready yet; check the space status or permission mode in Settings</string>
     <string name="lz_vm_launch_app_missing">%1$s has no launchable entry in this space</string>

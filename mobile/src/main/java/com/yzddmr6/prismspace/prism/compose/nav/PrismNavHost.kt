@@ -108,9 +108,9 @@ fun PrismNavHost(navController: NavHostController) {
                 popExitTransition = { ExitTransition.None },
             ) {
                 composable(PrismRoutes.HOME)     { HomeScreen(navController) }
-                composable(PrismRoutes.SPACE)    { SpaceScreen(navController) }
-                composable(PrismRoutes.FILES)    { FilesScreen(navController) }
-                composable(PrismRoutes.SETTINGS) { SettingsScreen(navController) }
+                composable(PrismRoutes.SPACE)    { SpaceScreen() }
+                composable(PrismRoutes.FILES)    { FilesScreen() }
+                composable(PrismRoutes.SETTINGS) { SettingsScreen() }
             }
         }
     }

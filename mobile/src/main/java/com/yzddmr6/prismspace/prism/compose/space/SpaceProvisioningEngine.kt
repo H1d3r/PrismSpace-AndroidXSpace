@@ -9,7 +9,6 @@ import com.yzddmr6.prismspace.util.Hacks
 import com.yzddmr6.prismspace.util.Modules
 import com.yzddmr6.prismspace.util.UserHandles
 import com.yzddmr6.prismspace.util.Users
-import com.yzddmr6.prismspace.prism.compose.settings.ExperimentalFlags
 import com.yzddmr6.prismspace.prism.compose.vm.CapabilityRepositoryProvider
 import com.yzddmr6.prismspace.space.SpaceState
 import eu.chainfire.libsuperuser.Shell
@@ -54,13 +53,11 @@ object SpaceProvisioningEngine {
 
     suspend fun createSpace(context: Context): CreateSpaceResult = withContext(Dispatchers.IO) {
         val stateRepository = SpaceStateRepository(context)
-        if (!ExperimentalFlags.isMultiProfileEnabled(context)) {
-            val preflight = stateRepository.preflightCreate()
-                ?: return@withContext CreateSpaceResult.StateRefreshFailed
-            if (preflight != SpaceState.NoProfile) {
-                DiagnosticLog.w(TAG, "root create blocked by state=$preflight")
-                return@withContext CreateSpaceResult.BlockedByState(preflight)
-            }
+        val preflight = stateRepository.preflightCreate()
+            ?: return@withContext CreateSpaceResult.StateRefreshFailed
+        if (preflight != SpaceState.NoProfile) {
+            DiagnosticLog.w(TAG, "root create blocked by state=$preflight")
+            return@withContext CreateSpaceResult.BlockedByState(preflight)
         }
         if (!rootOk(context)) return@withContext CreateSpaceResult.RootUnavailable
         val probe = probeMaxSpaces()

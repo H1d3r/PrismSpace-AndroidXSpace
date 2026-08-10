@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="permission_group_control_space_apps_label">棱镜空间管理的应用</string>
-    <string name="permission_group_control_space_apps_description">控制棱镜空间管理的应用</string>
-    <string name="permission_freeze_app_label">冻结棱镜空间管理的应用</string>
-    <string name="permission_freeze_app_description">这个应用被授权可随时冻结及解冻棱镜空间管理的任意应用</string>
-    <string name="permission_launch_app_label">启动棱镜空间管理的应用</string>
-    <string name="permission_launch_app_description">这个应用被授权可启动棱镜空间管理的任何应用，冻结的应用将在启动前解冻。</string>
-    <string name="permission_suspend_app_label">暂停棱镜空间管理的应用</string>
-    <string name="permission_suspend_app_description">这个应用被授权可随时暂停及恢复棱镜空间管理的任意应用</string>
+    <string name="permission_group_control_space_apps_label">PrismSpace 管理的应用</string>
+    <string name="permission_group_control_space_apps_description">控制 PrismSpace 管理的应用</string>
+    <string name="permission_freeze_app_label">冻结 PrismSpace 管理的应用</string>
+    <string name="permission_freeze_app_description">这个应用被授权可随时冻结及解冻 PrismSpace 管理的任意应用</string>
+    <string name="permission_launch_app_label">启动 PrismSpace 管理的应用</string>
+    <string name="permission_launch_app_description">这个应用被授权可启动 PrismSpace 管理的任何应用，冻结的应用将在启动前解冻。</string>
+    <string name="permission_suspend_app_label">暂停 PrismSpace 管理的应用</string>
+    <string name="permission_suspend_app_description">这个应用被授权可随时暂停及恢复 PrismSpace 管理的任意应用</string>
 
     <string name="notification_provisioning_space_title">正在准备双开空间…</string>
     <string name="notification_provisioning_mainland_title">正在管理主空间…</string>
