@@ -157,16 +157,6 @@
 
         <activity android:name="com.yzddmr6.prismspace.setup.SetupActivity" android:theme="@style/SetupTheme" />
 
-        <activity android:name="com.yzddmr6.prismspace.action.FeatureActionActivity" android:theme="@android:style/Theme.Translucent.NoTitleBar"
-                  android:excludeFromRecents="true" android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="prismspace" android:host="feature" />
-            </intent-filter>
-        </activity>
-
         <provider android:authorities="${applicationId}.apps"
                   android:name="com.yzddmr6.prismspace.data.PrismAppListProvider"
                   android:exported="false"
