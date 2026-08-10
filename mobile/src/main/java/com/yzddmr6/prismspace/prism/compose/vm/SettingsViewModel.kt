@@ -28,6 +28,8 @@ import com.yzddmr6.prismspace.prism.compose.space.SpaceRecoveryPlan
 import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository
 import com.yzddmr6.prismspace.prism.compose.space.SpaceSnapshot
 import com.yzddmr6.prismspace.prism.compose.space.recoveryPlan
+import com.yzddmr6.prismspace.prism.compose.space.presentSpace
+import com.yzddmr6.prismspace.prism.compose.space.SpacePresentationKind
 import com.yzddmr6.prismspace.prism.model.CapabilityAvailability
 import com.yzddmr6.prismspace.prism.model.CapabilityState
 import com.yzddmr6.prismspace.prism.model.PrismRootStatus
@@ -80,8 +82,7 @@ data class SettingsUiModel(
     // Feedback message shown below the screen (e.g. snapshot result)
     val feedbackMessage: String? = null,
     val feedbackIsError: Boolean = false,
-    // Space suspended state
-    val spaceSuspended: Boolean = false,
+    val spaceFreezeState: SpaceFreezeState = SpaceFreezeState.Unknown,
     // Single source of truth for which mode the user has selected
     val selectedMode: PrismMode = PrismMode.Normal,
     val experimentalMultiProfile: Boolean = false,
@@ -90,7 +91,10 @@ data class SettingsUiModel(
     val spaceActionTitle: String = "",
     val spaceActionSummary: String = "",
     val spaceActionNeedsConfirmation: Boolean = true,
-)
+    val spaceActionEnabled: Boolean = true,
+) {
+    val spaceSuspended: Boolean get() = spaceFreezeState == SpaceFreezeState.Frozen
+}
 
 /** A newer GitHub release than the installed build. */
 data class UpdateInfo(val version: String, val notes: String, val url: String)
@@ -218,6 +222,9 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             stateRepo.state.collectLatest { snapshot ->
                 when (snapshot) {
                     SpaceSnapshot.Loading -> _uiState.value = null
+                    is SpaceSnapshot.Failed -> {
+                        _uiState.value = withContext(Dispatchers.IO) { buildUnavailableUiModel(snapshot) }
+                    }
                     is SpaceSnapshot.Loaded -> {
                         _uiState.value = withContext(Dispatchers.IO) { buildUiModel(snapshot.state) }
                     }
@@ -405,8 +412,6 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                         else str(R.string.lz_setvm_space_resumed),
                         isError = false,
                     )
-                    val current = _uiState.value ?: return@launch
-                    _uiState.value = current.copy(spaceSuspended = suspend)
                 }
                 SuspendResult.NoSpace -> setFeedback(
                     str(R.string.lz_setvm_space_not_ready), isError = true)
@@ -424,6 +429,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                     if (suspend) str(R.string.lz_setvm_suspend_failed, result.detail)
                     else str(R.string.lz_setvm_resume_failed, result.detail), isError = true)
             }
+            refreshCapabilities()
         }
     }
 
@@ -500,6 +506,16 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                     setFeedback(
                         if (opened) str(R.string.lz_setvm_bridge_repair_opened_profile)
                         else str(R.string.lz_setvm_incomplete_cannot_auto_repair),
+                        isError = !opened,
+                    )
+                    refreshCapabilities()
+                }
+                is SpaceRecoveryPlan.OpenProfileUnlock -> {
+                    val profile = UserHandles.of(plan.userId)
+                    val opened = ProfileEntryLauncher.start(context, profile)
+                    setFeedback(
+                        if (opened) str(R.string.lz_setvm_unlock_opened_profile)
+                        else str(R.string.lz_setvm_repair_failed, str(R.string.lz_setvm_profile_activation_failed)),
                         isError = !opened,
                     )
                     refreshCapabilities()
@@ -662,9 +678,10 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun buildUiModel(spaceState: SpaceState): SettingsUiModel {
         val context: Context = getApplication()
+        val presentation = presentSpace(spaceState)
         val shizukuAvailable = isShizukuAvailable()
         val shizukuAuthorized = isShizukuAuthorized(shizukuAvailable)
-        val profileOwner = spaceState !is SpaceState.NoProfile && spaceState !is SpaceState.OrphanProfile
+        val profileOwner = presentation.hasProfile && presentation.kind != SpacePresentationKind.Orphan
         DiagnosticLog.d(
             TAG,
             "settings state profile=${Users.profile?.toId() ?: Users.NULL_ID} " +
@@ -704,12 +721,49 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             selectedMode = capRepo.selectedMode.value,
             res = prismResolver(getApplication()),
         )
-        // Preserve existing feedback message + spaceSuspended if any
+        val freezeState = observeSpaceFreezeState(context, presentation.kind)
+        val spaceAction = settingsSpaceAction(presentation.kind, presentation.bridgeCause, prismResolver(context))
         return result.copy(
             feedbackMessage = current?.feedbackMessage,
             feedbackIsError = current?.feedbackIsError ?: false,
-            spaceSuspended = current?.spaceSuspended ?: false,
+            spaceFreezeState = freezeState,
             experimentalMultiProfile = ExperimentalFlags.isMultiProfileEnabled(getApplication()),
+            spaceActionTitle = spaceAction.title,
+            spaceActionSummary = spaceAction.summary,
+            spaceActionNeedsConfirmation = spaceAction.needsConfirmation,
+            spaceActionEnabled = spaceAction.enabled,
+        )
+    }
+
+    private fun observeSpaceFreezeState(context: Context, kind: SpacePresentationKind): SpaceFreezeState {
+        if (kind != SpacePresentationKind.Ready) return SpaceFreezeState.Unknown
+        return runCatching {
+            val dual = spaceRepo.dualSpace() ?: return@runCatching SpaceFreezeState.Unknown
+            val self = context.packageName
+            val facts = spaceRepo.installedApps(dual)
+                .filter {
+                    it.isInstalled && it.packageName != self &&
+                        (!it.isSystem || UserCloneRegistry.contains(context, it.packageName))
+                }
+                .map { AppFreezeFact(it.isHidden, it.isSuspended) }
+            aggregateSpaceFreeze(facts)
+        }.getOrElse {
+            DiagnosticLog.w(TAG, "whole-space freeze observation failed", it)
+            SpaceFreezeState.Unknown
+        }
+    }
+
+    private fun buildUnavailableUiModel(snapshot: SpaceSnapshot.Failed): SettingsUiModel {
+        val base = buildUiModel(snapshot.lastKnown ?: SpaceState.NoProfile)
+        return base.copy(
+            modeBody = str(R.string.lz_setvm_state_refresh_failed),
+            level = PrismLevel.Warn,
+            profileOwnerReady = false,
+            spaceFreezeState = SpaceFreezeState.Unknown,
+            spaceActionTitle = str(R.string.lz_set_state_unavailable_title),
+            spaceActionSummary = str(R.string.lz_set_state_unavailable_summary),
+            spaceActionNeedsConfirmation = false,
+            spaceActionEnabled = false,
         )
     }
 

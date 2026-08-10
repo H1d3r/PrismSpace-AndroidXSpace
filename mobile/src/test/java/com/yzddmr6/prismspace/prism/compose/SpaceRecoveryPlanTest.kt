@@ -25,6 +25,8 @@ class SpaceRecoveryPlanTest {
         assertEquals(SpaceRecoveryPlan.StartSetup, plans.first())
         assertEquals(SpaceRecoveryPlan.RepairIncrementally(22), plans[3])
         assertEquals(SpaceRecoveryPlan.ActivateThenOpenEntry(22), plans[4])
+        assertEquals(SpaceRecoveryPlan.OpenProfileUnlock(22), plans[5])
+        assertEquals(SpaceRecoveryPlan.Activate(22), plans[6])
         assertFalse(plans.drop(1).any { it is SpaceRecoveryPlan.StartSetup })
     }
 }

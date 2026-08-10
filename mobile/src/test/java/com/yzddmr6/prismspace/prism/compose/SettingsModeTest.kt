@@ -181,10 +181,10 @@ class SettingsModeTest {
     }
 
     // ---------------------------------------------------------------------------
-    // spaceSuspended: default value in SettingsUiModel is false
+    // Observed freeze state defaults to Unknown; the compatibility Boolean must never invent Frozen.
     // ---------------------------------------------------------------------------
     @Test
-    fun `spaceSuspended defaults to false in mapSettingsUiModel result`() {
+    fun `space freeze defaults to unknown in mapSettingsUiModel result`() {
         val model = mapSettingsUiModel(
             profileOwner = true,
             shizukuAuthorized = false,
@@ -193,5 +193,6 @@ class SettingsModeTest {
             capabilityState = capState(),
         )
         assertFalse("spaceSuspended must default to false", model.spaceSuspended)
+        assertEquals(com.yzddmr6.prismspace.prism.compose.vm.SpaceFreezeState.Unknown, model.spaceFreezeState)
     }
 }

@@ -95,6 +95,10 @@ class SetupController(
             R.string.button_setup_space_with_root -> {
                 PrismSetup.requestProfileOwnerSetupWithRoot(Activities.findActivityFrom(activity))
             }
+            R.string.button_return_to_prismspace -> {
+                activity.startActivity(Intent(activity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
+                activity.finish()
+            }
             else -> Log.w(TAG, "Unhandled extra action: $extraActionRes")
         }
     }
@@ -112,11 +116,11 @@ class SetupController(
     private fun launchManagedProvisioning() {
         val intent = SetupViewModel.buildManagedProfileProvisioningIntentPublic(activity)
         try {
-            stateVm.provisioningLaunched = true
+            stateVm.beginProvisioning()
             SpaceProvisioningTracker.markStarted()
             provisionLauncher.launch(intent)
         } catch (e: ActivityNotFoundException) {
-            stateVm.provisioningLaunched = false
+            stateVm.consumeProvisioningLaunched()
             SpaceProvisioningTracker.clear()
             Log.w(TAG, "Managed provisioning activity not found", e)
             stateVm.setUiState(SetupUiState.Error(
@@ -143,7 +147,7 @@ class SetupController(
                 when (setupCompletionAction(resultCode, state)) {
                     SetupCompletionAction.Finish -> finishSuccessfulProvisioning(activity, vm, "activity_result")
                     SetupCompletionAction.ShowCanceled -> {
-                        vm.provisioningLaunched = false
+                        vm.consumeProvisioningLaunched()
                         SpaceProvisioningTracker.clear()
                         DiagnosticLog.i(TAG, "Managed provisioning canceled with fresh state=$state")
                         vm.setUiState(SetupUiState.Error(
@@ -152,10 +156,13 @@ class SetupController(
                             extraActionRes = R.string.button_setup_space_with_root,
                         ))
                     }
-                    SetupCompletionAction.WaitForHealth -> DiagnosticLog.i(
-                        TAG,
-                        "Managed provisioning result=$resultCode state=$state; waiting for healthy facts",
-                    )
+                    SetupCompletionAction.WaitForHealth -> {
+                        vm.setUiState(SetupUiState.Checking)
+                        DiagnosticLog.i(
+                            TAG,
+                            "Managed provisioning result=$resultCode state=$state; waiting for healthy facts",
+                        )
+                    }
                 }
             }
         }
@@ -174,6 +181,20 @@ class SetupController(
             activity.finish()
             return true
         }
+
+        @JvmStatic fun finishProvisioningConvergenceTimeout(
+            vm: SetupStateViewModel,
+        ): Boolean {
+            if (!vm.consumeProvisioningLaunched()) return false
+            SpaceProvisioningTracker.clear()
+            DiagnosticLog.w(TAG, "Managed provisioning did not converge to healthy before deadline")
+            vm.setUiState(SetupUiState.Error(
+                messageRes = R.string.setup_error_provisioning_not_healthy,
+                messageParams = null,
+                extraActionRes = R.string.button_return_to_prismspace,
+            ))
+            return true
+        }
     }
 }
 
@@ -183,6 +204,15 @@ internal fun setupCompletionAction(resultCode: Int, state: SpaceState?): SetupCo
     state is SpaceState.Healthy -> SetupCompletionAction.Finish
     resultCode == Activity.RESULT_CANCELED && state == SpaceState.NoProfile -> SetupCompletionAction.ShowCanceled
     else -> SetupCompletionAction.WaitForHealth
+}
+
+internal enum class SetupConvergenceAction { Finish, Wait, Recover }
+
+internal fun setupConvergenceAction(snapshot: com.yzddmr6.prismspace.prism.compose.space.SpaceSnapshot, remainingMs: Long) = when {
+    snapshot is com.yzddmr6.prismspace.prism.compose.space.SpaceSnapshot.Loaded && snapshot.state is SpaceState.Healthy ->
+        SetupConvergenceAction.Finish
+    remainingMs <= 0L -> SetupConvergenceAction.Recover
+    else -> SetupConvergenceAction.Wait
 }
 
 /** Compose-friendly UI state derived from [SetupViewModel]. */

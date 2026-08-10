@@ -136,15 +136,26 @@ fun SettingsScreen(nav: NavHostController) {
                 } else {
                     SwitchRow(
                         title = stringResource(R.string.lz_set_suspend_title),
-                        summary = stringResource(R.string.lz_set_suspend_summary),
+                        summary = when (state.spaceFreezeState) {
+                            com.yzddmr6.prismspace.prism.compose.vm.SpaceFreezeState.Active ->
+                                stringResource(R.string.lz_set_suspend_summary)
+                            com.yzddmr6.prismspace.prism.compose.vm.SpaceFreezeState.Frozen ->
+                                stringResource(R.string.lz_set_suspend_state_frozen)
+                            com.yzddmr6.prismspace.prism.compose.vm.SpaceFreezeState.Mixed ->
+                                stringResource(R.string.lz_set_suspend_state_mixed)
+                            com.yzddmr6.prismspace.prism.compose.vm.SpaceFreezeState.Unknown ->
+                                stringResource(R.string.lz_set_suspend_state_unknown)
+                        },
                         leadingIcon = PrismIcons.Snow,
                         checked = state.spaceSuspended,
+                        enabled = state.spaceFreezeState != com.yzddmr6.prismspace.prism.compose.vm.SpaceFreezeState.Unknown,
                         onCheckedChange = { vm.suspendSpace(it) },
                     )
                     ActionRow(
                         title = state.spaceActionTitle,
                         summary = state.spaceActionSummary,
                         leadingIcon = PrismIcons.Wrench,
+                        enabled = state.spaceActionEnabled,
                         onClick = {
                             if (state.spaceActionNeedsConfirmation) showRepairConfirm = true
                             else vm.repairSpace(context)

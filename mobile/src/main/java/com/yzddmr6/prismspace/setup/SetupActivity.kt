@@ -15,10 +15,14 @@ import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository
 import com.yzddmr6.prismspace.setup.compose.PrismSetupScreen
 import com.yzddmr6.prismspace.setup.compose.SetupController
 import com.yzddmr6.prismspace.setup.compose.SetupStateViewModel
+import com.yzddmr6.prismspace.setup.compose.SetupConvergenceAction
+import com.yzddmr6.prismspace.setup.compose.setupConvergenceAction
 import com.yzddmr6.prismspace.space.SpaceState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import android.os.SystemClock
 
 /**
  * PrismSpace setup activity.
@@ -57,10 +61,28 @@ class SetupActivity : ComponentActivity() {
             val repository = SpaceStateRepository(applicationContext)
             val refreshed = repository.refresh("setup_resumed_after_provisioning")
             DiagnosticLog.i(TAG, "setup resumed awaiting provisioning refreshed=$refreshed state=${repository.currentState()}")
-            repository.state.first { snapshot ->
-                (snapshot as? SpaceSnapshot.Loaded)?.state is SpaceState.Healthy
+            val remaining = stateVm.convergenceRemaining(SystemClock.elapsedRealtime(), CONVERGENCE_TIMEOUT_MS)
+            when (setupConvergenceAction(repository.state.value, remaining)) {
+                SetupConvergenceAction.Finish -> {
+                    SetupController.finishSuccessfulProvisioning(this@SetupActivity, stateVm, "healthy_state")
+                    return@launch
+                }
+                SetupConvergenceAction.Recover -> {
+                    SetupController.finishProvisioningConvergenceTimeout(stateVm)
+                    return@launch
+                }
+                SetupConvergenceAction.Wait -> Unit
             }
-            SetupController.finishSuccessfulProvisioning(this@SetupActivity, stateVm, "healthy_state")
+            val healthy = withTimeoutOrNull(remaining) {
+                repository.state.first { snapshot ->
+                    (snapshot as? SpaceSnapshot.Loaded)?.state is SpaceState.Healthy
+                }
+            }
+            if (healthy != null) {
+                SetupController.finishSuccessfulProvisioning(this@SetupActivity, stateVm, "healthy_state")
+            } else {
+                SetupController.finishProvisioningConvergenceTimeout(stateVm)
+            }
         }
     }
 
@@ -72,5 +94,6 @@ class SetupActivity : ComponentActivity() {
 
     private companion object {
         const val TAG = "Prism.SetupActivity"
+        const val CONVERGENCE_TIMEOUT_MS = 30_000L
     }
 }

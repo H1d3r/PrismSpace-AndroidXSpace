@@ -49,6 +49,16 @@ import kotlinx.coroutines.withTimeoutOrNull
 sealed interface SpaceSnapshot {
     object Loading : SpaceSnapshot
     data class Loaded(val state: SpaceState) : SpaceSnapshot
+    data class Failed(val failure: SpaceSnapshotFailure, val lastKnown: SpaceState?) : SpaceSnapshot
+}
+
+data class SpaceSnapshotFailure(val type: String, val detail: String?) {
+    companion object {
+        fun from(error: Throwable) = SpaceSnapshotFailure(
+            type = error.javaClass.simpleName.ifBlank { error.javaClass.name },
+            detail = error.message?.replace(Regex("\\s+"), " ")?.trim()?.take(160),
+        )
+    }
 }
 
 /** Process-wide observable space state. Reading [state] never performs IO. */
@@ -145,6 +155,12 @@ internal class SpaceStateStore(
                     throw error
                 } catch (error: Exception) {
                     runCatching { onCollectionFailure(reason, error) }
+                    val lastKnown = when (val previous = mutableState.value) {
+                        is SpaceSnapshot.Loaded -> previous.state
+                        is SpaceSnapshot.Failed -> previous.lastKnown
+                        SpaceSnapshot.Loading -> null
+                    }
+                    mutableState.value = SpaceSnapshot.Failed(SpaceSnapshotFailure.from(error), lastKnown)
                     false
                 }
             }.also { inFlight = it }

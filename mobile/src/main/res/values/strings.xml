@@ -49,6 +49,8 @@
     <string name="setup_error_existing_space_state">A dual-space profile already exists but is not ready. Return to Settings to repair it or remove it before creating another.</string>
     <string name="setup_error_orphan_profile">Android already has a work profile not managed by PrismSpace. Review and remove that profile in system settings before continuing.</string>
     <string name="setup_solution_for_cancelled_provision">Trouble setting up PrismSpace?\n\nIf setup was interrupted, return to the system setup screen and keep PrismSpace allowed to start in the background. On heavily customized ROMs, also disable battery or security restrictions for PrismSpace before retrying.\n\nRoot setup is available as an advanced fallback only when normal setup is blocked.</string>
+    <string name="setup_error_provisioning_not_healthy">Android returned from setup, but PrismSpace could not confirm a healthy dual space in time. No success was recorded. Return to PrismSpace to inspect the exact state and use its retry or repair action.</string>
+    <string name="button_return_to_prismspace">Return to PrismSpace</string>
 
 
     <string name="button_setup_help">Setup help</string>

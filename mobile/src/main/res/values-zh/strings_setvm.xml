@@ -38,6 +38,7 @@
     <string name="lz_setvm_space_already_ready">双开空间已正常，无需修复</string>
     <string name="lz_setvm_bridge_repairing">正在重新连接双开空间…</string>
     <string name="lz_setvm_bridge_repair_opened_profile">已打开双开空间，请在完成重连后返回棱镜空间重试。</string>
+    <string name="lz_setvm_unlock_opened_profile">已打开双开空间入口；请完成 Android 工作资料解锁后返回 PrismSpace。</string>
     <string name="lz_setvm_incomplete_repaired">已启动双开空间修复，正在重新检查状态…</string>
     <string name="lz_setvm_incomplete_cannot_auto_repair">PrismSpace 无法安全地自动续接这个未完成资料。请删除后重新创建双开空间。</string>
     <string name="lz_setvm_orphan_profile">该工作资料由 %1$s 管理，而非 PrismSpace。请在 Android 系统设置中移除；PrismSpace 不会删除其他管理器的资料。</string>

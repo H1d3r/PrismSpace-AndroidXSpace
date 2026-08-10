@@ -122,7 +122,7 @@ class HomeStateTest {
     }
 
     @Test
-    fun `Checking - showRepair true and level Warn`() {
+    fun `Checking - non actionable and level Warn`() {
         val model = mapHomeState(
             health = SpaceHealth.Checking,
             mainCount = 4,
@@ -133,7 +133,7 @@ class HomeStateTest {
             deviceText = "Xiaomi arm64-v8a",
             resolve = resolve,
         )
-        assertTrue("Checking should keep the settings affordance visible", model.showRepair)
+        assertFalse("Checking must not offer a state-changing action", model.showRepair)
         assertEquals(PrismLevel.Warn, model.level)
         assertEquals("检查中", model.tag)
         assertEquals("打开设置", model.primaryLabel)

@@ -38,6 +38,7 @@
     <string name="lz_setvm_space_already_ready">Dual space is already ready</string>
     <string name="lz_setvm_bridge_repairing">Reconnecting dual space…</string>
     <string name="lz_setvm_bridge_repair_opened_profile">Opened the dual space. Return to PrismSpace and retry after it reconnects.</string>
+    <string name="lz_setvm_unlock_opened_profile">Opened the dual-space entry. Complete Android’s work-profile unlock, then return to PrismSpace.</string>
     <string name="lz_setvm_incomplete_repaired">Dual-space repair started. Rechecking its state…</string>
     <string name="lz_setvm_incomplete_cannot_auto_repair">PrismSpace cannot safely resume this incomplete profile automatically. Remove it and create the dual space again.</string>
     <string name="lz_setvm_orphan_profile">This work profile is managed by %1$s, not PrismSpace. Remove it from Android system settings; PrismSpace will not delete another manager’s profile.</string>

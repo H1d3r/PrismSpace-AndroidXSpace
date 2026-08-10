@@ -448,6 +448,16 @@ private fun AppListSection(
         currentState is SpaceSegmentState.Loading -> {
             LoadingPlaceholder()
         }
+        currentState is SpaceSegmentState.Unavailable -> {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = stringResource(R.string.lz_setvm_state_refresh_failed),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(PrismSpacing.Lg),
+                )
+            }
+        }
         filteredRows.isEmpty() -> {
             EmptyPlaceholder(
                 segment = segment,

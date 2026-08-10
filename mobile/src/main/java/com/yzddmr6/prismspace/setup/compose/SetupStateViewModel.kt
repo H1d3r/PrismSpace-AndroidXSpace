@@ -30,9 +30,21 @@ class SetupStateViewModel(private val savedState: SavedStateHandle) : ViewModel(
         get() = savedState[KEY_PROVISIONING_LAUNCHED] ?: false
         set(value) { savedState[KEY_PROVISIONING_LAUNCHED] = value }
 
+    fun beginProvisioning() {
+        provisioningLaunched = true
+        savedState.get<Long>(KEY_CONVERGENCE_DEADLINE)?.let { savedState.remove<Long>(KEY_CONVERGENCE_DEADLINE) }
+    }
+
+    fun convergenceRemaining(nowElapsedMs: Long, timeoutMs: Long): Long {
+        val deadline = savedState.get<Long>(KEY_CONVERGENCE_DEADLINE)
+            ?: (nowElapsedMs + timeoutMs).also { savedState[KEY_CONVERGENCE_DEADLINE] = it }
+        return (deadline - nowElapsedMs).coerceAtLeast(0L)
+    }
+
     fun consumeProvisioningLaunched(): Boolean {
         if (!provisioningLaunched) return false
         provisioningLaunched = false
+        savedState.remove<Long>(KEY_CONVERGENCE_DEADLINE)
         return true
     }
 
@@ -42,5 +54,6 @@ class SetupStateViewModel(private val savedState: SavedStateHandle) : ViewModel(
 
     internal companion object {
         const val KEY_PROVISIONING_LAUNCHED = "provisioning_launched"
+        const val KEY_CONVERGENCE_DEADLINE = "provisioning_convergence_deadline"
     }
 }

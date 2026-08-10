@@ -89,7 +89,7 @@ class SpaceStateStoreTest {
         assertEquals(1, calls.get())
     }
 
-    @Test fun explicitRefreshReportsFailureWithoutReplacingLastSnapshot() = runBlocking {
+    @Test fun explicitRefreshReportsFailureWithLastSnapshotOnlyAsDisplayContext() = runBlocking {
         val calls = AtomicInteger()
         val store = SpaceStateStore(
             collector = {
@@ -102,7 +102,9 @@ class SpaceStateStoreTest {
         assertTrue(store.refresh("first"))
         assertEquals(SpaceSnapshot.Loaded(SpaceState.NoProfile), store.state.value)
         assertFalse(store.refresh("second"))
-        assertEquals(SpaceSnapshot.Loaded(SpaceState.NoProfile), store.state.value)
+        val failed = store.state.value as SpaceSnapshot.Failed
+        assertEquals(SpaceState.NoProfile, failed.lastKnown)
+        assertEquals("IllegalStateException", failed.failure.type)
     }
 
     @Test fun refreshAndReadReplacesAStaleLoadedSnapshot() = runBlocking {
@@ -131,7 +133,28 @@ class SpaceStateStoreTest {
 
         assertEquals(SpaceState.NoProfile, store.refreshAndRead("initial"))
         assertEquals(null, store.refreshAndRead("initial_route"))
-        assertEquals(SpaceSnapshot.Loaded(SpaceState.NoProfile), store.state.value)
+        assertEquals(SpaceState.NoProfile, (store.state.value as SpaceSnapshot.Failed).lastKnown)
+    }
+
+    @Test fun initialFailureIsPublishedBeforeRetrySucceeds() = runBlocking {
+        val release = CompletableDeferred<Unit>()
+        var calls = 0
+        val store = SpaceStateStore(
+            collector = {
+                if (++calls == 1) error("offline")
+                release.await()
+                SpaceState.NoProfile
+            },
+            scope = scope,
+            retryMs = 200L,
+            onCollectionFailure = { _, _ -> },
+        )
+        val observer = scope.launch { store.state.collect() }
+
+        val failed = withTimeout(2_000L) { store.state.first { it is SpaceSnapshot.Failed } }
+        assertEquals(null, (failed as SpaceSnapshot.Failed).lastKnown)
+        release.complete(Unit)
+        observer.cancel()
     }
 
     @Test fun invalidationWhileUnobservedRefreshesWhenSubscriberReturns() = runBlocking {

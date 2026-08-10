@@ -240,6 +240,7 @@ internal fun mapSpaceRows(apps: List<SpaceAppInput4>): List<SpaceRow> =
 
 sealed interface SpaceSegmentState {
     object Loading : SpaceSegmentState
+    object Unavailable : SpaceSegmentState
     object Empty : SpaceSegmentState
     data class Content(val rows: List<SpaceRow>) : SpaceSegmentState
 }
@@ -323,7 +324,18 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             stateRepo.state.collectLatest { snapshot ->
                 when (snapshot) {
-                    SpaceSnapshot.Loading -> Unit
+                    SpaceSnapshot.Loading -> _uiState.value = _uiState.value.copy(
+                        dual = SpaceSegmentState.Loading,
+                        main = SpaceSegmentState.Loading,
+                        systemApps = SpaceSegmentState.Loading,
+                        dualUsability = SpaceUsability.Unknown,
+                    )
+                    is SpaceSnapshot.Failed -> _uiState.value = _uiState.value.copy(
+                        dual = SpaceSegmentState.Unavailable,
+                        main = SpaceSegmentState.Unavailable,
+                        systemApps = SpaceSegmentState.Unavailable,
+                        dualUsability = SpaceUsability.Unknown,
+                    )
                     is SpaceSnapshot.Loaded -> loadContent()
                 }
             }

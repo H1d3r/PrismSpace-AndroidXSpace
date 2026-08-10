@@ -44,6 +44,8 @@
     <string name="setup_error_existing_space_state">设备上已有尚未就绪的双开资料。请返回设置修复，或删除后再重新创建。</string>
     <string name="setup_error_orphan_profile">Android 中已有不受 PrismSpace 管理的工作资料。请先在系统设置中确认并移除该资料。</string>
     <string name="setup_solution_for_cancelled_provision">创建双开空间遇到了困难？\n\n如果创建过程被中断，请重新进入系统创建流程，并确保棱镜空间允许后台启动。部分深度定制系统还需要先关闭电池优化或安全限制，然后再重试。\n\nRoot 创建只作为高级兜底路径，普通用户路径不依赖 Root。</string>
+    <string name="setup_error_provisioning_not_healthy">Android 已从配置界面返回，但 PrismSpace 未能在限定时间内确认双开空间健康，因此没有记录成功。请返回 PrismSpace 查看准确状态，并使用对应的重试或修复入口。</string>
+    <string name="button_return_to_prismspace">返回 PrismSpace</string>
 
 
     <string name="button_setup_help">创建帮助</string>

@@ -11,6 +11,8 @@ import com.yzddmr6.prismspace.prism.compose.space.SpaceRepository
 import com.yzddmr6.prismspace.prism.compose.space.SpaceRepositoryProvider
 import com.yzddmr6.prismspace.prism.compose.space.SpaceSnapshot
 import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository
+import com.yzddmr6.prismspace.prism.compose.space.SpacePresentationKind
+import com.yzddmr6.prismspace.prism.compose.space.presentSpace
 import com.yzddmr6.prismspace.prism.compose.space.SpaceUsability
 import com.yzddmr6.prismspace.prism.compose.nav.PrismRoutes
 import com.yzddmr6.prismspace.mobile.R
@@ -31,15 +33,17 @@ import kotlinx.coroutines.withContext
 
 enum class SpaceHealth { Normal, NotCreated, Provisioning, Suspended, Locked, Checking, NeedsRepair }
 
-internal fun spaceHealth(state: SpaceState): SpaceHealth = when (state) {
-    SpaceState.NoProfile -> SpaceHealth.NotCreated
-    is SpaceState.Provisioning -> SpaceHealth.Provisioning
-    is SpaceState.Locked -> SpaceHealth.Locked
-    is SpaceState.Inactive -> SpaceHealth.Suspended
-    is SpaceState.Healthy -> SpaceHealth.Normal
-    is SpaceState.OrphanProfile,
-    is SpaceState.HalfProvisioned,
-    is SpaceState.BridgeDown -> SpaceHealth.NeedsRepair
+internal fun spaceHealth(state: SpaceState): SpaceHealth = when (presentSpace(state).kind) {
+    SpacePresentationKind.Missing -> SpaceHealth.NotCreated
+    SpacePresentationKind.Provisioning -> SpaceHealth.Provisioning
+    SpacePresentationKind.Locked -> SpaceHealth.Locked
+    SpacePresentationKind.Inactive -> SpaceHealth.Suspended
+    SpacePresentationKind.Ready -> SpaceHealth.Normal
+    SpacePresentationKind.Checking,
+    SpacePresentationKind.Unavailable -> SpaceHealth.Checking
+    SpacePresentationKind.Orphan,
+    SpacePresentationKind.Incomplete,
+    SpacePresentationKind.BridgeUnavailable -> SpaceHealth.NeedsRepair
 }
 
 internal fun profileStatusLabelRes(state: SpaceState): Int = when (state) {
@@ -191,7 +195,7 @@ internal fun mapHomeState(
         versionName       = versionName,
         androidText       = androidText,
         deviceText        = deviceText,
-        showRepair        = health != SpaceHealth.Normal,
+        showRepair        = health != SpaceHealth.Normal && health != SpaceHealth.Checking,
         profileOwnerLabel = profileOwnerLabel,
     )
 }
@@ -213,7 +217,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             stateRepo.state.collectLatest { snapshot ->
                 when (snapshot) {
-                    SpaceSnapshot.Loading -> _uiState.value = null
+                    SpaceSnapshot.Loading -> renderChecking()
+                    is SpaceSnapshot.Failed -> renderChecking()
                     is SpaceSnapshot.Loaded -> render(snapshot.state)
                 }
             }
@@ -222,13 +227,18 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refresh() {
         viewModelScope.launch {
-            stateRepo.refresh("home_explicit")
-            (stateRepo.state.value as? SpaceSnapshot.Loaded)?.state?.let { render(it) }
+            if (stateRepo.refresh("home_explicit")) {
+                (stateRepo.state.value as? SpaceSnapshot.Loaded)?.state?.let { render(it) }
+            } else renderChecking()
         }
     }
 
     private suspend fun render(state: SpaceState) {
         _uiState.value = withContext(Dispatchers.IO) { loadState(state) }
+    }
+
+    private suspend fun renderChecking() {
+        _uiState.value = withContext(Dispatchers.IO) { loadCheckingState() }
     }
 
     // Create/repair actions navigate to Settings, where provisioning and recovery live.
@@ -323,6 +333,23 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             deviceText         = deviceText,
             profileOwnerLabel  = profileOwnerLabel,
             resolve            = resolve,
+        )
+    }
+
+    private fun loadCheckingState(): HomeUiModel {
+        val context: Context = getApplication()
+        val resolve: (Int) -> String = { id -> PrismLocale.wrap(context).getString(id) }
+        return mapHomeState(
+            health = SpaceHealth.Checking,
+            mainCount = 0,
+            cloneCount = 0,
+            capabilityText = resolve(prismModeLabelRes(capRepo.selectedMode.value)),
+            versionName = runCatching {
+                "v${com.yzddmr6.prismspace.util.Versions.name(context) ?: "?"} (${com.yzddmr6.prismspace.util.Versions.code(context)})"
+            }.getOrDefault("v?"),
+            androidText = "${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})",
+            deviceText = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}",
+            resolve = resolve,
         )
     }
 

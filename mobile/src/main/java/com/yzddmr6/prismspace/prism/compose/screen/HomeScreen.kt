@@ -124,7 +124,7 @@ fun HomeScreen(nav: NavHostController) {
 
             // ── Status Hero Card ─────────────────────────────────────────────
             StatusHeroCard(
-                level       = state?.level ?: PrismLevel.Ok,
+                level       = state?.level ?: PrismLevel.Warn,
                 title       = state?.statusTitle ?: stringResource(R.string.lz_home_loading),
                 body        = state?.statusBody ?: "",
                 tag         = state?.tag ?: "",

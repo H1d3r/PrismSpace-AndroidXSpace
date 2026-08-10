@@ -3,6 +3,8 @@ package com.yzddmr6.prismspace.setup.compose
 import android.app.Activity
 import androidx.lifecycle.SavedStateHandle
 import com.yzddmr6.prismspace.space.SpaceState
+import com.yzddmr6.prismspace.prism.compose.space.SpaceSnapshot
+import com.yzddmr6.prismspace.prism.compose.space.SpaceSnapshotFailure
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -55,5 +57,35 @@ class SetupCompletionDecisionTest {
         assertTrue(restored.provisioningLaunched)
         assertTrue(restored.consumeProvisioningLaunched())
         assertFalse(restored.consumeProvisioningLaunched())
+    }
+
+    @Test fun `convergence finishes only on healthy and otherwise reaches finite recovery`() {
+        assertEquals(
+            SetupConvergenceAction.Finish,
+            setupConvergenceAction(SpaceSnapshot.Loaded(SpaceState.Healthy(20)), remainingMs = 1),
+        )
+        assertEquals(
+            SetupConvergenceAction.Wait,
+            setupConvergenceAction(SpaceSnapshot.Loaded(SpaceState.BridgeDown(20, com.yzddmr6.prismspace.space.SpaceBridgeCause.TimedOut)), 1),
+        )
+        assertEquals(
+            SetupConvergenceAction.Recover,
+            setupConvergenceAction(SpaceSnapshot.Failed(SpaceSnapshotFailure("IO", null), null), 0),
+        )
+    }
+
+    @Test fun `convergence deadline survives recreation and cannot restart indefinitely`() {
+        val handle = SavedStateHandle()
+        val first = SetupStateViewModel(handle)
+        first.beginProvisioning()
+        assertEquals(30L, first.convergenceRemaining(nowElapsedMs = 100L, timeoutMs = 30L))
+
+        val restored = SetupStateViewModel(SavedStateHandle(mapOf(
+            SetupStateViewModel.KEY_PROVISIONING_LAUNCHED to true,
+            SetupStateViewModel.KEY_CONVERGENCE_DEADLINE to
+                handle.get<Long>(SetupStateViewModel.KEY_CONVERGENCE_DEADLINE),
+        )))
+        assertEquals(20L, restored.convergenceRemaining(nowElapsedMs = 110L, timeoutMs = 30L))
+        assertEquals(0L, restored.convergenceRemaining(nowElapsedMs = 131L, timeoutMs = 30L))
     }
 }
