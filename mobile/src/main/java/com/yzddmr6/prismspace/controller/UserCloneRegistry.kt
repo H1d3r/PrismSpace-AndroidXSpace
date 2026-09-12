@@ -42,6 +42,9 @@ object UserCloneRegistry {
     fun contains(context: Context, pkg: String): Boolean =
         (prefs(context).getStringSet(KEY, emptySet()) ?: emptySet()).contains(pkg)
 
+    fun packages(context: Context): Set<String> =
+        prefs(context).getStringSet(KEY, emptySet()).orEmpty().toSet()
+
     /** Clear all clone markers after the managed profile itself has been removed. */
     fun clear(context: Context) {
         prefs(context).edit().remove(KEY).apply()

@@ -1,6 +1,13 @@
 package com.yzddmr6.prismspace.prism.compose.space
 
 import android.content.Context
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.buffer
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import com.yzddmr6.prismspace.PrismNameManager
 import com.yzddmr6.prismspace.common.app.AppListProvider
 import com.yzddmr6.prismspace.data.PrismAppInfo
@@ -59,6 +66,17 @@ class DefaultSpaceRepository(private val appContext: Context) : SpaceRepository 
                           ?: return emptyList()
         return provider.installedApps(handle)
     }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun appChanges() = callbackFlow<Set<Int>> {
+        val source = provider
+        val observer = object : AppListProvider.PackageChangeObserver<PrismAppInfo> {
+            override fun onPackageUpdate(apps: Collection<PrismAppInfo>) { trySend(apps.map { it.user.toId() }.toSet()) }
+            override fun onPackageRemoved(apps: Collection<PrismAppInfo>) { trySend(apps.map { it.user.toId() }.toSet()) }
+        }
+        source.registerObserver(observer)
+        awaitClose { source.unregisterObserver(observer) }
+    }.buffer(Channel.UNLIMITED).flowOn(Dispatchers.IO) // the consumer coalesces user IDs without dropping invalidations
 
     override fun cloneTargetSpaceCount(): Int {
         return 1 + Users.getProfilesManagedByPrism().size

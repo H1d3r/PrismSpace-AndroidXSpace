@@ -7,6 +7,7 @@ import android.content.pm.PackageManager.MATCH_UNINSTALLED_PACKAGES
 import android.os.Build
 import android.os.SystemClock
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
@@ -33,12 +34,19 @@ import com.yzddmr6.prismspace.data.helper.installed
 import com.yzddmr6.prismspace.prism.ui.PrismAppsViewModel
 import com.yzddmr6.prismspace.util.LauncherAppsCompat
 import com.yzddmr6.prismspace.util.UserHandles
+import java.text.Collator
+import java.util.Locale
+import android.util.LruCache
+import com.yzddmr6.prismspace.util.PrismLocale
+import com.yzddmr6.prismspace.prism.service.SpaceIconLoader
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -63,6 +71,9 @@ internal data class SpaceAppInput(
     val prepared: Boolean = false,
     val segment: SpaceSegment,
     val critical: Boolean = false,
+    val userId: Int = 0,
+    val iconVersion: String = "",
+    val cloneStateKnown: Boolean = true,
 )
 
 /** The row's single next-step action rendered as its inline button; null = no action row button. */
@@ -86,6 +97,9 @@ data class SpaceRow(
     val chipOk: Boolean,       // true → ok-green, false → muted/warn
     val primaryAction: SpaceRowAction? = null,   // the row's only inline next-step action
     val critical: Boolean = false,
+    val userId: Int = 0,
+    val iconVersion: String = "",
+    val cloneStateKnown: Boolean = true,
 )
 
 // ---------------------------------------------------------------------------
@@ -118,6 +132,7 @@ internal fun mapRows(inputs: List<SpaceAppInput>, res: StringResolver): List<Spa
             else -> null
         }
         SpaceSegment.Main -> when {
+            !app.cloneStateKnown -> null
             app.prepared -> SpaceRowAction.ContinueInstall
             app.cloned -> null
             else -> SpaceRowAction.AddClone
@@ -137,6 +152,9 @@ internal fun mapRows(inputs: List<SpaceAppInput>, res: StringResolver): List<Spa
         chipOk    = chipOk,
         primaryAction = primaryAction,
         critical  = app.critical,
+        userId = app.userId,
+        iconVersion = app.iconVersion,
+        cloneStateKnown = app.cloneStateKnown,
     )
 }
 
@@ -172,7 +190,7 @@ enum class CloneFilter { All, Yes, No }
  * - search:      matches label OR packageName, case-insensitive; applied to both segments.
  * - showSystem:  hides system apps (row.system == true) when false.
  * - cloneFilter: All / Yes / No clone filter; MAIN segment only.
- * - sort Name:   localeCompare with zh collation (both segments).
+ * - sort Name:   localized name collation with package-name tie-breaker (both segments).
  * - sort Cloned: 已添加优先 — cloned-first (already-cloned at top), then name; MAIN segment only.
  *                Falls back to Name sort for Dual segment.
  *
@@ -186,6 +204,7 @@ internal fun applyListTransform(
     sort: SortOrder,
     cloneFilter: CloneFilter,
     showSystem: Boolean,
+    locale: Locale = Locale.getDefault(),
 ): List<SpaceRow> {
     var result = rows
 
@@ -197,26 +216,25 @@ internal fun applyListTransform(
         }
     }
 
-    // 2a. System-app visibility. Caller passes the segment's own flag; both default ON so a space
-    // initially shows its complete launchable app list.
+    // 2a. System-app visibility belongs to the selected space.
     if (!showSystem) result = result.filter { !it.system }
     // 2b. Clone filter (main segment only)
     if (segment == SpaceSegment.Main) {
         result = when (cloneFilter) {
             CloneFilter.Yes -> result.filter { it.cloned }
-            CloneFilter.No  -> result.filter { !it.cloned }
+            CloneFilter.No  -> result.filter { it.cloneStateKnown && !it.cloned }
             CloneFilter.All -> result
         }
     }
 
-    // 3. Sort
-    result = when {
-        sort == SortOrder.Name -> result.sortedWith(compareBy { it.label.lowercase() })
-        sort == SortOrder.Cloned && segment == SpaceSegment.Main ->
-            result.sortedWith(compareByDescending<SpaceRow> { if (it.cloned) 1 else 0 }
-                .thenBy { it.label.lowercase() })
-        else -> result.sortedWith(compareBy { it.label.lowercase() }) // Cloned sort falls back to Name for Dual
+    // Locale-aware, total ordering: identical names never inherit mutable provider-map order.
+    val collator = Collator.getInstance(locale)
+    val byName = Comparator<SpaceRow> { a, b ->
+        collator.compare(a.label, b.label).takeIf { it != 0 } ?: a.pkg.compareTo(b.pkg)
     }
+    val comparator = if (sort == SortOrder.Cloned && segment == SpaceSegment.Main)
+        compareByDescending<SpaceRow> { it.cloned }.then(byName) else byName
+    result = result.sortedWith(comparator)
 
     return result
 }
@@ -244,12 +262,10 @@ data class SpaceUiState(
     val multiSelectDomain: List<SpaceRow>? = null,
     // Batch progress message while a batch op is running, null otherwise
     val batchProgress: String? = null,
-    // Filter, sort, and search state.
-    val sortOrder: SortOrder = SortOrder.Name,
-    val cloneFilter: CloneFilter = CloneFilter.All,
-    val showSystem: Boolean = false,
-    // Dual space uses its own toggle state so each segment can be narrowed independently.
-    val showSystemDual: Boolean = false,
+    val browsing: Map<String, SpaceBrowseOptions> = emptyMap(),
+    val refreshing: Boolean = false,
+    val calculating: Boolean = false,
+    val refreshError: String? = null,
     val selectedDualSpaceId: String? = null,
     val spaces: List<PrismSpace> = emptyList(),
     val feedbackMessage: String? = null,
@@ -257,6 +273,14 @@ data class SpaceUiState(
     val dualUsability: SpaceUsability = SpaceUsability.Unknown,
     val mainCopyLostPackage: String? = null,
 ) {
+    val activeSpaceId: String get() = if (segment == SpaceSegment.Main) "main" else selectedDualSpaceId ?: "dual"
+    val browse: SpaceBrowseOptions get() = browsing[activeSpaceId] ?: SpaceBrowseOptions()
+    val sortOrder: SortOrder get() = browse.sort
+    val cloneFilter: CloneFilter get() = browse.filter
+    val query: String get() = browse.query
+    val systemQuery: String get() = browse.systemQuery
+    val showSystem: Boolean get() = browsing["main"]?.showSystem ?: false
+    val showSystemDual: Boolean get() = browsing[selectedDualSpaceId]?.showSystem ?: false
     val current: SpaceSegmentState get() = if (segment == SpaceSegment.Dual) dual else main
     val dualCount: Int get() = (dual as? SpaceSegmentState.Content)?.rows?.size ?: 0
     val mainCount: Int get() = (main as? SpaceSegmentState.Content)?.rows?.size ?: 0
@@ -278,13 +302,16 @@ internal fun batchActionsFor(segment: SpaceSegment): List<BatchAction> = when (s
 
 // ---------------------------------------------------------------------------
 // ViewModel — bridges the Compose UI to space/app data via SpaceRepository.
-// All profile + provider acquisition is delegated to SpaceRepository (the
-// single source of truth); this VM never touches Users/AppListProvider.
+// App enumeration uses SpaceRepository; execution paths retain fresh capability checks.
 // ---------------------------------------------------------------------------
 
-class SpaceViewModel(app: Application) : AndroidViewModel(app) {
+class SpaceViewModel(app: Application, private val savedState: SavedStateHandle) : AndroidViewModel(app) {
 
-    private val _uiState = MutableStateFlow(SpaceUiState())
+    private val _uiState = MutableStateFlow(SpaceUiState(
+        browsing = savedState.get<HashMap<String, SpaceBrowseOptions>>("space_browsing")?.toMap().orEmpty(),
+        selectedDualSpaceId = savedState["selected_dual"],
+        segment = savedState.get<String>("space_segment")?.let { runCatching { SpaceSegment.valueOf(it) }.getOrNull() } ?: SpaceSegment.Dual,
+    ))
     val uiState: StateFlow<SpaceUiState> = _uiState
     private val spaceRepo: SpaceRepository by lazy { SpaceRepositoryProvider.get(getApplication()) }
     private val stateRepo: SpaceStateRepository by lazy { SpaceStateRepository(getApplication()) }
@@ -302,55 +329,64 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // Internal cache so callers can look up PrismAppInfo by package.
-    // One immutable snapshot is published atomically via a single @Volatile ref,
-    // so readers always get a coherent (dual, main) pair.
-    private data class AppCache(val dual: List<PrismAppInfo>, val main: List<PrismAppInfo>)
-
-    private data class LoadedRows(
-        val dual: List<SpaceRow>,
-        val main: List<SpaceRow>,
-        val systemApps: List<SpaceRow>,
+    private data class SpaceApps(
+        val apps: Map<String, PrismAppInfo>,
+        val normal: List<SpaceAppInput>,
+        val system: List<SpaceAppInput>,
     )
-
-    @Volatile private var appCache: AppCache = AppCache(emptyList(), emptyList())
+    private data class SpaceView(val normal: SpaceSegmentState, val system: SpaceSegmentState)
+    @Volatile private var snapshots: Map<String, SpaceApps> = emptyMap()
+    private var views: Map<String, SpaceView> = emptyMap()
+    private val labels = LruCache<String, String>(2048)
+    private var labelLocale = PrismLocale.wrap(app).resources.configuration.locales[0].toLanguageTag()
+    private data class ProjectionInput(
+        val normal: List<SpaceAppInput>, val system: List<SpaceAppInput>, val options: SpaceBrowseOptions,
+        val targetPackages: Set<String>?, val hasTarget: Boolean, val pending: Set<String>,
+        val marked: Set<String>, val locale: Locale,
+    )
+    private var projections: Map<String, Pair<ProjectionInput, SpaceView>> = emptyMap()
+    private var projectionVersion = 0
+    private var projectionJob: Job? = null
+    val icons = SpaceIconLoader(app, viewModelScope)
+    private val reloads = SpaceReloadQueue(viewModelScope, onFailure = ::refreshFailed) { reload(it) }
 
     init {
         viewModelScope.launch {
             stateRepo.state.collectLatest { snapshot ->
                 when (snapshot) {
-                    SpaceSnapshot.Loading -> _uiState.value = _uiState.value.copy(
-                        dual = SpaceSegmentState.Loading,
-                        main = SpaceSegmentState.Loading,
-                        systemApps = SpaceSegmentState.Loading,
+                    SpaceSnapshot.Loading -> publishViews(_uiState.value.copy(dualUsability = SpaceUsability.Unknown))
+                    is SpaceSnapshot.Failed -> publishViews(_uiState.value.copy(
                         dualUsability = SpaceUsability.Unknown,
-                    )
-                    is SpaceSnapshot.Failed -> _uiState.value = _uiState.value.copy(
-                        dual = SpaceSegmentState.Unavailable,
-                        main = SpaceSegmentState.Unavailable,
-                        systemApps = SpaceSegmentState.Unavailable,
-                        dualUsability = SpaceUsability.Unknown,
-                    )
-                    is SpaceSnapshot.Loaded -> loadContent()
+                        refreshError = app.getString(R.string.lz_setvm_state_refresh_failed),
+                    ))
+                    is SpaceSnapshot.Loaded -> reloads.request(SpaceReloadRequest())
                 }
+            }
+        }
+        viewModelScope.launch {
+            spaceRepo.appChanges().collect { users ->
+                if (users.isNotEmpty()) reloads.request(SpaceReloadRequest(users))
             }
         }
     }
 
-    // -----------------------------------------------------------------------
-    // Segment switching
-    // -----------------------------------------------------------------------
-
+    /** Switching known views only selects a cached projection; it never refreshes both lists. */
     fun selectSegment(segment: SpaceSegment) {
-        if (_uiState.value.batchProgress != null) return
-        _uiState.value = _uiState.value.copy(segment = segment)
+        if (_uiState.value.batchProgress != null || _uiState.value.segment == segment) return
+        publishViews(_uiState.value.copy(segment = segment))
+        savedState["space_segment"] = segment.name
     }
 
     fun selectSpace(dualSpaceId: String) {
-        if (_uiState.value.batchProgress != null) return
-        // selectSegment only flips the already-loaded view; selectSpace changes WHICH dual is loaded, so it must reload.
-        _uiState.value = _uiState.value.copy(segment = SpaceSegment.Dual, selectedDualSpaceId = dualSpaceId)
-        refresh()
+        val current = _uiState.value
+        if (current.batchProgress != null || (current.segment == SpaceSegment.Dual && current.selectedDualSpaceId == dualSpaceId)) return
+        val space = current.spaces.firstOrNull { it.id == dualSpaceId && it.kind == PrismSpaceKind.Dual } ?: return
+        val targetChanged = current.selectedDualSpaceId != dualSpaceId
+        publishViews(current.copy(segment = SpaceSegment.Dual, selectedDualSpaceId = dualSpaceId))
+        savedState["space_segment"] = SpaceSegment.Dual.name
+        savedState["selected_dual"] = dualSpaceId
+        if (space.id !in snapshots) reloads.request(SpaceReloadRequest(setOf(space.userId)))
+        if (targetChanged) projectViews()
     }
 
     private fun setFeedback(message: String, isError: Boolean) {
@@ -372,55 +408,127 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
     // Data refresh
     // -----------------------------------------------------------------------
 
-    fun refresh() {
-        viewModelScope.launch {
-            stateRepo.refresh("space_explicit")
-            loadContent()
+    fun refresh() { reloads.request(SpaceReloadRequest(checkSpaceFacts = true)) }
+
+    private suspend fun reload(request: SpaceReloadRequest) {
+        _uiState.value = _uiState.value.copy(refreshing = true, refreshError = null)
+        try {
+            if (request.checkSpaceFacts && !stateRepo.refresh("space_explicit")) {
+                throw IllegalStateException("space_facts_unavailable")
+            }
+            // A failed fact lookup is not evidence that a profile disappeared.
+            if (stateRepo.state.value is SpaceSnapshot.Loading) return
+            if (stateRepo.state.value is SpaceSnapshot.Failed) throw IllegalStateException("space_facts_unavailable")
+            val previous = snapshots
+            val (spaces, updated) = withContext(Dispatchers.IO) {
+                val spaces = spaceRepo.spaces()
+                val updated = previous.filterKeys { id -> spaces.any { it.id == id } }.toMutableMap()
+                spaces.filter { request.users == null || it.userId in request.users || it.id !in previous }.forEach { space ->
+                    if (space.kind == PrismSpaceKind.Main || spaceRepo.usabilityOf(space) == SpaceUsability.Usable) {
+                        DiagnosticLog.d(TAG, "load app snapshot space=${space.id}")
+                        val apps = loadApps(space)
+                        // Retire completed preparations only against a freshly read usable profile,
+                        // never as a side effect of rendering a cached list or changing its filter.
+                        if (space.kind == PrismSpaceKind.Dual) {
+                            ClonePreparationStore.reconcileInstalled(getApplication(), apps.apps.keys)
+                        }
+                        updated[space.id] = apps
+                    }
+                }
+                spaces to updated.toMap()
+            }
+            snapshots = updated
+            views = views.filterKeys { id -> spaces.any { it.id == id } }
+            val current = _uiState.value
+            val selection = resolveSpaceSelection(current.segment, current.selectedDualSpaceId, spaces)
+            savedState["space_segment"] = selection.segment.name
+            savedState["selected_dual"] = selection.selectedDualSpaceId
+            publishViews(current.copy(spaces = spaces, segment = selection.segment, selectedDualSpaceId = selection.selectedDualSpaceId))
+            projectViews()
+        } finally {
+            _uiState.value = _uiState.value.copy(refreshing = false)
         }
     }
 
-    private suspend fun loadContent() {
-        _uiState.value = _uiState.value.copy(
-            dual = SpaceSegmentState.Loading,
-            main = SpaceSegmentState.Loading,
-            systemApps = SpaceSegmentState.Loading,
-        )
-        val selectedDualId = _uiState.value.selectedDualSpaceId
-        val (pair, allSpaces, dualUsability) = withContext(Dispatchers.IO) {
-            val segments = loadBothSegments()
-            val spaces = spaceRepo.spaces()
-            val usability = (selectedDualId?.let { spaceRepo.space(it) } ?: spaceRepo.dualSpace())
-                ?.let { spaceRepo.usabilityOf(it) } ?: SpaceUsability.NotProvisioned
-            Triple(segments, spaces, usability)
+    private fun refreshFailed(error: Exception) {
+        DiagnosticLog.w(TAG, "app snapshot refresh failed", error)
+        publishViews(_uiState.value.copy(refreshError = prismResolver(getApplication())(
+            R.string.lz_setvm_state_refresh_failed, emptyArray())))
+    }
+
+    /** Rows are projected once off-main and cached for every space; UI only renders this result. */
+    private fun projectViews() {
+        projectionJob?.cancel()
+        val version = ++projectionVersion
+        val source = snapshots
+        val browsing = _uiState.value.browsing
+        val target = _uiState.value.selectedDualSpaceId
+        val previous = projections
+        _uiState.value = _uiState.value.copy(calculating = true)
+        projectionJob = viewModelScope.launch {
+            try {
+                val result = withContext(Dispatchers.Default) {
+                    val context: Context = getApplication()
+                    val locale = PrismLocale.wrap(context).resources.configuration.locales[0]
+                    val res = prismResolver(context)
+                    val targetApps = source[target]?.apps?.keys
+                    val pending = ClonePreparationStore.pendingPackages(context)
+                    val marked = UserCloneRegistry.packages(context)
+                    source.mapValues { (id, apps) ->
+                        val options = browsing[id] ?: SpaceBrowseOptions()
+                        val key = ProjectionInput(apps.normal, apps.system, options,
+                            if (id == "main") targetApps else null, target != null,
+                            if (id == "main") pending else emptySet(), marked, locale)
+                        previous[id]?.takeIf { it.first == key } ?: run {
+                            val inputs = if (id == "main") apps.normal.map { input ->
+                                input.copy(
+                                    cloned = mainAppIsCloned(input.system, input.pkg in targetApps.orEmpty(), input.pkg in marked),
+                                    prepared = input.pkg in pending && input.pkg !in targetApps.orEmpty(),
+                                    cloneStateKnown = target == null || targetApps != null,
+                                )
+                            } else apps.normal
+                            val segment = if (id == "main") SpaceSegment.Main else SpaceSegment.Dual
+                            key to SpaceView(
+                                applyListTransform(mapRows(inputs, res), segment, options.query, options.sort,
+                                    options.filter, options.showSystem, locale).toSegmentState(),
+                                filterSystemAppRows(mapRows(apps.system, res), options.systemQuery).toSegmentState(),
+                            )
+                        }
+                    }
+                }
+                projections = result
+                views = result.mapValues { it.value.second }
+                publishViews(_uiState.value)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                DiagnosticLog.w(TAG, "app list projection failed", error)
+                publishViews(_uiState.value.copy(refreshError = prismResolver(getApplication())(
+                    R.string.lz_setvm_state_refresh_failed, emptyArray())))
+            } finally {
+                if (version == projectionVersion) _uiState.value = _uiState.value.copy(calculating = false)
+            }
         }
-        val selection = resolveSpaceSelection(
-            requestedSegment = _uiState.value.segment,
-            selectedDualSpaceId = selectedDualId,
-            spaces = allSpaces,
-        )
-        _uiState.value = _uiState.value.copy(
-            segment = selection.segment,
-            selectedDualSpaceId = selection.selectedDualSpaceId,
-            dual = pair.dual.toSegmentState(),
-            main = pair.main.toSegmentState(),
-            systemApps = pair.systemApps.toSegmentState(),
-            spaces = allSpaces,
-            dualUsability = dualUsability,
+    }
+
+    private fun publishViews(state: SpaceUiState) {
+        val fallback = if (state.refreshError == null) SpaceSegmentState.Loading else SpaceSegmentState.Unavailable
+        val selected = state.selectedDualSpaceId
+        val usability = state.spaces.firstOrNull { it.id == selected }
+            ?.let { spaceRepo.usabilityOf(it) } ?: SpaceUsability.NotProvisioned
+        _uiState.value = state.copy(
+            main = views["main"]?.normal ?: fallback,
+            dual = views[selected]?.normal ?: if (usability == SpaceUsability.Usable) fallback else SpaceSegmentState.Unavailable,
+            systemApps = views[selected]?.system ?: fallback,
+            dualUsability = if (stateRepo.state.value is SpaceSnapshot.Loaded) usability else SpaceUsability.Unknown,
         )
     }
 
     private fun List<SpaceRow>.toSegmentState(): SpaceSegmentState =
         if (isEmpty()) SpaceSegmentState.Empty else SpaceSegmentState.Content(this)
 
-    // -----------------------------------------------------------------------
-    // Look-up
-    // -----------------------------------------------------------------------
-
-    fun appFor(pkg: String, segment: SpaceSegment): PrismAppInfo? {
-        val snapshot = appCache  // single @Volatile read → a coherent (dual,main) pair
-        val cache = if (segment == SpaceSegment.Dual) snapshot.dual else snapshot.main
-        return cache.firstOrNull { it.packageName == pkg }
-    }
+    fun appFor(pkg: String, segment: SpaceSegment): PrismAppInfo? =
+        snapshots[if (segment == SpaceSegment.Main) "main" else _uiState.value.selectedDualSpaceId]?.apps?.get(pkg)
 
     // -----------------------------------------------------------------------
     // Multi-select
@@ -429,6 +537,7 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
     /** Long-press an app card to enter multi-select mode with that app pre-selected. The current
      *  search/filter/sort result set is snapshotted as the selection domain. */
     fun enterMultiSelect(pkg: String, domain: List<SpaceRow>) {
+        if (_uiState.value.calculating || _uiState.value.batchProgress != null) return
         // System packages are deliberately single-action only so the critical-package warning
         // cannot be bypassed through a batch operation.
         val state = MultiSelect.enter(pkg, domain) ?: return
@@ -438,7 +547,7 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
     /** The explicit 批量管理 top-bar entry: enter multi-select with an empty selection over the
      *  current domain snapshot. */
     fun enterMultiSelect(domain: List<SpaceRow>) {
-        if (_uiState.value.batchProgress != null) return
+        if (_uiState.value.calculating || _uiState.value.batchProgress != null) return
         val state = MultiSelect.enterEmpty(domain) ?: return
         _uiState.value = _uiState.value.copy(selectedPkgs = state.selected, multiSelectDomain = state.domain)
     }
@@ -638,6 +747,12 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
     fun onHostResumed() {
         uninstallHostResumed = true
         beginUninstallVerification()
+        val locale = PrismLocale.wrap(getApplication()).resources.configuration.locales[0].toLanguageTag()
+        if (locale != labelLocale) {
+            labelLocale = locale
+            reloads.request(SpaceReloadRequest())
+        }
+        viewModelScope.launch { stateRepo.refresh("space_resumed") }
     }
 
     private fun startUninstallQueue(pkgs: List<String>, segment: SpaceSegment) {
@@ -833,112 +948,45 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
     // Filter, sort, and search state updates.
     // -----------------------------------------------------------------------
 
-    fun setSortOrder(order: SortOrder) {
-        _uiState.value = _uiState.value.copy(sortOrder = order)
+    private fun updateBrowse(change: (SpaceBrowseOptions) -> SpaceBrowseOptions) {
+        val current = _uiState.value
+        val next = change(current.browse)
+        if (next == current.browse) return
+        val browsing = current.browsing + (current.activeSpaceId to next)
+        _uiState.value = current.copy(browsing = browsing)
+        savedState["space_browsing"] = HashMap(browsing)
+        projectViews()
     }
 
-    fun setCloneFilter(filter: CloneFilter) {
-        _uiState.value = _uiState.value.copy(cloneFilter = filter)
-    }
+    fun setSortOrder(order: SortOrder) = updateBrowse { it.copy(sort = order) }
+    fun setCloneFilter(filter: CloneFilter) = updateBrowse { it.copy(filter = filter) }
+    fun setShowSystem(show: Boolean) = updateBrowse { it.copy(showSystem = show) }
+    fun setShowSystemDual(show: Boolean) = setShowSystem(show)
+    fun setQuery(query: String) = updateBrowse { it.copy(query = query) }
+    fun setSystemQuery(query: String) = updateBrowse { it.copy(systemQuery = query) }
 
-    fun setShowSystem(show: Boolean) {
-        _uiState.value = _uiState.value.copy(showSystem = show)
-    }
-
-    /** Dual-space «显示系统应用» toggle — independent state, same default (ON) as main space. */
-    fun setShowSystemDual(show: Boolean) {
-        _uiState.value = _uiState.value.copy(showSystemDual = show)
-    }
-
-    // -----------------------------------------------------------------------
-    // Private helpers (run on IO dispatcher)
-    // -----------------------------------------------------------------------
-
-    private fun loadBothSegments(): LoadedRows {
-        val context: Context = getApplication()
-        val res: StringResolver = prismResolver(context)
-        val dual = _uiState.value.selectedDualSpaceId
-            ?.let { id -> spaceRepo.space(id)?.takeIf { it.kind == PrismSpaceKind.Dual } }
-            ?: spaceRepo.dualSpace()
-
-        // --- Dual profile (PrismSpace/work profile) ---
-        var allDualApps: List<PrismAppInfo> = emptyList()
-        val dualRows: List<SpaceRow> = if (dual == null) {
-            emptyList()
-        } else {
-            allDualApps = spaceRepo.installedApps(dual)
-                .filter { it.isInstalled && it.packageName != context.packageName }
-            val apps = allDualApps
-                .filter { it.shouldShowAsEnabled() }
-                // 分身 = what the USER cloned. Third-party apps in a profile are always user clones;
-                // system apps are only 分身 if the user explicitly cloned them (UserCloneRegistry).
-                // This hides the system apps a managed profile carries by provisioning (Play/设置/文件…).
-                // Include launchable system apps (browser/camera/files/…) so the dual space lists
-                // useful default system apps; non-launchable background packages stay excluded.
-                // The «显示系统应用» toggle (default ON) hides/reveals them in the UI layer (applyListTransform).
-                .filter { !it.isSystem || UserCloneRegistry.contains(context, it.packageName) || it.isLaunchable }
-                .sortedBy { it.label.toString().lowercase() }
-            val inputs = apps.map { app ->
-                SpaceAppInput(
-                    pkg       = app.packageName,
-                    label     = app.label.toString(),
-                    frozen    = app.isHidden,
-                    suspended = app.isSuspended,
-                    launchable = app.isLaunchable,
-                    system    = app.isSystem,
-                    cloned    = false, // dual profile always cloned
-                    segment   = SpaceSegment.Dual,
-                    critical  = app.isCritical,
-                )
-            }
-            mapRows(inputs, res)
-        }
-
-        // --- Main profile ---
-        val systemRows = mapRows(allDualApps
-            .filter { it.isSystem }
-            .map { app ->
-                SpaceAppInput(
-                    pkg = app.packageName,
-                    label = app.label.toString(),
-                    frozen = app.isHidden,
-                    suspended = app.isSuspended,
-                    launchable = app.isLaunchable,
-                    system = true,
-                    cloned = false,
-                    segment = SpaceSegment.Dual,
-                    critical = app.isCritical,
-                )
-            }, res)
-
-        val dualPkgs: Set<String> = allDualApps.map { it.packageName }.toSet()
-        val pendingClonePkgs = ClonePreparationStore.reconcileInstalled(context, dualPkgs)
-        val mainAppsList = spaceRepo.installedApps(spaceRepo.mainSpace())
-            .filter { it.isInstalled && it.enabled && it.packageName != context.packageName }
-            .sortedBy { it.label.toString().lowercase() }
-        val mainRows = mapRows(mainAppsList.map { app ->
-            SpaceAppInput(
-                pkg       = app.packageName,
-                label     = app.label.toString(),
-                frozen    = app.isHidden,
-                suspended = app.isSuspended,
-                launchable = app.isLaunchable,
-                system    = app.isSystem,
-                cloned    = mainAppIsCloned(
-                    isSystem = app.isSystem,
-                    installedInDual = app.packageName in dualPkgs,
-                    systemCloneMarked = UserCloneRegistry.contains(context, app.packageName),
-                ),
-                prepared  = app.packageName in pendingClonePkgs,
-                segment   = SpaceSegment.Main,
-                critical  = app.isCritical,
+    /** Immutable input values, collected from the existing repository off the UI thread. */
+    private fun loadApps(space: PrismSpace): SpaceApps {
+        val context = PrismLocale.wrap(getApplication())
+        val locale = PrismLocale.wrap(context).resources.configuration.locales[0].toLanguageTag()
+        val apps = spaceRepo.installedApps(space).filter { it.isInstalled && it.packageName != context.packageName }
+        val segment = if (space.kind == PrismSpaceKind.Main) SpaceSegment.Main else SpaceSegment.Dual
+        val inputs = apps.associate { app ->
+            val labelKey = "${space.id}:${app.packageName}:${app.sourceDir}:$locale"
+            val label = labels.get(labelKey) ?: runCatching { app.loadLabel(context.packageManager).toString() }
+                .getOrDefault(app.packageName).ifBlank { app.packageName }.also { labels.put(labelKey, it) }
+            app.packageName to SpaceAppInput(
+                pkg = app.packageName, label = label, frozen = app.isHidden, suspended = app.isSuspended,
+                launchable = app.isLaunchable, system = app.isSystem, cloned = false, segment = segment,
+                critical = app.isCritical, userId = space.userId, iconVersion = app.sourceDir.orEmpty(),
             )
-        }, res)
-
-        appCache = AppCache(allDualApps, mainAppsList)
-        return LoadedRows(dualRows, mainRows, systemRows)
+        }
+        val normal = apps.filter { app ->
+            if (segment == SpaceSegment.Main) app.enabled else app.shouldShowAsEnabled() &&
+                (!app.isSystem || UserCloneRegistry.contains(context, app.packageName) || inputs.getValue(app.packageName).launchable)
+        }.map { inputs.getValue(it.packageName) }
+        return SpaceApps(apps.associateBy { it.packageName }, normal, inputs.values.filter { it.system })
     }
-
 }
 
 private const val TAG = "Prism.SpaceVM"
