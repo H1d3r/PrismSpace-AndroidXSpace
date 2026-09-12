@@ -76,7 +76,7 @@ class HomeMapTest {
         assertEquals(PrismLevel.Warn, model.level)
         assertEquals("已暂停", model.tag)
         assertEquals("恢复双开空间", model.primaryLabel)
-        assertEquals(HomePrimaryAction.OpenSettings, model.primaryAction)
+        assertEquals(HomePrimaryAction.ActivateSpace, model.primaryAction)
         assertNull(model.primaryRoute)
         assertEquals(7, model.mainCount)
         assertEquals(2, model.cloneCount)
@@ -136,5 +136,10 @@ class HomeMapTest {
         assertNull(model.primaryRoute)
         assertEquals(0, model.mainCount)
         assertEquals(0, model.cloneCount)
+    }
+    @Test fun pausedAndLockedActionsRequestActivationRatherThanOnlyNavigation() {
+        for (health in listOf(SpaceHealth.Suspended, SpaceHealth.Locked)) {
+            assertEquals(HomePrimaryAction.ActivateSpace, mapHome(health, 10, 1, resolve).primaryAction)
+        }
     }
 }

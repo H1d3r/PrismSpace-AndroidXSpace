@@ -456,7 +456,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     // Create/repair entry point. When the profile is absent, this opens the normal setup
     // wizard. When it exists but is paused/locked, it asks Android to bring that profile back.
     // ---------------------------------------------------------------------------
-    fun repairSpace(context: Context) {
+    fun repairSpace(context: Context, activationOnly: Boolean = false) {
         viewModelScope.launch {
             val appContext = context.applicationContext
             if (!stateRepo.refresh("settings_repair")) {
@@ -477,6 +477,13 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             }
             if (plan == null) {
                 setFeedback(str(R.string.lz_setvm_state_refresh_failed), isError = true)
+                return@launch
+            }
+            // A home-page resume request must not turn into setup or policy repair if facts
+            // changed while navigating. Those operations retain their explicit settings entry.
+            if (activationOnly && plan !is SpaceRecoveryPlan.Activate &&
+                plan !is SpaceRecoveryPlan.OpenProfileUnlock && plan !is SpaceRecoveryPlan.AlreadyReady) {
+                refreshCapabilities()
                 return@launch
             }
             when (plan) {

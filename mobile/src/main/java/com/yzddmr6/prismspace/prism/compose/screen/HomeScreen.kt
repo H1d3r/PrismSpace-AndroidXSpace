@@ -164,7 +164,7 @@ fun HomeScreen(nav: NavHostController) {
                             onClick   = {
                                 when (state.primaryAction) {
                                     HomePrimaryAction.StartSetup -> SetupFlow.open(context)
-                                    HomePrimaryAction.OpenSettings -> {
+                                    HomePrimaryAction.OpenSettings, HomePrimaryAction.ActivateSpace -> {
                                         activity?.let(NotificationPermissionPrompt::requestOnce)
                                         vm.repair { route -> nav.navigateToTab(route) }
                                     }
@@ -180,6 +180,7 @@ fun HomeScreen(nav: NavHostController) {
                                     HomePrimaryAction.StartSetup -> PrismIcons.Add
                                     HomePrimaryAction.OpenSpace -> PrismIcons.Grid
                                     HomePrimaryAction.OpenSettings -> PrismIcons.Wrench
+                                    HomePrimaryAction.ActivateSpace -> PrismIcons.Play
                                 },
                                 contentDescription = null,
                                 modifier = Modifier.padding(end = PrismSpacing.Sm),

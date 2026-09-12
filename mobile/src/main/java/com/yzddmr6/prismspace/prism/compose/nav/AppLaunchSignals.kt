@@ -7,6 +7,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 
 object AppLaunchSignals {
+    private val activationChannel = Channel<Unit>(capacity = Channel.CONFLATED)
+    val activateSpace: Flow<Unit> = activationChannel.receiveAsFlow()
+    fun signalActivateSpace() { activationChannel.trySend(Unit) }
+
     // "去启用" from the clone install-method selector (which lives in a Fragment, not the Compose
     // NavHost): jump to Settings and auto-open the run-mode guide so the user can enable Shizuku/Root.
     private val runModeChannel = Channel<Unit>(capacity = Channel.CONFLATED)

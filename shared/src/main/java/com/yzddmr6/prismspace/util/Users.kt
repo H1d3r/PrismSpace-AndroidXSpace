@@ -190,16 +190,27 @@ class Users : PseudoContentProvider() {
 					launch {
 						Log.i(TAG, "Activating PrismSpace ${profile.toId()}...")
 						val activating = runCatching {
-							HomeRole.runWithHomeRole(context) {
-								um.requestQuietModeEnabled(false, profile) }
+							if (DevicePolicies(context).isProfileOrDeviceOwnerOnCallingUser) {
+								HomeRole.runWithHomeRole(context) { um.requestQuietModeEnabled(false, profile) }
+							} else {
+								// A normal parent app cannot change DPM preferred activities. Launching
+								// its profile entry lets Android present the work-profile activation UI.
+								val launcher = context.getSystemService<LauncherApps>()!!
+								val entry = launcher.getActivityList(context.packageName, profile).firstOrNull()
+								if (entry == null) false else {
+									launcher.startMainActivity(entry.componentName, profile, null, null)
+									true
+								}
+							}
 						}.onFailure { e ->
 							Log.e(TAG, "Failed to request quiet mode disabled for user ${profile.toId()}", e)
 						}.getOrDefault(false)
 						if (! activating) it.resume(null)
 						Log.i(TAG, "Waiting for PrismSpace ${profile.toId()} to be ready...") }}
 			val user = intent?.getParcelableExtra<UserHandle>(Intent.EXTRA_USER)
-			Log.i(TAG, "PrismSpace ${user?.toId()} is ready")
-			return@coroutineScope user != null
+				val ready = user == profile && isProfileAvailable(context, profile)
+				Log.i(TAG, "PrismSpace ${profile.toId()} activation confirmed=$ready")
+				return@coroutineScope ready
 		}
 
 		private const val ACTIVATION_TIMEOUT: Long = 15_000		// May need to wait for user credential

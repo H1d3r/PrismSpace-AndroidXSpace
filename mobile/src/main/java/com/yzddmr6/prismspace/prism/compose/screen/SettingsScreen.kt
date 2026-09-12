@@ -77,6 +77,9 @@ fun SettingsScreen() {
     val context = LocalContext.current
 
     LaunchedEffect(Unit) { vm.refreshCapabilities() }
+    LaunchedEffect(Unit) {
+        AppLaunchSignals.activateSpace.collect { vm.repairSpace(context, activationOnly = true) }
+    }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->

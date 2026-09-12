@@ -61,7 +61,7 @@ internal fun profileStatusLabelRes(state: SpaceState): Int = when (state) {
     is SpaceState.BridgeDown -> R.string.lz_home_tag_needsrepair
 }
 
-enum class HomePrimaryAction { OpenSpace, StartSetup, OpenSettings }
+enum class HomePrimaryAction { OpenSpace, StartSetup, OpenSettings, ActivateSpace }
 
 /** 概览卡标签行：与头像组同一截断口径（同取前 N 个），仅当总数超出展示数时才追加省略号。 */
 internal fun overviewLabelsLine(labels: List<String>, cloneCount: Int): String =
@@ -156,7 +156,7 @@ internal fun mapHome(
         cloneCount = cloneCount,
         primaryLabel = resolve(R.string.lz_home_label_restore),
         primaryRoute = null,
-        primaryAction = HomePrimaryAction.OpenSettings,
+        primaryAction = HomePrimaryAction.ActivateSpace,
     )
     SpaceHealth.Locked -> HomeUiModel(
         level = PrismLevel.Warn,
@@ -167,7 +167,7 @@ internal fun mapHome(
         cloneCount = cloneCount,
         primaryLabel = resolve(R.string.lz_home_label_unlock),
         primaryRoute = null,
-        primaryAction = HomePrimaryAction.OpenSettings,
+        primaryAction = HomePrimaryAction.ActivateSpace,
     )
     SpaceHealth.Checking -> HomeUiModel(
         // 检查中/未知统一归 Neutral：「不知道」不得染绿也不染黄。
@@ -265,6 +265,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     // Create/repair actions navigate to Settings, where provisioning and recovery live.
     fun repair(onNavigate: (String) -> Unit) {
+        if (_uiState.value?.primaryAction == HomePrimaryAction.ActivateSpace)
+            com.yzddmr6.prismspace.prism.compose.nav.AppLaunchSignals.signalActivateSpace()
         onNavigate(PrismRoutes.SETTINGS)
     }
 
