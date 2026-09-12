@@ -5,6 +5,8 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
+const val DEFAULT_SYNC_TIMEOUT_MS = 4_500L
+
 enum class ShuttleNotReadyCause {
 	PermissionDenied,
 	UnknownAuthority,
@@ -37,11 +39,7 @@ fun classifyShuttleNotReadyCause(error: RuntimeException, permissionGranted: Boo
 		is IllegalArgumentException ->
 			if (error.message?.contains("Unknown authority", ignoreCase = true) == true) {
 				ShuttleNotReadyCause.UnknownAuthority
-			} else if (permissionGranted) {
-				ShuttleNotReadyCause.PermissionPresentCallFailed
-			} else {
-				ShuttleNotReadyCause.PermissionDenied
-			}
+			} else null
 		else -> null
 	}
 

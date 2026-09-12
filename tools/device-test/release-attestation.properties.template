@@ -1,0 +1,14 @@
+# Copy this file outside the repository, replace every placeholder, and supply it with
+# --attestation only after performing the real user-confirmed system-UI flows.
+format.version=1
+repository.revision=REPLACE_WITH_FULL_GIT_SHA
+device.serial=REPLACE_WITH_ADB_SERIAL
+device.fingerprint=REPLACE_WITH_BUILD_FINGERPRINT
+candidate.sha256=REPLACE_WITH_AUTOMATED_GATE_HASH
+normal.managed_provisioning=NOT_RUN
+normal.clone_package_installer=NOT_RUN
+normal.storage_access_framework=NOT_RUN
+normal.unknown_sources_guidance=NOT_RUN
+normal.pause_unlock_recovery=NOT_RUN
+operator=REPLACE_WITH_OPERATOR
+completed.at.utc=REPLACE_WITH_UTC_TIMESTAMP

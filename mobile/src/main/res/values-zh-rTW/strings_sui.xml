@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lz_setvm_mode_body_shizuku">Shizuku/Sui 模式可用，增強能力已啟用。</string>
+    <string name="lz_setvm_shizuku_not_ready">Shizuku 或 Sui 尚未就緒，請先啟動 Shizuku 或啟用 Sui，然後完成授權。</string>
+    <string name="lz_set_shizuku_intro">Shizuku 或 Sui 讓 PrismSpace 使用特權系統 API 增強克隆與跨使用者操作。</string>
+    <string name="lz_set_shizuku_step1">第 1 步  啟動 Shizuku；或在支援的 Root 環境安裝並啟用 Sui。</string>
+    <string name="lz_set_shizuku_step2">第 2 步  Shizuku 可用「無線偵錯」、ADB 或 Root 啟動；Sui 啟用後會被自動識別。</string>
+    <string name="lz_set_shizuku_step3">第 3 步  返回本頁，點下方按鈕檢查通道，並在系統提示時授權。</string>
+    <string name="lz_set_shizuku_check_button">檢查 Shizuku / Sui</string>
+</resources>

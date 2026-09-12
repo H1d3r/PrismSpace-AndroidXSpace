@@ -17,7 +17,10 @@ import android.text.TextUtils
 import android.util.Log
 import com.yzddmr6.prismspace.util.Apps
 import com.yzddmr6.prismspace.shuttle.ActivityShuttle
-import com.yzddmr6.prismspace.shuttle.Shuttle
+import com.yzddmr6.prismspace.bridge.Bridge
+import com.yzddmr6.prismspace.bridge.BridgeTargets
+import com.yzddmr6.prismspace.bridge.OpenAppDetailsInProfile
+import com.yzddmr6.prismspace.util.Users.Companion.toId
 import com.yzddmr6.prismspace.util.CallerAwareActivity
 import com.yzddmr6.prismspace.util.IntentCompat
 import com.yzddmr6.prismspace.util.Users
@@ -34,8 +37,11 @@ class AppInfoForwarderActivity : CallerAwareActivity() {
 		val user: UserHandle? = intent.getParcelableExtra(Intent.EXTRA_USER)
 		if (user != null && intent.action == Settings.ACTION_APPLICATION_DETAILS_SETTINGS) {  // For profiles other than default
 			intent.removeExtra(Intent.EXTRA_USER)
-			Shuttle(this, user).launch {
-				startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+			val pkg = intent.data?.takeIf { it.scheme == "package" }?.schemeSpecificPart
+			val target = BridgeTargets.profile(user.toId())
+			if (!pkg.isNullOrEmpty() && target != null) {
+				Bridge.inProfile(this, target).execute(OpenAppDetailsInProfile(pkg))
+			}
 		} else intent.getStringExtra(IntentCompat.EXTRA_PACKAGE_NAME)?.also { pkg ->
 			startActivity(buildTargetIntent(pkg, user, intent)) }
 		finish()

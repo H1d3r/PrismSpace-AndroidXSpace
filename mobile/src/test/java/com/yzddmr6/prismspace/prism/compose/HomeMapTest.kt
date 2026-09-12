@@ -5,8 +5,10 @@ import com.yzddmr6.prismspace.prism.compose.component.PrismLevel
 import com.yzddmr6.prismspace.prism.compose.vm.HomePrimaryAction
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceHealth
 import com.yzddmr6.prismspace.prism.compose.vm.mapHome
+import com.yzddmr6.prismspace.prism.compose.vm.overviewLabelsLine
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HomeMapTest {
@@ -74,7 +76,7 @@ class HomeMapTest {
         assertEquals(PrismLevel.Warn, model.level)
         assertEquals("已暂停", model.tag)
         assertEquals("恢复双开空间", model.primaryLabel)
-        assertEquals(HomePrimaryAction.OpenSettings, model.primaryAction)
+        assertEquals(HomePrimaryAction.ActivateSpace, model.primaryAction)
         assertNull(model.primaryRoute)
         assertEquals(7, model.mainCount)
         assertEquals(2, model.cloneCount)
@@ -89,13 +91,39 @@ class HomeMapTest {
     }
 
     @Test
-    fun `Checking - level Warn, tag 检查中, no repair wording`() {
+    fun `Checking - level Neutral, tag 检查中, no repair wording`() {
         val model = mapHome(SpaceHealth.Checking, mainCount = 7, cloneCount = 2, resolve = resolve)
-        assertEquals(PrismLevel.Warn, model.level)
+        assertEquals(PrismLevel.Neutral, model.level)
         assertEquals("正在检查双开空间", model.statusTitle)
         assertEquals("检查中", model.tag)
         assertEquals("打开设置", model.primaryLabel)
         assertEquals(HomePrimaryAction.OpenSettings, model.primaryAction)
+    }
+
+    @Test
+    fun `Provisioning - level Neutral (in-progress is not a warning)`() {
+        val model = mapHome(SpaceHealth.Provisioning, mainCount = 7, cloneCount = 2, resolve = resolve)
+        assertEquals(PrismLevel.Neutral, model.level)
+        assertEquals(HomePrimaryAction.OpenSettings, model.primaryAction)
+    }
+
+    @Test
+    fun `status calm rule - Ok and Neutral render as quiet line, Warn and Error as card`() {
+        // 状态安静原则：健康（Ok）与无偏向（Neutral）为一行安静文字；Warn/Error 才上状态卡。
+        assertTrue(mapHome(SpaceHealth.Normal, 1, 1, resolve).calm)
+        assertTrue(mapHome(SpaceHealth.Checking, 1, 1, resolve).calm)
+        assertTrue(mapHome(SpaceHealth.Provisioning, 1, 1, resolve).calm)
+        assertTrue(!mapHome(SpaceHealth.Suspended, 1, 1, resolve).calm)
+        assertTrue(!mapHome(SpaceHealth.NotCreated, 1, 1, resolve).calm)
+        assertTrue(!mapHome(SpaceHealth.NeedsRepair, 1, 1, resolve).calm)
+    }
+
+    @Test
+    fun `overview label line shares the avatar truncation and only ellipsizes beyond it`() {
+        // 标签行与头像组同一截断口径：cloneCount ≤ 展示数时不出现省略号（4–5 个分身的边界）。
+        assertEquals("甲、乙、丙、丁", overviewLabelsLine(listOf("甲", "乙", "丙", "丁"), 4))
+        assertEquals("甲、乙、丙、丁、戊", overviewLabelsLine(listOf("甲", "乙", "丙", "丁", "戊"), 5))
+        assertEquals("甲、乙、丙、丁、戊 …", overviewLabelsLine(listOf("甲", "乙", "丙", "丁", "戊"), 12))
     }
 
     @Test
@@ -108,5 +136,10 @@ class HomeMapTest {
         assertNull(model.primaryRoute)
         assertEquals(0, model.mainCount)
         assertEquals(0, model.cloneCount)
+    }
+    @Test fun pausedAndLockedActionsRequestActivationRatherThanOnlyNavigation() {
+        for (health in listOf(SpaceHealth.Suspended, SpaceHealth.Locked)) {
+            assertEquals(HomePrimaryAction.ActivateSpace, mapHome(health, 10, 1, resolve).primaryAction)
+        }
     }
 }

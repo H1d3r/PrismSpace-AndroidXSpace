@@ -61,18 +61,6 @@ fun PrismNavHost(navController: NavHostController) {
         }
     }
     LaunchedEffect(navController) {
-        AppLaunchSignals.resetToHome.collect {
-            navController.navigate(PrismRoutes.HOME) {
-                popUpTo(navController.graph.findStartDestination().id) {
-                    inclusive = false
-                    saveState = false
-                }
-                launchSingleTop = true
-                restoreState = false
-            }
-        }
-    }
-    LaunchedEffect(navController) {
         // "去启用" from the clone install-method selector → jump to Settings (run-mode row is at the top).
         AppLaunchSignals.openRunMode.collect {
             navController.navigate(PrismRoutes.SETTINGS) {
@@ -80,6 +68,13 @@ fun PrismNavHost(navController: NavHostController) {
                 popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                 restoreState = true
             }
+        }
+    }
+    LaunchedEffect(navController) {
+        // Settings「系统应用」→ switch to the Space tab; the screen itself opens the system-apps
+        // view off the same nonce.
+        AppLaunchSignals.openSpaceSystemApps.collect { nonce ->
+            if (nonce > 0) navController.navigateToTab(PrismRoutes.SPACE)
         }
     }
 
@@ -120,9 +115,9 @@ fun PrismNavHost(navController: NavHostController) {
                 popExitTransition = { ExitTransition.None },
             ) {
                 composable(PrismRoutes.HOME)     { HomeScreen(navController) }
-                composable(PrismRoutes.SPACE)    { SpaceScreen(navController) }
-                composable(PrismRoutes.FILES)    { FilesScreen(navController) }
-                composable(PrismRoutes.SETTINGS) { SettingsScreen(navController) }
+                composable(PrismRoutes.SPACE)    { SpaceScreen() }
+                composable(PrismRoutes.FILES)    { FilesScreen() }
+                composable(PrismRoutes.SETTINGS) { SettingsScreen() }
             }
         }
     }

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -21,7 +22,11 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -35,7 +40,12 @@ import com.yzddmr6.prismspace.prism.compose.theme.PrismSpacing
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceRow
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceSegment
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceViewModel
+import com.yzddmr6.prismspace.prism.compose.vm.ActionFeedback
+import com.yzddmr6.prismspace.prism.compose.vm.AppFeedbackBus
+import com.yzddmr6.prismspace.prism.compose.vm.SpaceActionGate
+import com.yzddmr6.prismspace.prism.service.FileBridgeService
 import com.yzddmr6.prismspace.prism.ui.PrismAppsViewModel
+import com.yzddmr6.prismspace.shortcut.PrismAppShortcut
 import kotlinx.coroutines.launch
 
 /**
@@ -45,11 +55,12 @@ import kotlinx.coroutines.launch
  *   启动应用 → vm.launch
  *   冻结/解冻 → vm.setFrozen
  *   应用信息 → vm.openSystemSettings
- *   卸载分身 (danger) → vm.remove
+ *   卸载分身 (danger) → vm.remove, gated by [uninstallEntry] on dual-space usability
  *
  * Main segment:
  *   打开应用设置 → vm.openSystemSettings
  *   克隆到双开空间 → opens clone flow
+ *   (if prepared) 继续安装 → profile install entry, gated by [installEntry] on dual-space usability
  *   (if cloned) 跳双开空间 → onJumpDual
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,6 +69,8 @@ fun AppActionSheet(
     row: SpaceRow,
     context: android.content.Context,
     vm: SpaceViewModel,
+    uninstallEntry: SpaceActionGate,
+    installEntry: SpaceActionGate,
     onDismiss: () -> Unit,
     onJumpDual: () -> Unit,
 ) {
@@ -65,6 +78,7 @@ fun AppActionSheet(
     val scope = rememberCoroutineScope()
     val prismAppsVm: PrismAppsViewModel = viewModel()
     val activity = LocalContext.current as? androidx.fragment.app.FragmentActivity
+    var confirmCriticalFreeze by remember(row.pkg) { mutableStateOf(false) }
 
     fun dismiss() {
         scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
@@ -103,21 +117,39 @@ fun AppActionSheet(
                 // A clone is "frozen" to the user if it's hidden OR suspended (one unified concept);
                 // 解冻 then clears whichever applied (vm.setFrozen(false) recovers both).
                 val paused = row.frozen || row.suspended
-                SheetAction(
-                    icon = PrismIcons.Play,
-                    title = stringResource(R.string.lz_app_launch),
-                    subtitle = if (paused) stringResource(R.string.lz_app_launch_frozen_subtitle) else null,
-                ) {
-                    dismiss()
-                    vm.launch(context, row.pkg, SpaceSegment.Dual)
+                if (row.launchable) {
+                    SheetAction(
+                        icon = PrismIcons.Play,
+                        title = stringResource(R.string.lz_app_launch),
+                        subtitle = if (paused) stringResource(R.string.lz_app_launch_frozen_subtitle) else null,
+                    ) {
+                        dismiss()
+                        vm.launch(context, row.pkg, SpaceSegment.Dual)
+                    }
                 }
 
                 SheetAction(
                     icon = if (paused) PrismIcons.Sun else PrismIcons.Snow,
                     title = if (paused) stringResource(R.string.lz_app_unfreeze) else stringResource(R.string.lz_app_freeze),
                 ) {
-                    dismiss()
-                    vm.setFrozen(row.pkg, !paused)
+                    if (!paused && row.critical) {
+                        confirmCriticalFreeze = true
+                    } else {
+                        dismiss()
+                        vm.setFrozen(row.pkg, !paused)
+                    }
+                }
+
+                if (row.launchable) {
+                    SheetAction(
+                        icon = PrismIcons.Add,
+                        title = stringResource(R.string.lz_app_create_shortcut),
+                    ) {
+                        dismiss()
+                        vm.appFor(row.pkg, SpaceSegment.Dual)?.let { app ->
+                            PrismAppShortcut.requestPin(context, app)
+                        }
+                    }
                 }
 
                 SheetAction(
@@ -131,21 +163,33 @@ fun AppActionSheet(
                 SheetAction(
                     icon = PrismIcons.Trash,
                     title = stringResource(R.string.lz_app_uninstall_clone),
+                    subtitle = if (uninstallEntry.enabled) null else uninstallEntry.guidance,
                     danger = true,
+                    enabled = uninstallEntry.enabled,
                 ) {
+                    // Gated on dual-space usability: a disabled entry surfaces the guidance and
+                    // fires no uninstall request (fail closed; the request itself is re-checked
+                    // against fresh usability inside vm.remove).
+                    if (!uninstallEntry.enabled) {
+                        uninstallEntry.guidance?.let(vm::reportTransientError)
+                        return@SheetAction
+                    }
                     dismiss()
                     val activity = context as? Activity ?: return@SheetAction
                     vm.remove(activity, row.pkg, SpaceSegment.Dual)
                 }
             } else {
                 // --- Main tab actions ---
-                // 启动应用 is the most frequent action → always first, mirroring the Dual tab.
-                SheetAction(
-                    icon = PrismIcons.Play,
-                    title = stringResource(R.string.lz_app_launch),
-                ) {
-                    dismiss()
-                    vm.launch(context, row.pkg, SpaceSegment.Main)
+                // 启动应用 is the most frequent action → first when the package actually has
+                // a launcher activity. System-app search can surface packages without one.
+                if (row.launchable) {
+                    SheetAction(
+                        icon = PrismIcons.Play,
+                        title = stringResource(R.string.lz_app_launch),
+                    ) {
+                        dismiss()
+                        vm.launch(context, row.pkg, SpaceSegment.Main)
+                    }
                 }
 
                 SheetAction(
@@ -164,6 +208,25 @@ fun AppActionSheet(
                         dismiss()
                         onJumpDual()
                     }
+                } else if (row.prepared) {
+                    SheetAction(
+                        icon = PrismIcons.Add,
+                        title = stringResource(R.string.lz_app_continue_install),
+                        subtitle = if (installEntry.enabled) null else installEntry.guidance,
+                        enabled = installEntry.enabled,
+                    ) {
+                        // Pending-install gate: the 待安装 record stays untouched; a blocked tap only
+                        // surfaces the state guidance and fires no install flow.
+                        if (!installEntry.enabled) {
+                            installEntry.guidance?.let(vm::reportTransientError)
+                            return@SheetAction
+                        }
+                        dismiss()
+                        if (activity != null) {
+                            val result = FileBridgeService().openProfileInstallEntry(activity)
+                            if (!result.success) AppFeedbackBus.emit(ActionFeedback(result.message, true))
+                        }
+                    }
                 } else {
                     SheetAction(
                         icon = PrismIcons.Add,
@@ -174,7 +237,7 @@ fun AppActionSheet(
                         val app = vm.appFor(row.pkg, SpaceSegment.Main)
                         Log.i(TAG, "Main action clone app lookup pkg=${row.pkg} found=${app != null}")
                         if (app != null && activity != null) {
-                            PrismAppClones(activity, prismAppsVm, app).request()
+                            PrismAppClones(activity, prismAppsVm, app, onCloneStateChanged = vm::refresh).request()
                         }
                     }
                 }
@@ -182,6 +245,35 @@ fun AppActionSheet(
 
             Spacer(modifier = Modifier.height(PrismSpacing.Sm))
         }
+    }
+
+    if (confirmCriticalFreeze) {
+        AlertDialog(
+            onDismissRequest = { confirmCriticalFreeze = false },
+            title = { Text(stringResource(R.string.lz_system_app_freeze_critical_title)) },
+            text = { Text(stringResource(R.string.lz_system_app_freeze_critical_body, row.label, row.pkg)) },
+            confirmButton = {
+                PrismTextButton(
+                    onClick = {
+                        confirmCriticalFreeze = false
+                        dismiss()
+                        vm.setFrozen(row.pkg, true)
+                    },
+                ) {
+                    Text(
+                        stringResource(R.string.lz_system_app_freeze_critical_confirm),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                PrismTextButton(
+                    onClick = { confirmCriticalFreeze = false },
+                ) {
+                    Text(stringResource(R.string.lz_space_dialog_cancel))
+                }
+            },
+        )
     }
 }
 
@@ -193,12 +285,15 @@ private fun SheetAction(
     title: String,
     subtitle: String? = null,
     danger: Boolean = false,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
-    val contentColor = if (danger) MaterialTheme.colorScheme.error
-                       else MaterialTheme.colorScheme.onSurface
-    val iconColor = if (danger) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.onSurfaceVariant
+    val contentColor = (if (danger) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurface)
+        .let { if (enabled) it else it.copy(alpha = DisabledAlpha) }
+    val iconColor = (if (danger) MaterialTheme.colorScheme.error
+                     else MaterialTheme.colorScheme.onSurfaceVariant)
+        .let { if (enabled) it else it.copy(alpha = DisabledAlpha) }
 
     Row(
         modifier = Modifier

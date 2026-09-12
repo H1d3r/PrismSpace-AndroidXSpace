@@ -3,6 +3,7 @@ package com.yzddmr6.prismspace.prism.service
 import android.app.Activity
 import android.app.admin.DevicePolicyManager.FLAG_MANAGED_CAN_ACCESS_PARENT
 import android.content.ComponentName
+import android.content.ContentProviderOperation
 import android.content.ContentValues
 import android.content.ContentResolver
 import android.content.ContentUris
@@ -18,7 +19,31 @@ import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
+import com.yzddmr6.prismspace.bridge.AbortWriteSession
+import com.yzddmr6.prismspace.bridge.BridgeFileStore
+import com.yzddmr6.prismspace.bridge.BridgeTarget
+import com.yzddmr6.prismspace.bridge.BridgeTargets
+import com.yzddmr6.prismspace.bridge.BridgeTransferDirection
+import com.yzddmr6.prismspace.bridge.CrossProfileForwardingKind
+import com.yzddmr6.prismspace.bridge.DeletePerAppShareMarker
+import com.yzddmr6.prismspace.bridge.FileBridgePort
+import com.yzddmr6.prismspace.bridge.FinishWriteSession
+import com.yzddmr6.prismspace.bridge.ImportApkSet
+import com.yzddmr6.prismspace.bridge.InstallCrossProfileForwarding
+import com.yzddmr6.prismspace.bridge.MAX_APK_PATH_COUNT
+import com.yzddmr6.prismspace.bridge.OpenImagePickerInProfile
+import com.yzddmr6.prismspace.bridge.OpenLatestForRead
+import com.yzddmr6.prismspace.bridge.OpenWriteSession
+import com.yzddmr6.prismspace.bridge.ProfileMediaEntryDto
+import com.yzddmr6.prismspace.bridge.QueryLatestVisibleImage
+import com.yzddmr6.prismspace.bridge.ReadSessionDto
+import com.yzddmr6.prismspace.bridge.RunBridgeSelfTest
+import com.yzddmr6.prismspace.bridge.SelfTestResultDto
+import com.yzddmr6.prismspace.bridge.TransferHistoryDto
+import com.yzddmr6.prismspace.bridge.WritePerAppShareMarker
+import com.yzddmr6.prismspace.bridge.WriteSessionDto
 import com.yzddmr6.prismspace.engine.CrossProfile
+import com.yzddmr6.prismspace.controller.ClonePreparationStore
 import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.prism.model.PerAppFileSharePolicy
 import com.yzddmr6.prismspace.prism.model.PerAppFileShareSpec
@@ -27,7 +52,13 @@ import com.yzddmr6.prismspace.prism.ui.ProfileImagePickerActivity
 import com.yzddmr6.prismspace.util.DPM
 import com.yzddmr6.prismspace.util.DevicePolicies
 import com.yzddmr6.prismspace.util.PrismLocale
+import com.yzddmr6.prismspace.util.Users
 import java.io.InputStream
+import java.io.OutputStream
+import java.io.File
+import java.io.FileNotFoundException
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.UUID
 import java.nio.charset.StandardCharsets
 
 data class FileBridgeSelfTestResult(
@@ -52,6 +83,115 @@ enum class FileTransferFailureReason {
     BridgeNotReady,
     TimedOut,
     IOError,
+    SpaceUnavailable,
+    TargetWriteFailed,
+    Cancelled,
+}
+
+enum class TransferDirection(val wireValue: String) {
+    ToMain("toMain"),
+    ToProfile("toProfile");
+
+    companion object {
+        fun fromWireValue(value: String?): TransferDirection? = entries.firstOrNull { it.wireValue == value }
+    }
+}
+
+data class FileTransferDestination(val relativePath: String, val displayLocation: String, val isImage: Boolean)
+
+internal object CrossSpaceFileTransferPolicy {
+    fun destination(mimeType: String?): FileTransferDestination =
+        if (mimeType?.startsWith("image/", ignoreCase = true) == true) {
+            FileTransferDestination(FileBridgeMediaWriter.DEFAULT_RELATIVE_PATH, "Pictures/PrismSpace", true)
+        } else {
+            FileTransferDestination(FileBridgeDownloadWriter.DEFAULT_RELATIVE_PATH, "Download/PrismSpace", false)
+        }
+}
+
+class TransferCancellationSignal {
+    private val cancelled = AtomicBoolean(false)
+    fun cancel() { cancelled.set(true) }
+    fun isCancelled(): Boolean = cancelled.get()
+}
+
+/** A single-use source for one transfer. It carries metadata, not a private cached copy. */
+class TransferSource private constructor(
+    val displayName: String,
+    val mime: String,
+    val declaredSize: Long?,
+    private val opener: () -> InputStream,
+) {
+    private val opened = AtomicBoolean(false)
+
+    fun openOnce(): InputStream {
+        check(opened.compareAndSet(false, true)) { "Transfer source was already opened" }
+        return opener()
+    }
+
+    companion object {
+        fun fromFile(file: File, displayName: String = file.name, mime: String): TransferSource =
+            TransferSource(displayName, mime, file.length().takeIf { it >= 0L }) { file.inputStream() }
+
+        fun fromUri(
+            resolver: ContentResolver,
+            uri: Uri,
+            displayName: String,
+            mime: String,
+            declaredSize: Long?,
+        ): TransferSource = fromUriCandidates(
+            resolver, listOf(uri), displayName, mime, declaredSize,
+        )
+
+        fun fromUriCandidates(
+            resolver: ContentResolver,
+            uris: List<Uri>,
+            displayName: String,
+            mime: String,
+            declaredSize: Long?,
+        ): TransferSource = TransferSource(displayName, mime, declaredSize?.takeIf { it >= 0L }) {
+            openFirstReadableCandidate(uris) { resolver.openInputStream(it) }.let { opened ->
+                if (opened.index > 0) {
+                    DiagnosticLog.i(
+                        "Prism.FileSource",
+                        "source URI opened with paired-user fallback authority=${opened.candidate.encodedAuthority}",
+                    )
+                }
+                opened.stream
+            }
+        }
+
+        internal fun testing(
+            displayName: String = "test.bin",
+            mime: String = "application/octet-stream",
+            declaredSize: Long? = null,
+            opener: () -> InputStream,
+        ): TransferSource = TransferSource(displayName, mime, declaredSize, opener)
+    }
+}
+
+internal data class OpenedSource<T>(
+    val candidate: T,
+    val index: Int,
+    val stream: InputStream,
+)
+
+internal fun <T> openFirstReadableCandidate(
+    candidates: List<T>,
+    open: (T) -> InputStream?,
+): OpenedSource<T> {
+    require(candidates.isNotEmpty()) { "At least one source candidate is required" }
+    var lastFailure: Exception? = null
+    candidates.forEachIndexed { index, candidate ->
+        try {
+            val stream = open(candidate)
+            if (stream != null) return OpenedSource(candidate, index, stream)
+        } catch (failure: Exception) {
+            lastFailure = failure
+        }
+    }
+    throw FileNotFoundException("No readable source candidate").also { error ->
+        lastFailure?.let(error::initCause)
+    }
 }
 
 data class PerAppShareFolderResult(
@@ -63,6 +203,165 @@ data class PerAppShareFolderResult(
 
 class FileBridgeService {
 
+    fun saveInCurrentSpace(
+        context: Context,
+        localFile: File,
+        displayName: String,
+        mime: String,
+        cancellation: TransferCancellationSignal = TransferCancellationSignal(),
+        onProgress: (Long) -> Unit = {},
+    ): FileTransferResult {
+        val safeName = FileTransferPolicy.safeDisplayName(displayName)
+        if (!localFile.isFile || !localFile.canRead()) return FileTransferResult(
+            false, str(context, R.string.fb_transfer_source_unreadable), safeName,
+            failureReason = FileTransferFailureReason.SourceUnreadable,
+        )
+        val destination = CrossSpaceFileTransferPolicy.destination(mime)
+        val store = if (destination.isImage) PROFILE_WRITE_MEDIA else PROFILE_WRITE_DOWNLOAD
+        val session = runCatching { openProfileWriteSession(context, store, safeName, mime, destination.relativePath) }
+            .getOrElse { return FileTransferResult(false, str(context, R.string.fb_transfer_target_failed), safeName,
+                failureReason = FileTransferFailureReason.TargetWriteFailed) }
+        val targetUri = session.getString(BRIDGE_KEY_URI)
+            ?: return FileTransferResult(false, str(context, R.string.fb_transfer_target_failed), safeName,
+                failureReason = FileTransferFailureReason.TargetWriteFailed)
+        val pfd = session.getPfd()
+        if (pfd == null) {
+            abortProfileWriteSession(context, store, targetUri)
+            return FileTransferResult(false, str(context, R.string.fb_transfer_target_failed), safeName,
+                failureReason = FileTransferFailureReason.TargetWriteFailed)
+        }
+        return try {
+            localFile.inputStream().use { input ->
+                ParcelFileDescriptor.AutoCloseOutputStream(pfd).use { output ->
+                    copyCancellable(input, output, cancellation, onProgress)
+                }
+            }
+            val uri = finishProfileTransfer(
+                context, store, targetUri, safeName, destination.displayLocation,
+                destination.isImage, null,
+            )
+            FileTransferResult(true, str(context, R.string.fb_transfer_saved_here, safeName), safeName, uri)
+        } catch (e: Throwable) {
+            abortProfileWriteSession(context, store, targetUri)
+            FileTransferResult(
+                false,
+                if (e is TransferCancelledException) str(context, R.string.fb_transfer_cancelled)
+                else str(context, R.string.fb_transfer_target_failed),
+                safeName,
+                failureReason = FileTransferFailureReason.TargetWriteFailed,
+            )
+        }
+    }
+
+    fun transferToOtherSpace(
+        context: Context,
+        source: TransferSource,
+        direction: TransferDirection,
+        cancellation: TransferCancellationSignal = TransferCancellationSignal(),
+        onProgress: (Long) -> Unit = {},
+    ): FileTransferResult {
+        val safeName = FileTransferPolicy.safeDisplayName(source.displayName)
+        val target = when (direction) {
+            TransferDirection.ToProfile -> BridgeTargets.profile()
+            TransferDirection.ToMain -> BridgeTargets.parent().takeIf { !Users.isParentProfile() }
+        } ?: return FileTransferResult(
+            false,
+            str(context, R.string.fb_transfer_space_unavailable),
+            safeName,
+            failureReason = FileTransferFailureReason.SpaceUnavailable,
+        )
+        val destination = CrossSpaceFileTransferPolicy.destination(source.mime)
+        val store = if (destination.isImage) PROFILE_WRITE_MEDIA else PROFILE_WRITE_DOWNLOAD
+        val operation = "cross-space transfer direction=${direction.wireValue} name=$safeName"
+        val session = when (val result = runDestinationBridgeOperation(
+            context,
+            TAG,
+            "$operation open",
+            target,
+            command = OpenWriteSession(store.toBridgeStore(), safeName, source.mime, destination.relativePath),
+        )) {
+            is ProfileBridgeResult.Value -> result.value
+            else -> return bridgeFailureResult(context, result, str(context, R.string.fb_transfer_bridge_not_ready))
+                .copy(failureReason = crossSpaceFailureReason(result))
+        } ?: return FileTransferResult(false, str(context, R.string.fb_transfer_target_failed), safeName,
+            failureReason = FileTransferFailureReason.TargetWriteFailed)
+        val targetUri = session.uri
+        val pfd = session.descriptor
+
+        val write = transferSingleCopy(
+            source = source,
+            output = ParcelFileDescriptor.AutoCloseOutputStream(pfd),
+            cancellation = cancellation,
+            onProgress = onProgress,
+            abort = { abortTransfer(context, target, store, targetUri, "$operation abort") },
+        )
+        if (write !is SingleCopyTransferResult.Written) {
+            val reason = when (write) {
+                SingleCopyTransferResult.SourceUnreadable -> FileTransferFailureReason.SourceUnreadable
+                SingleCopyTransferResult.TargetWriteFailed -> FileTransferFailureReason.TargetWriteFailed
+                SingleCopyTransferResult.Cancelled -> FileTransferFailureReason.Cancelled
+                is SingleCopyTransferResult.Written -> error("Handled above")
+            }
+            val message = when (write) {
+                SingleCopyTransferResult.SourceUnreadable -> str(context, R.string.fb_transfer_source_unreadable)
+                SingleCopyTransferResult.Cancelled -> str(context, R.string.fb_transfer_cancelled)
+                else -> str(context, R.string.fb_transfer_target_failed)
+            }
+            return FileTransferResult(false, message, safeName, failureReason = reason)
+        }
+
+        return try {
+            val finished = runDestinationBridgeOperation(
+                context,
+                TAG,
+                "$operation finish",
+                target,
+                command = FinishWriteSession(
+                    store.toBridgeStore(),
+                    targetUri,
+                    TransferHistoryDto(
+                        safeName,
+                        destination.displayLocation,
+                        destination.isImage,
+                        direction.toBridgeDirection(),
+                    ),
+                ),
+            )
+            when (finished) {
+                is ProfileBridgeResult.Value -> FileTransferResult(
+                    true,
+                    str(context, R.string.fb_transfer_done, safeName),
+                    safeName,
+                    finished.value ?: targetUri,
+                )
+                else -> {
+                    // The bytes may be complete but the MediaStore row is still pending. A failed
+                    // commit is not a usable transfer, so remove the half-created target as well.
+                    abortTransfer(context, target, store, targetUri, "$operation finish-failed")
+                    bridgeFailureResult(context, finished, str(context, R.string.fb_transfer_target_failed))
+                        .copy(failureReason = FileTransferFailureReason.TargetWriteFailed)
+                }
+            }
+        } catch (e: Throwable) {
+            abortTransfer(context, target, store, targetUri, "$operation abort")
+            DiagnosticLog.w(TAG, "$operation failed", e)
+            FileTransferResult(false, str(context, R.string.fb_transfer_target_failed), safeName,
+                failureReason = FileTransferFailureReason.TargetWriteFailed)
+        }
+    }
+
+    private fun abortTransfer(context: Context, target: BridgeTarget, store: Int, targetUri: String, operation: String) {
+        runCatching {
+            runDestinationBridgeOperation(
+                context,
+                TAG,
+                operation,
+                target,
+                command = AbortWriteSession(store.toBridgeStore(), targetUri),
+            )
+        }
+    }
+
     /** Localized user-facing message (follows the app's chosen language, not the system default). */
     private fun str(context: Context, id: Int, vararg args: Any): String =
         PrismLocale.wrap(context).getString(id, *args)
@@ -71,19 +370,12 @@ class FileBridgeService {
         return try {
             DiagnosticLog.i(TAG, "self-test start package=${context.packageName}")
             val payload = buildPayload(context)
-            val cloneResult = when (val result = runProfileBridgeOperation(context, TAG, "self-test") {
-                DiagnosticLog.i(TAG, "profile write start")
-                val cloneUri = writeDownload(
-                    displayName = CLONE_FILE,
-                    mimeType = MIME_TEXT,
-                    bytes = payload,
-                )
-                DiagnosticLog.i(TAG, "profile write done uri=$cloneUri")
-                val bytes = contentResolver.openInputStream(Uri.parse(cloneUri))?.use { it.readBytes() }
-                    ?: return@runProfileBridgeOperation null
-                DiagnosticLog.i(TAG, "profile read done bytes=${bytes.size}")
-                BridgePayload(bytes, cloneUri)
-            }) {
+            val cloneResult = when (val result = runProfileBridgeOperation(
+                context,
+                TAG,
+                "self-test",
+                command = RunBridgeSelfTest(payload),
+            )) {
                 is ProfileBridgeResult.Value -> result.value ?: return FileBridgeSelfTestResult(
                     success = false,
                     message = str(context, R.string.fb_apk_transfer_failed),
@@ -93,7 +385,7 @@ class FileBridgeService {
                     message = bridgeFailureMessage(context, result, str(context, R.string.fb_space_not_ready)),
                 )
             }
-            DiagnosticLog.i(TAG, "shuttle returned bytes=${cloneResult.bytes.size} uri=${cloneResult.uri}")
+            DiagnosticLog.i(TAG, "shuttle returned bytes=${cloneResult.bytes.size} uri=${cloneResult.location}")
 
             DiagnosticLog.i(TAG, "main write start")
             val mainUri = context.writeDownload(
@@ -105,7 +397,7 @@ class FileBridgeService {
             FileBridgeSelfTestResult(
                 success = true,
                 message = "文件桥自检通过：主空间 -> 双开空间 -> 主空间",
-                cloneUri = cloneResult.uri,
+                cloneUri = cloneResult.location,
                 mainUri = mainUri,
             )
         } catch (e: Throwable) {
@@ -125,15 +417,10 @@ class FileBridgeService {
                 context,
                 sourceUri,
                 "import file to profile",
-                openSession = {
-                    AndroidFileBridgeDownloadStore(this).openPendingWrite(
-                        payload.displayName,
-                        payload.mimeType,
-                        FileBridgeDownloadWriter.DEFAULT_RELATIVE_PATH,
-                    )
-                },
-                finishSession = { AndroidFileBridgeDownloadStore(this).finishPendingWrite(it) },
-                abortSession = { AndroidFileBridgeDownloadStore(this).abortPendingWrite(it) },
+                PROFILE_WRITE_DOWNLOAD,
+                payload.displayName,
+                payload.mimeType,
+                FileBridgeDownloadWriter.DEFAULT_RELATIVE_PATH,
             )) {
                 is ProfileBridgeResult.Value -> result.value ?: return FileTransferResult(
                     success = false,
@@ -203,37 +490,25 @@ class FileBridgeService {
     /**
      * 普通模式克隆: transfer a COMPLETE app — base + ALL split APKs — into the dual space's
      * Download/PrismSpace/, recording a single incoming history entry as "label-package". Copying
-     * the whole split set keeps split packages installable. Only the APK path strings cross the Shuttle (Serializable); the profile process reads
+     * the whole split set keeps split packages installable. Only the bounded APK path list crosses the typed bridge; the profile process reads
      * each /data/app file by path (world-readable, same absolute path across users) and streams it into
      * its own MediaStore — avoiding the Binder byte cap and non-serializable PFDs, so it supports big APKs.
      */
     fun importApksToProfile(context: Context, apkFiles: List<java.io.File>, label: String, packageName: String): FileTransferResult {
         return try {
-            val paths = ArrayList(apkFiles.filter { it.canRead() }.map { it.absolutePath })
-            if (paths.isEmpty()) return FileTransferResult(
+            val paths = completeReadableApkPaths(apkFiles) ?: return FileTransferResult(
                 false,
                 str(context, R.string.fb_apk_unreadable),
                 failureReason = FileTransferFailureReason.SourceUnreadable,
             )
-            val safeBase = FileTransferPolicy.safeDisplayName("$label-$packageName")
+            val safeBase = FileTransferPolicy.safeDisplayName(packageName)
             val cloneLocation = "Download/PrismSpace"
             val firstUriResult = runProfileBridgeOperation(
                 context,
                 TAG,
                 "apk import package=$packageName apkCount=${apkFiles.size} readableCount=${paths.size}",
-            ) {
-                var first: String? = null
-                paths.forEachIndexed { i, path ->
-                    val name = if (i == 0) "$safeBase.apk" else "$safeBase.split$i.apk"
-                    val uri = AndroidFileBridgeDownloadStore(this).insertFromFile(
-                        name, "application/vnd.android.package-archive",
-                        java.io.File(path), FileBridgeDownloadWriter.DEFAULT_RELATIVE_PATH)
-                    if (first == null) first = uri
-                }
-                // Dual-space incoming half: recorded as label + package, shown as "label-package".
-                TransferHistoryStore.record(this, label, cloneLocation, false, packageName)
-                first
-            }
+                command = ImportApkSet(paths, label, packageName, cloneLocation),
+            )
             val firstUri = when (firstUriResult) {
                 is ProfileBridgeResult.Value -> firstUriResult.value ?: return FileTransferResult(
                     false,
@@ -249,6 +524,14 @@ class FileBridgeService {
         }
     }
 
+    internal fun completeReadableApkPaths(
+        apkFiles: List<File>,
+        canRead: (File) -> Boolean = File::canRead,
+    ): ArrayList<String>? {
+        if (apkFiles.isEmpty() || apkFiles.any { !canRead(it) }) return null
+        return ArrayList(apkFiles.map(File::getAbsolutePath))
+    }
+
     fun importImageToProfileGallery(context: Context, sourceUri: Uri): FileTransferResult {
         return try {
             DiagnosticLog.i(TAG, "media sync start uri=$sourceUri")
@@ -257,15 +540,10 @@ class FileBridgeService {
                 context,
                 sourceUri,
                 "import image to profile gallery",
-                openSession = {
-                    AndroidFileBridgeMediaStore(this).openPendingWrite(
-                        payload.displayName,
-                        payload.mimeType,
-                        FileBridgeMediaWriter.DEFAULT_RELATIVE_PATH,
-                    )
-                },
-                finishSession = { AndroidFileBridgeMediaStore(this).finishPendingWrite(it) },
-                abortSession = { AndroidFileBridgeMediaStore(this).abortPendingWrite(it) },
+                PROFILE_WRITE_MEDIA,
+                payload.displayName,
+                payload.mimeType,
+                FileBridgeMediaWriter.DEFAULT_RELATIVE_PATH,
             )) {
                 is ProfileBridgeResult.Value -> result.value ?: return FileTransferResult(
                     success = false,
@@ -299,15 +577,10 @@ class FileBridgeService {
                 context,
                 sourceUri,
                 "import image to per-app share package=$packageName",
-                openSession = {
-                    AndroidFileBridgeMediaStore(this).openPendingWrite(
-                        payload.displayName,
-                        payload.mimeType,
-                        relativePath,
-                    )
-                },
-                finishSession = { AndroidFileBridgeMediaStore(this).finishPendingWrite(it) },
-                abortSession = { AndroidFileBridgeMediaStore(this).abortPendingWrite(it) },
+                PROFILE_WRITE_MEDIA,
+                payload.displayName,
+                payload.mimeType,
+                relativePath,
             )) {
                 is ProfileBridgeResult.Value -> result.value ?: return FileTransferResult(
                     success = false,
@@ -341,15 +614,10 @@ class FileBridgeService {
                 context,
                 sourceUri,
                 "import file to per-app share package=$packageName",
-                openSession = {
-                    AndroidFileBridgeDownloadStore(this).openPendingWrite(
-                        payload.displayName,
-                        payload.mimeType,
-                        relativePath,
-                    )
-                },
-                finishSession = { AndroidFileBridgeDownloadStore(this).finishPendingWrite(it) },
-                abortSession = { AndroidFileBridgeDownloadStore(this).abortPendingWrite(it) },
+                PROFILE_WRITE_DOWNLOAD,
+                payload.displayName,
+                payload.mimeType,
+                relativePath,
             )) {
                 is ProfileBridgeResult.Value -> result.value ?: return FileTransferResult(
                     success = false,
@@ -377,9 +645,12 @@ class FileBridgeService {
     fun verifyProfileGalleryVisibility(context: Context): FileTransferResult {
         return try {
             DiagnosticLog.i(TAG, "media visibility start")
-            val entry = when (val result = runProfileBridgeOperation(context, TAG, "media visibility") {
-                FileBridgeMediaVisibilityVerifier(AndroidFileBridgeMediaQueryStore(this)).latestVisibleImage()
-            }) {
+            val entry = when (val result = runProfileBridgeOperation(
+                context,
+                TAG,
+                "media visibility",
+                command = QueryLatestVisibleImage,
+            )) {
                 is ProfileBridgeResult.Value -> result.value ?: return FileTransferResult(
                     success = false,
                     message = str(context, R.string.fb_no_dual_media),
@@ -412,10 +683,12 @@ class FileBridgeService {
                     else -> return bridgeFailureResult(context, result, str(context, R.string.fb_open_image_picker_failed))
                 }
             } else {
-                when (val result = runProfileBridgeOperation(context, TAG, "profile image picker launch") {
-                    ProfileImagePickerLauncher.open(this)
-                    true
-                }) {
+                when (val result = runProfileBridgeOperation(
+                    context,
+                    TAG,
+                    "profile image picker launch",
+                    command = OpenImagePickerInProfile,
+                )) {
                     is ProfileBridgeResult.Value -> result.value == true
                     else -> return bridgeFailureResult(context, result, str(context, R.string.fb_open_image_picker_failed))
                 }
@@ -464,20 +737,12 @@ class FileBridgeService {
     }
 
     private fun installProfileImagePickerForwarding(context: Context): ProfileBridgeResult<Boolean> {
-        return runProfileBridgeOperation(context, TAG, "profile image picker forwarding install") {
-            val filter = ProfileImagePickerLauncher.crossProfileActivityIntentFilter()
-            val policies = DevicePolicies(this)
-            policies.addCrossProfileIntentFilter(
-                filter,
-                ProfileImagePickerLauncher.crossProfileForwardingFlags(),
-            )
-            policies.execute(
-                DPM::addPersistentPreferredActivity,
-                filter,
-                ProfileImagePickerLauncher.crossProfilePreferredActivityComponent(this),
-            )
-            true
-        }
+        return runProfileBridgeOperation(
+            context,
+            TAG,
+            "profile image picker forwarding install",
+            command = InstallCrossProfileForwarding(CrossProfileForwardingKind.ImagePicker),
+        )
     }
 
     private fun findCrossProfileForwarder(context: Context, intent: Intent): ComponentName? {
@@ -493,20 +758,21 @@ class FileBridgeService {
     fun exportLatestToMain(context: Context): FileTransferResult {
         return try {
             DiagnosticLog.i(TAG, "export latest start")
-            val payload = when (val result = runProfileBridgeOperation(context, TAG, "export latest to main") {
-                AndroidFileBridgeDownloadStore(this).openLatestInPrismFolderForRead()
-            }) {
+            val payload = when (val result = runProfileBridgeOperation(
+                context,
+                TAG,
+                "export latest to main",
+                command = OpenLatestForRead(BridgeFileStore.Downloads),
+            )) {
                 is ProfileBridgeResult.Value -> result.value ?: return FileTransferResult(
                     success = false,
                     message = str(context, R.string.fb_no_files_to_export),
                 )
                 else -> return bridgeFailureResult(context, result, str(context, R.string.fb_export_failed))
             }
-            val displayName = payload.getString(BRIDGE_KEY_DISPLAY_NAME)
-                ?: return FileTransferResult(false, str(context, R.string.fb_export_failed), failureReason = FileTransferFailureReason.IOError)
-            val mimeType = payload.getString(BRIDGE_KEY_MIME_TYPE) ?: "application/octet-stream"
-            val pfd = payload.getPfd()
-                ?: return FileTransferResult(false, str(context, R.string.fb_export_failed), failureReason = FileTransferFailureReason.IOError)
+            val displayName = payload.displayName
+            val mimeType = payload.mimeType
+            val pfd = payload.descriptor
             val targetUri = context.writeDownload(
                 displayName = displayName,
                 mimeType = mimeType,
@@ -532,9 +798,12 @@ class FileBridgeService {
         return try {
             DiagnosticLog.i(TAG, "per-app share enable start package=$packageName")
             val spec = PerAppFileSharePolicy.specFor(packageName)
-            val markerUri = when (val result = runProfileBridgeOperation(context, TAG, "per-app share enable package=$packageName") {
-                AndroidPerAppShareFolderStore(this).writeMarker(spec)
-            }) {
+            val markerUri = when (val result = runProfileBridgeOperation(
+                context,
+                TAG,
+                "per-app share enable package=$packageName",
+                command = WritePerAppShareMarker(packageName),
+            )) {
                 is ProfileBridgeResult.Value -> result.value ?: return PerAppShareFolderResult(
                     success = false,
                     message = str(context, R.string.fb_prepare_shared_dir_failed),
@@ -563,10 +832,12 @@ class FileBridgeService {
         return try {
             DiagnosticLog.i(TAG, "per-app share disable start package=$packageName")
             val spec = PerAppFileSharePolicy.specFor(packageName)
-            val deleted = when (val result = runProfileBridgeOperation(context, TAG, "per-app share disable package=$packageName") {
-                AndroidPerAppShareFolderStore(this).deleteMarker(spec)
-                true
-            }) {
+            val deleted = when (val result = runProfileBridgeOperation(
+                context,
+                TAG,
+                "per-app share disable package=$packageName",
+                command = DeletePerAppShareMarker(packageName),
+            )) {
                 is ProfileBridgeResult.Value -> result.value == true
                 else -> return bridgeFailureShareResult(context, result, spec, str(context, R.string.fb_restore_isolation_failed))
             }
@@ -629,33 +900,51 @@ class FileBridgeService {
         context: Context,
         sourceUri: Uri,
         operation: String,
-        openSession: Context.() -> Bundle,
-        finishSession: Context.(String) -> String,
-        abortSession: Context.(String) -> Unit,
+        store: Int,
+        displayName: String,
+        mimeType: String,
+        relativePath: String,
     ): ProfileBridgeResult<String> {
-        val session = when (val result = runProfileBridgeOperation(context, TAG, "$operation open", block = openSession)) {
+        val target = BridgeTargets.profile()
+        val session = when (val result = runDestinationBridgeOperation(
+            context,
+            TAG,
+            "$operation open",
+            target,
+            command = OpenWriteSession(store.toBridgeStore(), displayName, mimeType, relativePath),
+        )) {
             is ProfileBridgeResult.Value -> result.value ?: return ProfileBridgeResult.Failed(
                 IllegalStateException("Profile write session returned no descriptor")
             )
             else -> return result.asFailureResult()
         }
-        val targetUri = session.getString(BRIDGE_KEY_URI)
-            ?: return ProfileBridgeResult.Failed(IllegalStateException("Profile write session returned no URI"))
-        val pfd = session.getPfd()
-            ?: return ProfileBridgeResult.Failed(IllegalStateException("Profile write session returned no file descriptor"))
+        val targetUri = session.uri
+        val pfd = session.descriptor
         return try {
             context.contentResolver.openInputStream(sourceUri)?.use { input ->
                 ParcelFileDescriptor.AutoCloseOutputStream(pfd).use { output ->
                     input.copyTo(output, STREAM_BUFFER_SIZE)
                 }
             } ?: return ProfileBridgeResult.Failed(IllegalStateException(str(context, R.string.fb_read_selected_failed)))
-            when (val finish = runProfileBridgeOperation(context, TAG, "$operation finish", block = { finishSession(targetUri) })) {
+            when (val finish = runDestinationBridgeOperation(
+                context,
+                TAG,
+                "$operation finish",
+                target,
+                command = FinishWriteSession(store.toBridgeStore(), targetUri),
+            )) {
                 is ProfileBridgeResult.Value -> ProfileBridgeResult.Value(finish.value ?: targetUri)
                 else -> finish.asFailureResult()
             }
         } catch (e: Throwable) {
             runCatching {
-                runProfileBridgeOperation(context, TAG, "$operation abort", block = { abortSession(targetUri) })
+                runDestinationBridgeOperation(
+                    context,
+                    TAG,
+                    "$operation abort",
+                    target,
+                    command = AbortWriteSession(store.toBridgeStore(), targetUri),
+                )
             }
             ProfileBridgeResult.Failed(e)
         }
@@ -694,11 +983,6 @@ class FileBridgeService {
         return text.toByteArray(StandardCharsets.UTF_8)
     }
 
-    private data class BridgePayload(
-        val bytes: ByteArray,
-        val uri: String,
-    ) : java.io.Serializable
-
     private companion object {
         private const val TAG = "Prism.FileBridge"
         private const val MIME_TEXT = "text/plain"
@@ -707,22 +991,299 @@ class FileBridgeService {
     }
 }
 
+internal object MobileFileBridgePort : FileBridgePort {
+    override fun openWriteSession(
+        context: Context,
+        store: BridgeFileStore,
+        safeName: String,
+        mimeType: String,
+        relativePath: String,
+    ): WriteSessionDto {
+        val session = openProfileWriteSession(context, store.toWire(), safeName, mimeType, relativePath)
+        val uri = requireNotNull(session.getString(BRIDGE_KEY_URI)) { "Write session missing URI" }
+        @Suppress("DEPRECATION")
+        val descriptor = requireNotNull(session.getParcelable<ParcelFileDescriptor>(BRIDGE_KEY_FD)) {
+            "Write session missing descriptor"
+        }
+        return WriteSessionDto(uri, descriptor)
+    }
+
+    override fun finishWriteSession(
+        context: Context,
+        store: BridgeFileStore,
+        targetUri: String,
+        history: TransferHistoryDto?,
+    ): String = if (history == null) {
+        finishProfileWriteSession(context, store.toWire(), targetUri)
+    } else {
+        finishProfileTransfer(
+            context,
+            store.toWire(),
+            targetUri,
+            history.displayName,
+            history.displayLocation,
+            history.isImage,
+            history.direction?.toTransferDirection()?.wireValue,
+        )
+    }
+
+    override fun abortWriteSession(context: Context, store: BridgeFileStore, targetUri: String) =
+        abortProfileWriteSession(context, store.toWire(), targetUri)
+
+    override fun importApkSet(
+        context: Context,
+        paths: List<String>,
+        label: String,
+        packageName: String,
+        cloneLocation: String,
+    ): String? {
+        require(paths.size <= MAX_APK_PATH_COUNT) { "APK set exceeds $MAX_APK_PATH_COUNT entries" }
+        val safeBase = FileTransferPolicy.safeDisplayName(packageName)
+        val legacySafeBase = FileTransferPolicy.safeDisplayName("$label-$packageName")
+        val first = ApkSuitePublisher(AndroidApkSuiteStore(context)).replace(
+            paths,
+            safeBase,
+            FileBridgeDownloadWriter.DEFAULT_RELATIVE_PATH,
+            previousSafeBases = setOf(safeBase, legacySafeBase),
+        )
+        TransferHistoryStore.record(context, label, cloneLocation, false, packageName)
+        return first
+    }
+
+    override fun completeClonePreparation(context: Context, packageName: String): Boolean {
+        ClonePreparationStore.remove(context, packageName)
+        return true
+    }
+
+    override fun queryPendingClonePreparations(context: Context): List<String> =
+        ClonePreparationStore.pendingPackages(context).sorted()
+
+    override fun queryLatestVisibleImage(context: Context): ProfileMediaEntryDto? =
+        FileBridgeMediaVisibilityVerifier(AndroidFileBridgeMediaQueryStore(context)).latestVisibleImage()?.let {
+            ProfileMediaEntryDto(it.displayName, it.mimeType, it.uri)
+        }
+
+    override fun openImagePicker(context: Context): Boolean = true.also { ProfileImagePickerLauncher.open(context) }
+
+    override fun openLatestForRead(context: Context, store: BridgeFileStore): ReadSessionDto? {
+        require(store == BridgeFileStore.Downloads) { "Read sessions only support Downloads" }
+        val session = AndroidFileBridgeDownloadStore(context).openLatestInPrismFolderForRead() ?: return null
+        val displayName = requireNotNull(session.getString(BRIDGE_KEY_DISPLAY_NAME))
+        val mimeType = session.getString(BRIDGE_KEY_MIME_TYPE) ?: "application/octet-stream"
+        @Suppress("DEPRECATION")
+        val descriptor = requireNotNull(session.getParcelable<ParcelFileDescriptor>(BRIDGE_KEY_FD))
+        return ReadSessionDto(displayName, mimeType, descriptor)
+    }
+
+    override fun writePerAppShareMarker(context: Context, packageName: String): String =
+        AndroidPerAppShareFolderStore(context).writeMarker(PerAppFileSharePolicy.specFor(packageName))
+
+    override fun deletePerAppShareMarker(context: Context, packageName: String): Boolean = true.also {
+        AndroidPerAppShareFolderStore(context).deleteMarker(PerAppFileSharePolicy.specFor(packageName))
+    }
+
+    override fun runSelfTest(context: Context, marker: ByteArray): SelfTestResultDto? {
+        val cloneUri = context.writeDownload(SELF_TEST_CLONE_FILE, SELF_TEST_MIME_TEXT, marker)
+        val uri = Uri.parse(cloneUri)
+        return try {
+            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
+            SelfTestResultDto(bytes, cloneUri)
+        } finally {
+            check(context.contentResolver.delete(uri, null, null) > 0) {
+                "Unable to delete profile file-bridge self-test object: $cloneUri"
+            }
+        }
+    }
+
+    override fun installCrossProfileForwarding(context: Context, kind: CrossProfileForwardingKind): Boolean {
+        val policies = DevicePolicies(context)
+        val filter: IntentFilter
+        val flags: Int
+        val component: ComponentName
+        when (kind) {
+            CrossProfileForwardingKind.ImagePicker -> {
+                filter = ProfileImagePickerLauncher.crossProfileActivityIntentFilter()
+                flags = ProfileImagePickerLauncher.crossProfileForwardingFlags()
+                component = ProfileImagePickerLauncher.crossProfilePreferredActivityComponent(context)
+            }
+            CrossProfileForwardingKind.ProfileDownloads -> {
+                filter = ProfileDownloadsLauncher.crossProfileActivityIntentFilter()
+                flags = ProfileDownloadsLauncher.crossProfileForwardingFlags()
+                component = ProfileDownloadsLauncher.crossProfilePreferredActivityComponent(context)
+            }
+        }
+        policies.addCrossProfileIntentFilter(filter, flags)
+        policies.execute(DPM::addPersistentPreferredActivity, filter, component)
+        return true
+    }
+
+    private fun BridgeFileStore.toWire() = when (this) {
+        BridgeFileStore.Downloads -> PROFILE_WRITE_DOWNLOAD
+        BridgeFileStore.Media -> PROFILE_WRITE_MEDIA
+    }
+
+    private fun BridgeTransferDirection.toTransferDirection() = when (this) {
+        BridgeTransferDirection.ToMain -> TransferDirection.ToMain
+        BridgeTransferDirection.ToProfile -> TransferDirection.ToProfile
+    }
+
+}
+
 private const val BRIDGE_KEY_URI = "uri"
 private const val BRIDGE_KEY_FD = "fd"
 private const val BRIDGE_KEY_DISPLAY_NAME = "display_name"
 private const val BRIDGE_KEY_MIME_TYPE = "mime_type"
 private const val STREAM_BUFFER_SIZE = 64 * 1024
+private const val PROFILE_WRITE_DOWNLOAD = 1
+private const val PROFILE_WRITE_MEDIA = 2
+private const val SELF_TEST_MIME_TEXT = "text/plain"
+private const val SELF_TEST_CLONE_FILE = "prismspace-bridge-clone.txt"
+
+private fun Int.toBridgeStore() = when (this) {
+    PROFILE_WRITE_DOWNLOAD -> BridgeFileStore.Downloads
+    PROFILE_WRITE_MEDIA -> BridgeFileStore.Media
+    else -> error("Unknown profile write store: $this")
+}
+
+private fun TransferDirection.toBridgeDirection() = when (this) {
+    TransferDirection.ToMain -> BridgeTransferDirection.ToMain
+    TransferDirection.ToProfile -> BridgeTransferDirection.ToProfile
+}
+
+private fun openProfileWriteSession(
+    context: Context,
+    store: Int,
+    displayName: String,
+    mimeType: String,
+    relativePath: String,
+): Bundle = when (store) {
+    PROFILE_WRITE_DOWNLOAD -> AndroidFileBridgeDownloadStore(context)
+        .openPendingWrite(displayName, mimeType, relativePath)
+    PROFILE_WRITE_MEDIA -> AndroidFileBridgeMediaStore(context)
+        .openPendingWrite(displayName, mimeType, relativePath)
+    else -> error("Unknown profile write store: $store")
+}
+
+private fun finishProfileWriteSession(context: Context, store: Int, targetUri: String): String = when (store) {
+    PROFILE_WRITE_DOWNLOAD -> AndroidFileBridgeDownloadStore(context).finishPendingWrite(targetUri)
+    PROFILE_WRITE_MEDIA -> AndroidFileBridgeMediaStore(context).finishPendingWrite(targetUri)
+    else -> error("Unknown profile write store: $store")
+}
+
+private fun finishProfileTransfer(
+    context: Context,
+    store: Int,
+    targetUri: String,
+    displayName: String,
+    location: String,
+    isImage: Boolean,
+    directionWireValue: String?,
+): String {
+    val uri = finishProfileWriteSession(context, store, targetUri)
+    TransferHistoryStore.record(
+        context,
+        displayName,
+        location,
+        isImage,
+        direction = TransferDirection.fromWireValue(directionWireValue),
+    )
+    return uri
+}
+
+private fun abortProfileWriteSession(context: Context, store: Int, targetUri: String) {
+    when (store) {
+        PROFILE_WRITE_DOWNLOAD -> AndroidFileBridgeDownloadStore(context).abortPendingWrite(targetUri)
+        PROFILE_WRITE_MEDIA -> AndroidFileBridgeMediaStore(context).abortPendingWrite(targetUri)
+        else -> error("Unknown profile write store: $store")
+    }
+}
+
+private class TransferCancelledException : java.io.IOException("Transfer cancelled")
+private class SourceReadException(cause: Throwable) : java.io.IOException(cause)
+private class TargetWriteException(cause: Throwable) : java.io.IOException(cause)
+
+internal sealed interface SingleCopyTransferResult {
+    data class Written(val bytes: Long) : SingleCopyTransferResult
+    object SourceUnreadable : SingleCopyTransferResult
+    object TargetWriteFailed : SingleCopyTransferResult
+    object Cancelled : SingleCopyTransferResult
+}
+
+internal fun transferSingleCopy(
+    source: TransferSource,
+    output: OutputStream,
+    cancellation: TransferCancellationSignal,
+    onProgress: (Long) -> Unit = {},
+    abort: () -> Unit,
+): SingleCopyTransferResult {
+    val input = try {
+        source.openOnce()
+    } catch (_: Exception) {
+        runCatching(abort)
+        runCatching { output.close() }
+        return SingleCopyTransferResult.SourceUnreadable
+    }
+    val result = try {
+        input.use {
+            output.use {
+                SingleCopyTransferResult.Written(copyCancellable(input, output, cancellation, onProgress))
+            }
+        }
+    } catch (_: TransferCancelledException) {
+        SingleCopyTransferResult.Cancelled
+    } catch (_: SourceReadException) {
+        SingleCopyTransferResult.SourceUnreadable
+    } catch (_: TargetWriteException) {
+        SingleCopyTransferResult.TargetWriteFailed
+    } catch (_: Exception) {
+        SingleCopyTransferResult.TargetWriteFailed
+    }
+    if (result !is SingleCopyTransferResult.Written) runCatching(abort)
+    return result
+}
+
+internal fun copyCancellable(
+    input: InputStream,
+    output: OutputStream,
+    cancellation: TransferCancellationSignal,
+    onProgress: (Long) -> Unit = {},
+): Long {
+    val buffer = ByteArray(STREAM_BUFFER_SIZE)
+    var copied = 0L
+    while (true) {
+        if (cancellation.isCancelled()) throw TransferCancelledException()
+        val read = try {
+            input.read(buffer)
+        } catch (e: Exception) {
+            throw SourceReadException(e)
+        }
+        if (read < 0) break
+        try {
+            output.write(buffer, 0, read)
+        } catch (e: Exception) {
+            throw TargetWriteException(e)
+        }
+        copied += read
+        onProgress(copied)
+    }
+    try {
+        output.flush()
+    } catch (e: Exception) {
+        throw TargetWriteException(e)
+    }
+    return copied
+}
 
 private data class FileBridgeMetadata(
     val displayName: String,
     val mimeType: String,
-) : java.io.Serializable
+)
 
 data class ProfileMediaEntry(
     val displayName: String,
     val mimeType: String,
     val uri: String,
-) : java.io.Serializable
+)
 
 private fun ContentResolver.openPendingWriteSession(
     collectionUri: Uri,
@@ -809,6 +1370,68 @@ internal class FileBridgeDownloadWriter(private val store: FileBridgeDownloadSto
 
 internal interface FileBridgeDownloadStore {
     fun insert(displayName: String, mimeType: String, bytes: ByteArray, relativePath: String): String
+}
+
+internal object ApkSuiteNames {
+    fun canonical(safeBase: String, index: Int): String =
+        if (index == 0) "$safeBase.apk" else "$safeBase.split$index.apk"
+
+    fun pending(safeBase: String, token: String, index: Int): String =
+        ".$safeBase.prism-pending-$token-$index.apk"
+
+    fun isPublishedFor(safeBase: String, displayName: String): Boolean {
+        val base = Regex.escape(safeBase)
+        return Regex("^$base(?:\\.split\\d+)?(?: \\(\\d+\\))?\\.apk$").matches(displayName) ||
+            Regex("^$base \\(\\d+\\)(?:\\.split\\d+)?\\.apk$").matches(displayName)
+    }
+
+    fun isPendingFor(safeBase: String, displayName: String): Boolean =
+        Regex("^\\.${Regex.escape(safeBase)}\\.prism-pending-[A-Za-z0-9-]+-\\d+\\.apk$").matches(displayName)
+}
+
+internal data class StagedApk(val uri: String, val canonicalName: String)
+internal data class PublishedApk(val uri: String, val displayName: String)
+
+internal interface ApkSuiteStore {
+    fun stage(sourcePath: String, pendingName: String, canonicalName: String, relativePath: String): StagedApk
+    fun existingFor(safeBase: String, relativePath: String): List<PublishedApk>
+    fun replaceAtomically(previous: List<PublishedApk>, staged: List<StagedApk>)
+    fun abort(staged: StagedApk)
+}
+
+internal class ApkSuitePublisher(
+    private val store: ApkSuiteStore,
+    private val tokenFactory: () -> String = { UUID.randomUUID().toString() },
+) {
+    fun replace(
+        paths: List<String>,
+        safeBase: String,
+        relativePath: String,
+        previousSafeBases: Set<String> = setOf(safeBase),
+    ): String? {
+        require(paths.isNotEmpty()) { "APK suite is empty" }
+        val token = tokenFactory()
+        val previous = previousSafeBases
+            .flatMap { store.existingFor(it, relativePath) }
+            .distinctBy(PublishedApk::uri)
+        val staged = ArrayList<StagedApk>(paths.size)
+        try {
+            paths.forEachIndexed { index, sourcePath ->
+                val canonical = ApkSuiteNames.canonical(safeBase, index)
+                staged += store.stage(
+                    sourcePath,
+                    ApkSuiteNames.pending(safeBase, token, index),
+                    canonical,
+                    relativePath,
+                )
+            }
+            store.replaceAtomically(previous, staged)
+            return staged.first().uri
+        } catch (error: Throwable) {
+            staged.forEach { runCatching { store.abort(it) } }
+            throw error
+        }
+    }
 }
 
 internal class FileBridgeMediaWriter(private val store: FileBridgeMediaStore) {
@@ -955,34 +1578,6 @@ private class AndroidFileBridgeDownloadStore(private val context: Context) : Fil
         return uri.toString()
     }
 
-    /** Stream from a source File (read locally inside this — the profile — process) into a MediaStore
-     *  Downloads entry. No full-memory load, no Binder byte limit. Used by the file-sync clone path to copy a
-     *  shared, world-readable /data/app APK into the dual space for manual install. */
-    fun insertFromFile(displayName: String, mimeType: String, src: java.io.File, relativePath: String): String {
-        // No pre-delete: cloning the same app twice now yields "App (1).apk" instead of destroying the first.
-        val resolver = context.contentResolver
-        val values = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
-            put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
-                put(MediaStore.MediaColumns.IS_PENDING, 1)
-            }
-        }
-        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-            ?: error("Unable to create Downloads entry")
-        src.inputStream().use { input ->
-            resolver.openOutputStream(uri)?.use { output -> input.copyTo(output, 64 * 1024) }
-                ?: error("Unable to open Downloads output stream")
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            resolver.update(uri, ContentValues().apply {
-                put(MediaStore.MediaColumns.IS_PENDING, 0)
-            }, null, null)
-        }
-        return uri.toString()
-    }
-
     fun insertFromStream(displayName: String, mimeType: String, input: InputStream, relativePath: String): String {
         val resolver = context.contentResolver
         val session = resolver.openPendingWriteSession(
@@ -1060,6 +1655,81 @@ private class AndroidFileBridgeDownloadStore(private val context: Context) : Fil
 
     private companion object {
         private const val PRISM_RELATIVE_PATH = "Download/PrismSpace/"
+    }
+}
+
+private class AndroidApkSuiteStore(private val context: Context) : ApkSuiteStore {
+    private val resolver get() = context.contentResolver
+    private val collection get() = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+
+    override fun stage(
+        sourcePath: String,
+        pendingName: String,
+        canonicalName: String,
+        relativePath: String,
+    ): StagedApk {
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, pendingName)
+            put(MediaStore.MediaColumns.MIME_TYPE, "application/vnd.android.package-archive")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+        }
+        val uri = resolver.insert(collection, values) ?: error("Unable to stage APK")
+        try {
+            File(sourcePath).inputStream().use { input ->
+                resolver.openOutputStream(uri)?.use { output -> input.copyTo(output, STREAM_BUFFER_SIZE) }
+                    ?: error("Unable to open staged APK output")
+            }
+        } catch (error: Throwable) {
+            runCatching { resolver.delete(uri, null, null) }
+            throw error
+        }
+        return StagedApk(uri.toString(), canonicalName)
+    }
+
+    override fun existingFor(safeBase: String, relativePath: String): List<PublishedApk> {
+        val projection = arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME)
+        val selection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            "${MediaStore.MediaColumns.RELATIVE_PATH}=? AND (${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ? OR ${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?)"
+        } else {
+            "${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ? OR ${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?"
+        }
+        val args = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            arrayOf(relativePath, "$safeBase%.apk", ".$safeBase.prism-pending-%.apk")
+        } else {
+            arrayOf("$safeBase%.apk", ".$safeBase.prism-pending-%.apk")
+        }
+        return buildList {
+            resolver.query(collection, projection, selection, args, null)?.use { cursor ->
+                val idColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+                val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+                while (cursor.moveToNext()) {
+                    val name = cursor.getString(nameColumn)
+                    if (ApkSuiteNames.isPublishedFor(safeBase, name) || ApkSuiteNames.isPendingFor(safeBase, name)) {
+                        add(PublishedApk(ContentUris.withAppendedId(collection, cursor.getLong(idColumn)).toString(), name))
+                    }
+                }
+            }
+        }
+    }
+
+    override fun replaceAtomically(previous: List<PublishedApk>, staged: List<StagedApk>) {
+        val operations = ArrayList<ContentProviderOperation>(previous.size + staged.size)
+        previous.forEach { operations += ContentProviderOperation.newDelete(Uri.parse(it.uri)).build() }
+        staged.forEach { apk ->
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, apk.canonicalName)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) put(MediaStore.MediaColumns.IS_PENDING, 0)
+            }
+            operations += ContentProviderOperation.newUpdate(Uri.parse(apk.uri)).withValues(values).build()
+        }
+        resolver.applyBatch(MediaStore.AUTHORITY, operations)
+    }
+
+    override fun abort(staged: StagedApk) {
+        resolver.delete(Uri.parse(staged.uri), null, null)
     }
 }
 

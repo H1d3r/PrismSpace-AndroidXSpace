@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lz_space_detail_added">Clone already in dual space</string>
+    <string name="lz_space_detail_pending">Installation files copied to dual space</string>
+    <string name="lz_space_detail_not_added">No clone added yet</string>
+    <string name="lz_shell_enhanced_method">Automatic installation when authorized; otherwise uses system confirmation</string>
+    <string name="lz_shell_current_version">Current version %1$s</string>
+    <string name="lz_shell_profile_identity">You are in dual space</string>
+    <string name="lz_shell_profile_isolation">Apps and data here are isolated from main space.</string>
+    <string name="lz_shell_profile_pick_files">Choose files from dual space</string>
+    <string name="lz_shell_prepare_read">1 · Installation files collected, including all splits</string>
+    <string name="lz_shell_prepare_copy">2 · Copying to dual space</string>
+    <string name="lz_shell_prepare_copied">2 · Copied to dual space</string>
+    <string name="lz_shell_prepare_confirm">3 · Confirm installation in the Android installer</string>
+    <string name="lz_shell_space_details">Space details</string>
+    <string name="lz_shell_space_details_summary">%1$d clones in dual space. Apps, accounts and files are isolated from main space.</string>
+    <string name="lz_shell_pending_unavailable">Cannot read pending installations. Reconnect from PrismSpace in main space and try again.</string>
+</resources>

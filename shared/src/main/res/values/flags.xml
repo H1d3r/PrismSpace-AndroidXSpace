@@ -5,4 +5,6 @@
     <bool name="since_api_28">false</bool>
     <bool name="since_api_29">false</bool>
     <bool name="since_api_31">false</bool>
+    <!-- Overridden by APK flavors that package the installer bridge contributor. -->
+    <bool name="bridge_require_installer_port">false</bool>
 </resources>

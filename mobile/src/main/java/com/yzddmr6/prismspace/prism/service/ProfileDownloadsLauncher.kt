@@ -12,11 +12,11 @@ import android.content.pm.PackageManager.MATCH_DISABLED_COMPONENTS
 import android.os.Build
 import android.os.UserHandle
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
+import com.yzddmr6.prismspace.bridge.CrossProfileForwardingKind
+import com.yzddmr6.prismspace.bridge.InstallCrossProfileForwarding
 import com.yzddmr6.prismspace.engine.CrossProfile
 import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.settings.PrismSettingsActivity
-import com.yzddmr6.prismspace.util.DPM
-import com.yzddmr6.prismspace.util.DevicePolicies
 import com.yzddmr6.prismspace.util.PrismLocale
 import com.yzddmr6.prismspace.util.Users
 
@@ -136,17 +136,12 @@ internal class ProfileDownloadsOpener {
     }
 
     private fun installForwarding(context: Context): ProfileBridgeResult<Boolean> =
-        runProfileBridgeOperation(context, TAG, "profile downloads forwarding install") {
-            val filter = ProfileDownloadsLauncher.crossProfileActivityIntentFilter()
-            val policies = DevicePolicies(this)
-            policies.addCrossProfileIntentFilter(filter, ProfileDownloadsLauncher.crossProfileForwardingFlags())
-            policies.execute(
-                DPM::addPersistentPreferredActivity,
-                filter,
-                ProfileDownloadsLauncher.crossProfilePreferredActivityComponent(this),
-            )
-            true
-        }
+        runProfileBridgeOperation(
+            context,
+            TAG,
+            "profile downloads forwarding install",
+            command = InstallCrossProfileForwarding(CrossProfileForwardingKind.ProfileDownloads),
+        )
 
     private fun findCrossProfileForwarder(context: Context, intent: Intent): ComponentName? =
         context.packageManager.queryIntentActivities(

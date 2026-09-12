@@ -15,6 +15,9 @@ import android.widget.Toast
 import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.prism.service.FileTransferPolicy
 import com.yzddmr6.prismspace.util.PrismLocale
+import com.yzddmr6.prismspace.bridge.Bridge
+import com.yzddmr6.prismspace.bridge.BridgeTargets
+import com.yzddmr6.prismspace.bridge.CompleteClonePreparation
 
 /**
  * Foreground PackageInstaller session for a cloned app's copied APK set (base + splits) that the
@@ -32,14 +35,16 @@ object ProfileApkInstaller {
     private const val TAG = "Prism.PAI"
     private const val ACTION_RESULT = "com.yzddmr6.prismspace.action.PROFILE_INSTALL_RESULT"
     private const val EXTRA_BASE = "base"
+    private const val EXTRA_PACKAGE = "package"
 
     /** True when the copied base/split APK files for this transfer record still exist in Download/PrismSpace. */
     fun hasCopiedApkSet(context: Context, pkg: String, label: String): Boolean =
-        queryApkSet(context.applicationContext, safeBase(label, pkg)).isNotEmpty()
+        queryApkSet(context.applicationContext, safeBases(label, pkg)).isNotEmpty()
 
     /**
      * Install the copied APK set for [pkg] cloned under [label]. The clone wrote files named
-     * "<safeBase>.apk" + "<safeBase>.splitN.apk" where safeBase = safeDisplayName("label-pkg").
+     * "<safeBase>.apk" + "<safeBase>.splitN.apk" where safeBase is the stable package name.
+     * The former label-package namespace remains readable for already prepared transfers.
      * Must be called from a foreground context (the entry screen) so the confirm dialog can launch.
      */
     fun install(context: Context, pkg: String, label: String) {
@@ -59,8 +64,9 @@ object ProfileApkInstaller {
             Toast.makeText(context, loc.getString(R.string.lz_pf_install_need_perm), Toast.LENGTH_LONG).show()
             return
         }
-        val safeBase = safeBase(label, pkg)
-        val uris = queryApkSet(appCtx, safeBase)
+        val safeBases = safeBases(label, pkg)
+        val safeBase = safeBases.first()
+        val uris = queryApkSet(appCtx, safeBases)
         if (uris.isEmpty()) {
             DiagnosticLog.w(TAG, "profile apk install has no copied apk set pkg=$pkg safeBase=$safeBase")
             Toast.makeText(context, loc.getString(R.string.lz_pf_install_no_apk), Toast.LENGTH_LONG).show(); return
@@ -82,7 +88,10 @@ object ProfileApkInstaller {
                             }
                         } ?: throw IllegalStateException("cannot read $uri")
                     }
-                    val callback = Intent(ACTION_RESULT).setPackage(appCtx.packageName).putExtra(EXTRA_BASE, safeBase)
+                    val callback = Intent(ACTION_RESULT)
+                        .setPackage(appCtx.packageName)
+                        .putExtra(EXTRA_BASE, safeBase)
+                        .putExtra(EXTRA_PACKAGE, pkg)
                     val pi = PendingIntent.getBroadcast(
                         appCtx, sessionId, callback,
                         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
@@ -97,7 +106,15 @@ object ProfileApkInstaller {
     }
 
     /** base + splits in Download/PrismSpace named exactly "<base>.apk" / "<base>.splitN.apk" (no MediaStore "(1)" dupes). */
-    private fun queryApkSet(context: Context, safeBase: String): List<Uri> {
+    private fun queryApkSet(context: Context, safeBases: List<String>): List<Uri> {
+        safeBases.forEach { safeBase ->
+            val found = queryExactApkSet(context, safeBase)
+            if (found.isNotEmpty()) return found
+        }
+        return emptyList()
+    }
+
+    private fun queryExactApkSet(context: Context, safeBase: String): List<Uri> {
         val out = ArrayList<Uri>()
         val coll = MediaStore.Downloads.EXTERNAL_CONTENT_URI
         val proj = arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME)
@@ -116,8 +133,10 @@ object ProfileApkInstaller {
         return out
     }
 
-    private fun safeBase(label: String, pkg: String): String =
-        FileTransferPolicy.safeDisplayName("$label-$pkg")
+    private fun safeBases(label: String, pkg: String): List<String> = listOf(
+        FileTransferPolicy.safeDisplayName(pkg),
+        FileTransferPolicy.safeDisplayName("$label-$pkg"),
+    ).distinct()
 
     @Volatile private var receiverRegistered = false
     private fun registerResultReceiver(appCtx: Context) {
@@ -138,8 +157,26 @@ object ProfileApkInstaller {
                         }
                     }
                     PackageInstaller.STATUS_SUCCESS -> {
-                        DiagnosticLog.i(TAG, "profile apk install success")
+                        val packageName = intent.getStringExtra(EXTRA_PACKAGE)
+                        DiagnosticLog.i(TAG, "profile apk install success pkg=$packageName")
                         Toast.makeText(c, loc.getString(R.string.lz_pf_install_success), Toast.LENGTH_LONG).show()
+                        if (!packageName.isNullOrBlank()) {
+                            val async = goAsync()
+                            Thread {
+                                try {
+                                    val target = BridgeTargets.parentFresh(c.applicationContext)
+                                    val outcome = target?.let {
+                                        Bridge.inParent(c.applicationContext, it)
+                                            .execute(CompleteClonePreparation(packageName))
+                                    }
+                                    DiagnosticLog.i(TAG, "parent pending clone completion pkg=$packageName outcome=${outcome?.javaClass?.simpleName}")
+                                } catch (error: Throwable) {
+                                    DiagnosticLog.e(TAG, "parent pending clone completion failed pkg=$packageName", error)
+                                } finally {
+                                    async.finish()
+                                }
+                            }.start()
+                        }
                     }
                     else -> {
                         val msg = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "status=$status"

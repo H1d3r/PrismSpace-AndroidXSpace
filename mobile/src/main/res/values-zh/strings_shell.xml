@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lz_space_detail_added">双开空间中已有分身</string>
+    <string name="lz_space_detail_pending">安装包已传到双开空间</string>
+    <string name="lz_space_detail_not_added">尚未添加分身</string>
+    <string name="lz_shell_enhanced_method">授权就绪时自动安装，否则使用系统确认安装</string>
+    <string name="lz_shell_current_version">当前版本 %1$s</string>
+    <string name="lz_shell_profile_identity">你正在双开空间中</string>
+    <string name="lz_shell_profile_isolation">这里的应用和数据与主空间相互隔离。</string>
+    <string name="lz_shell_profile_pick_files">选择双开空间中的文件</string>
+    <string name="lz_shell_prepare_read">1 · 已读取完整安装文件（含全部分包）</string>
+    <string name="lz_shell_prepare_copy">2 · 正在复制到双开空间</string>
+    <string name="lz_shell_prepare_copied">2 · 已复制到双开空间</string>
+    <string name="lz_shell_prepare_confirm">3 · 在 Android 系统安装器中确认安装</string>
+    <string name="lz_shell_space_details">空间详情</string>
+    <string name="lz_shell_space_details_summary">双开空间中有 %1$d 个分身，应用、账号和文件与主空间隔离。</string>
+    <string name="lz_shell_pending_unavailable">暂时无法读取待安装任务，请在主空间 PrismSpace 重新连接后再试。</string>
+</resources>

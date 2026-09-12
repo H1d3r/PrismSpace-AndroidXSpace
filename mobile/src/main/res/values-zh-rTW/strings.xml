@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">稜鏡空間</string>
-    <string name="prism_profile_entry_label">稜鏡-雙開空間</string>
+    <string name="app_name">PrismSpace</string>
+    <string name="prism_profile_entry_label">PrismSpace 雙開空間</string>
     <string name="label_searchable">雙開空間中的應用程式</string>
+    <string name="prism_language_zh_tw">繁體中文</string>
 
 
 
@@ -10,69 +11,79 @@
 
     <!-- Compose setup wizard strings -->
     <string name="prism_setup_hero_title">歡迎使用 PrismSpace</string>
-    <string name="prism_setup_hero_body">在同一部裝置上安全執行另一份獨立的應用副本。</string>
+    <string name="prism_setup_hero_body">在手機上建立一個與主空間系統級隔離的雙開空間：獨立的應用程式、獨立的帳號、獨立的資料。</string>
     <string name="prism_setup_features_title">主要功能</string>
-    <string name="prism_setup_feature_clone_title">應用克隆</string>
-    <string name="prism_setup_feature_clone_body">將已安裝的應用複製到獨立的雙開空間，資料互不干擾。</string>
-    <string name="prism_setup_feature_isolation_title">資料隔離</string>
+    <string name="prism_setup_feature_clone_title">應用程式分身</string>
+    <string name="prism_setup_feature_clone_body">將已安裝的應用克隆到獨立的雙開空間，資料互不干擾。</string>
+    <string name="prism_setup_feature_isolation_title">系統級隔離</string>
     <string name="prism_setup_feature_isolation_body">雙開空間使用獨立的帳號與儲存空間，與主空間應用互相隔離。</string>
-    <string name="prism_setup_feature_files_title">跨空間檔案</string>
+    <string name="prism_setup_feature_files_title">跨空間傳檔案</string>
     <string name="prism_setup_feature_files_body">在主空間與雙開空間之間，依需求安全傳輸檔案。</string>
     <string name="prism_setup_privacy_title">運作方式 · 隱私</string>
     <string name="prism_setup_privacy_body">PrismSpace 透過 Android 工作資料建立雙開空間。應用雙開、安裝和檔案傳輸等核心流程在裝置本機完成；檢查更新、PrismProbe 網路測試和診斷分享只會在你主動使用時發起。</string>
     <string name="prism_setup_cta_primary">開始建立雙開空間</string>
     <string name="prism_setup_cta_help">遇到問題？</string>
+    <string name="prism_setup_howto_title">建立方式</string>
+    <string name="prism_setup_howto_system_title">由 Android 系統引導完成</string>
+    <string name="prism_setup_howto_system_body">建立過程會短暫離開 PrismSpace，進入系統設定畫面，通常需要 30–90 秒。</string>
+    <string name="prism_setup_howto_delete_title">隨時可刪除</string>
+    <string name="prism_setup_howto_delete_body">雙開空間只是手機上的一個工作資料，不需要時可以完整刪除。</string>
     <string name="prism_setup_error_title">無法繼續</string>
     <string name="dialog_root_setup_profile_exists">裝置上已存在 PrismSpace 雙開空間。如需重新建立，請先在主空間中刪除已有的雙開空間，然後再次嘗試設定。</string>
     <string name="setup_root_profile_progress">正在建立雙開空間…</string>
     <string name="setup_error_managed_profile_not_supported">抱歉，此裝置不支援必需的「Android 工作資料」特性。</string>
-    <string name="setup_error_provisioning_incomplete">雙開空間的建立不完整，在此之前的建立嘗試可能並未成功。\n\n<b>如果您的裝置或其它三方工具施加了「自啟動」（或類似的）限制，請務必首先將應用雙開解除限制或加入白名單，然後再次建立雙開空間。</b></string>
-    <string name="setup_error_managed_device">抱歉，由於此裝置已被 <b>%1$s</b> 接管，雙開空間無法建立。</string>
+    <string name="setup_error_provisioning_incomplete">雙開空間的建立不完整，在此之前的建立嘗試可能並未成功。\n\n<b>如果您的裝置或其它三方工具施加了「自啟動」（或類似的）限制，請務必首先將 PrismSpace 解除限制或加入白名單，然後再次建立雙開空間。</b></string>
+    <string name="setup_error_managed_device">Android 目前不允許裝置擁有者（Device Owner）與工作設定檔共存，而且互斥是雙向的；Root 或其他特權模式也無法繞過這項平台規則。\n\n目前接管裝置的應用程式：%1$s。\n\n如要建立雙開空間，請先停用該裝置管理應用程式（例如 Dhizuku），然後重試。雙開空間存在期間，也無法再啟用 Device Owner 類工具。</string>
+    <string name="setup_unknown_device_owner">未知裝置管理應用程式</string>
     <string name="setup_error_missing_managed_provisioning">抱歉，由於此裝置並未完整支援必需的「Android 工作資料」特性。</string>
-    <string name="setup_solution_for_cancelled_provision">建立雙開空間遇到了困難？\n\n如果建立過程被中斷，請重新進入系統建立流程，並確保棱鏡空間允許背景啟動。部分深度客製系統還需要先關閉電池最佳化或安全限制，然後再重試。\n\nRoot 建立只作為進階兜底路徑，普通使用者路徑不依賴 Root。</string>
+    <string name="setup_error_existing_space_state">裝置上已有尚未就緒的雙開資料。請返回設定修復，或刪除後再重新建立。</string>
+    <string name="setup_error_orphan_profile">Android 中已有不受 PrismSpace 管理的工作資料。請先在系統設定中確認並移除該資料。</string>
+    <string name="setup_solution_for_cancelled_provision">建立雙開空間遇到了困難？\n\n如果建立過程被中斷，請重新進入系統建立流程，並確保 PrismSpace 允許背景啟動。部分深度客製系統還需要先關閉電池最佳化或安全限制，然後再重試。\n\nRoot 建立只作為進階兜底路徑，普通使用者路徑不依賴 Root。</string>
 
 
     <string name="button_setup_help">建立說明</string>
     <string name="button_have_checked">我已檢查</string>
     <string name="button_setup_space_with_root">透過 ROOT 建立雙開空間</string>
     <string name="prism_help_setup_title">建立說明</string>
-    <string name="prism_help_setup_body">棱鏡空間透過 Android 工作資料建立獨立的雙開空間。\n\n如果建立失敗，先檢查這些項目：\n· 允許棱鏡空間背景執行和自啟動。\n· 系統建立頁面工作時不要手動關閉。\n· 關閉安全中心或電池策略對棱鏡空間的限制後重試。\n· Root 建立僅作為普通建立被系統攔截後的進階兜底。</string>
-    <string name="prism_help_clone_title">複製應用程式說明</string>
-    <string name="prism_help_clone_body">複製應用程式需要 Android 的已安裝應用複製能力、可用的系統應用商店、Shizuku/ADB 授權，或棱鏡空間安裝器模組。\n\n如果目前路徑被系統攔截，請先在主空間安裝目標應用程式後再次複製，或在設定裡啟用 Shizuku/ADB 模式。</string>
+    <string name="prism_help_setup_body">PrismSpace 透過 Android 工作資料建立獨立的雙開空間。\n\n如果建立失敗，先檢查這些項目：\n· 允許 PrismSpace 背景執行和自啟動。\n· 系統建立頁面工作時不要手動關閉。\n· 關閉安全中心或電池策略對 PrismSpace 的限制後重試。\n· Root 建立僅作為普通建立被系統攔截後的進階兜底。</string>
+    <string name="prism_help_clone_title">克隆應用程式說明</string>
+    <string name="prism_help_clone_body">克隆應用程式需要 Android 的已安裝應用克隆能力、可用的系統應用商店、Shizuku/ADB 授權，或 PrismSpace 安裝器模組。\n\n如果目前路徑被系統攔截，請先在主空間安裝目標應用程式後再次克隆，或在設定裡啟用 Shizuku/ADB 模式。</string>
     <string name="prism_help_main_space_title">管理主空間</string>
-    <string name="prism_help_main_space_body">管理主空間會讓棱鏡空間獲得整機範圍的管理能力，不只是雙開空間能力。只有當你需要凍結主空間應用程式，或把 ADB 安全限制套用到整台裝置時才需要啟用。\n\n這是可選能力。複製和啟動雙開應用程式不需要管理主空間。</string>
+    <string name="prism_help_main_space_body">管理主空間會讓 PrismSpace 獲得整機範圍的管理能力，不只是雙開空間能力。只有當你需要凍結主空間應用程式，或把 ADB 安全限制套用到整台裝置時才需要啟用。\n\n這是可選能力。克隆和啟動雙開應用程式不需要管理主空間。</string>
     <string name="prism_home_status_ready_title">雙開空間正常</string>
     <string name="prism_home_status_missing_title">雙開空間尚未就緒</string>
     <string name="prism_home_status_paused_title">雙開空間已暫停</string>
-    <string name="prism_home_status_ready_body">可以複製、開啟和管理雙開空間裡的應用程式。</string>
-    <string name="prism_home_status_missing_body">需要建立或修復工作資料後才能複製應用程式。</string>
+    <string name="prism_home_status_ready_body">可以克隆、開啟和管理雙開空間裡的應用程式。</string>
+    <string name="prism_home_status_missing_body">需要建立或修復工作資料後才能克隆應用程式。</string>
     <string name="prism_home_status_paused_body">恢復雙開空間後才能開啟其中的應用程式。</string>
     <string name="prism_home_add_app">新增應用程式</string>
     <string name="prism_home_action_create_or_repair">建立或修復雙開空間</string>
     <string name="prism_home_action_open_diagnostics">開啟診斷</string>
 
-    <string name="action_rescind">撤銷</string>
 
 
 
     <string name="dialog_title_warning">注意</string>
     <string name="dialog_reactivate_message">雙開空間入口被意外關閉，請再次授權裝置管理權限以重新開啟。</string>
-    <string name="dialog_destroy_message">確定要刪除整個雙開空間？其中的應用程式副本和所有資料將被永久刪除，無法復原。\n\n主空間的應用程式和資料不會受到影響。</string>
-    <string name="dialog_destroy_message_for_managed_user">如果「主空間」也由應用雙開管理，由於 Android 系統施加的限制，您將無法再建立新的雙開空間，除非撤銷對「主空間」的管理權。\n\n確定仍要刪除此雙開空間？</string>
-    <string name="dialog_rescind_message">確定要撤銷對「主空間」的管理權？\n\n將來若希望重新啟用，必須再一次完成必要的流程。如果沒有 ROOT 權限，屆時需要刪除現有的雙開空間（如果已建立）並退出裝置上登入的所有帳號。</string>
     <string name="dialog_cannot_destroy_message">如果要刪除整個雙開空間，請打開系統設定 -（帳戶和）帳號，點選「移除工作資料」。</string>
     <string name="dialog_critical_app_warning">這個應用程式（或服務）可能對於 Android 系統或其它應用程式的正常運作至關重要。如果繼續此操作，部分應用程式甚至整個系統可能因此變得不穩定或無法正常運作。\n\n確認繼續？</string>
     <string name="dialog_space_setup_failed">抱歉，建立雙開空間時出現了異常。（階段 %1$d）</string>
 
     <string name="action_continue">繼續</string>
-    <string name="action_destroy">刪除</string>
 
     <string name="prompt_disable_sys_app_as_removal">系統應用程式（或服務）只能被停用，與解除安裝應用程式的效果相似。\n\n由於沒有權限直接停用應用程式，接下來即將打開系統的應用程式設定介面，屆時請點擊「停用」按鈕。</string>
     <string name="toast_enable_disabled_system_app">請重新啟用此分身</string>
 
     <string name="toast_successfully_cloned">%1$s 已完成分身</string>
     <string name="toast_cannot_clone">抱歉，無法為 %1$s 分身。</string>
+    <string name="lz_app_clone_shizuku_failed">Shizuku 克隆失敗（%1$s）。請檢查 Shizuku/Sui 授權，或改用檔案同步安裝。</string>
+    <string name="lz_home_status_needsrepair_body">雙開空間連線需要修復。點擊「修復」並完成可見的空間內步驟；即使拒絕通知權限，此入口仍可使用。</string>
+    <string name="lz_space_main_copy_lost_title">主空間應用程式已不存在</string>
+    <string name="lz_space_main_copy_lost_body">完成 %1$s 的系統解除安裝流程後，偵測到它在主空間中的副本已不存在。這是 Android 目前回傳的真實狀態；如有需要，請從備份還原應用程式及其資料。</string>
+    <string name="lz_vm_uninstall_queue_summary">解除安裝完成：已移除 %1$d 個、未移除 %2$d 個、無法確認 %3$d 個。</string>
+    <string name="lz_vm_uninstall_queue_aborted">解除安裝已停止：已移除 %1$d 個、未移除 %2$d 個、無法確認 %3$d 個、%4$d 個未執行。%5$s</string>
     <string name="toast_shortcut_failed">快速啟動方式建立失敗</string>
+    <string name="lz_app_create_shortcut">新增桌面快速啟動方式</string>
     <string name="toast_error_freeze_failure">凍結失敗</string>
     <string name="toast_error_unfreeze_failure">解凍失敗</string>
     <string name="toast_error_freezing_active_admin">無法凍結已啟用裝置管理器的應用程式</string>
@@ -100,5 +111,108 @@
 
 
     <!-- Tip cards -->
+
+    <!-- Chrome / navigation -->
+    <string name="lz_mode_normal">一般模式</string>
+    <string name="lz_mode_shizuku">Shizuku/ADB</string>
+    <string name="lz_mode_root">Root</string>
+    <string name="lz_nav_home">首頁</string>
+    <string name="lz_nav_space">空間</string>
+    <string name="lz_nav_files">檔案</string>
+    <string name="lz_nav_settings">設定</string>
+    <string name="lz_space_main_name">主空間</string>
+
+    <!-- Home -->
+    <string name="lz_home_title">首頁</string>
+    <string name="lz_home_about">關於</string>
+    <string name="lz_home_loading">載入中…</string>
+    <string name="lz_home_repair_fallback">修復雙開空間</string>
+    <string name="lz_home_main_space">主空間</string>
+    <string name="lz_home_dual_space">雙開空間</string>
+    <string name="lz_home_work_profile">工作資料</string>
+    <string name="lz_home_run_mode">執行模式</string>
+    <string name="lz_home_android_version">Android 版本</string>
+    <string name="lz_home_device">裝置</string>
+    <string name="lz_home_status_normal_title">雙開空間正常</string>
+    <string name="lz_home_status_normal_body">分身已就緒，隨時可啟動。</string>
+    <string name="lz_home_tag_normal">正常</string>
+    <string name="lz_home_label_add_app">克隆一個應用程式</string>
+    <string name="lz_home_status_notcreated_title">雙開空間未建立</string>
+    <string name="lz_home_status_notcreated_body">請前往設定建立雙開空間。</string>
+    <string name="lz_home_tag_notcreated">未建立</string>
+    <string name="lz_home_label_create">建立雙開空間</string>
+    <string name="lz_home_status_provisioning_title">雙開空間設定進行中</string>
+    <string name="lz_home_status_provisioning_body">Android 與 PrismSpace 正在完成工作資料設定。</string>
+    <string name="lz_home_tag_provisioning">設定中</string>
+    <string name="lz_home_label_provisioning">開啟設定</string>
+    <string name="lz_home_status_suspended_title">雙開空間已暫停</string>
+    <string name="lz_home_status_suspended_body">雙開空間已暫停，分身應用程式暫時無法使用。</string>
+    <string name="lz_home_tag_suspended">已暫停</string>
+    <string name="lz_home_label_restore">恢復雙開空間</string>
+    <string name="lz_home_status_locked_title">雙開空間已鎖定</string>
+    <string name="lz_home_status_locked_body">雙開空間需先解鎖（輸入螢幕鎖定密碼）後才能使用分身。</string>
+    <string name="lz_home_tag_locked">未解鎖</string>
+    <string name="lz_home_label_unlock">前往解鎖</string>
+    <string name="lz_home_status_checking_title">正在檢查雙開空間</string>
+    <string name="lz_home_status_checking_body">正在確認主空間與雙開空間的連線狀態。</string>
+    <string name="lz_home_tag_checking">檢查中</string>
+    <string name="lz_home_label_checking">開啟設定</string>
+    <string name="lz_home_status_needsrepair_title">雙開空間需要修復</string>
+    <string name="lz_home_tag_needsrepair">需要修復</string>
+    <string name="lz_home_label_repair">修復雙開空間</string>
+    <string name="lz_home_profile_not_created">未建立</string>
+    <string name="lz_home_profile_suspended">已暫停</string>
+    <string name="lz_home_profile_ready">雙開空間已就緒</string>
+    <string name="lz_home_pending_title_one">%1$s 等待安裝確認</string>
+    <string name="lz_home_pending_title_more">%1$s 等 %2$d 個應用程式等待安裝確認</string>
+    <string name="lz_home_pending_body">安裝包已傳到雙開空間，下一步在 Android 系統安裝器中確認。</string>
+    <string name="lz_home_pending_action">前往安裝</string>
+    <string name="lz_home_task_add_clone">新增分身</string>
+    <string name="lz_home_task_send_files">傳送檔案</string>
+    <string name="lz_home_overview_title">空間概覽</string>
+    <string name="lz_home_overview_clones">%1$d 個分身</string>
+    <string name="lz_home_recent_transfer">最近傳輸</string>
+    <string name="lz_home_no_transfer">暫無記錄</string>
+    <string name="lz_home_device_version">裝置與版本</string>
+
+    <!-- App actions -->
+    <string name="lz_app_launch">開啟應用程式</string>
+    <string name="lz_app_launch_frozen_subtitle">已凍結，將先解凍再啟動</string>
+    <string name="lz_app_freeze">暫停分身</string>
+    <string name="lz_app_unfreeze">恢復分身</string>
+    <string name="lz_app_app_info">應用程式資訊</string>
+    <string name="lz_app_uninstall_clone">解除安裝分身</string>
+    <string name="lz_app_go_to_dual_space">跳到雙開空間</string>
+    <string name="lz_app_clone_to_dual_space">克隆到雙開空間</string>
+    <string name="lz_app_copy_to">克隆到</string>
+    <string name="lz_app_target_already_in_space">%1$s · 已在此空間</string>
+    <string name="lz_app_method_filesync_title">系統確認安裝</string>
+    <string name="lz_app_method_filesync_summary">建議 · 每次安裝都需要你在 Android 畫面中確認</string>
+    <string name="lz_app_method_shizuku_title">Shizuku 自動安裝</string>
+    <string name="lz_app_method_shizuku_summary_ready">透過 Shizuku 靜默安裝到雙開空間</string>
+    <string name="lz_app_method_root_title">Root 自動安裝</string>
+    <string name="lz_app_method_root_summary_ready">透過 Root 靜默安裝到雙開空間</string>
+    <string name="lz_app_filesync_open_install_entry">開啟雙開空間安裝入口</string>
+    <string name="lz_app_filesync_allow_file_manager">授權系統檔案管理器</string>
+    <string name="lz_app_filesync_install_later">稍後安裝</string>
+    <string name="lz_app_continue_install">繼續安裝</string>
+    <string name="lz_app_delete_dual_space">刪除雙開空間</string>
+    <string name="lz_app_continue_delete">繼續刪除</string>
+    <string name="lz_app_cancel">取消</string>
+    <string name="lz_app_final_confirmation">最終確認</string>
+    <string name="lz_app_delete_final_warning">確認後雙開空間立即刪除，所有分身資料無法找回。</string>
+    <string name="lz_app_permanently_delete">確認永久刪除</string>
+    <string name="lz_app_repair_dual_space_title">修復雙開空間？</string>
+    <string name="lz_app_repair_dual_space_body">這個操作會重新建立工作資料的 Profile Owner 綁定，僅在雙開空間狀態異常時使用。\n\n注意：\n• 修復期間所有正在執行的分身應用程式會被關閉。\n• 系統可能將你短暫帶離 PrismSpace，請稍後回到本應用程式查看結果。\n• 大多數情況下不需要使用此功能。</string>
+    <string name="lz_app_start_repair">開始修復</string>
+    <string name="lz_clone_confirm_title">新增「%1$s」分身</string>
+    <string name="lz_clone_confirm_body_filesync">PrismSpace 會把完整的應用程式安裝檔案複製到雙開空間，再由 Android 詢問你是否安裝。</string>
+    <string name="lz_clone_confirm_body_auto">將按目前方式自動安裝到雙開空間（%1$s）。</string>
+    <string name="lz_clone_change_method">更改</string>
+    <string name="lz_clone_prepare_packages">準備安裝包</string>
+    <string name="lz_clone_confirm_body_system">系統應用程式只需在雙開空間內啟用，無需複製安裝包。</string>
+    <string name="lz_clone_enable_system">啟用</string>
+    <string name="lz_clone_auto_install">自動安裝</string>
+    <string name="lz_app_delete_dual_space_warning_count">將永久刪除 %1$d 個分身，以及其中的帳號、應用程式資料和空間內檔案。此操作無法復原。</string>
 
 </resources>

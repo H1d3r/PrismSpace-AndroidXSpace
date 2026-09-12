@@ -36,6 +36,19 @@ class SpaceBridgeHealthStoreTest {
         assertEquals(11, store.cached(profileId = 11, nowMs = 1_500L)?.profileId)
     }
 
+    @Test fun availabilityListenerOnlySeesTransitionsOrExpiredObservations() {
+        val store = SpaceBridgeHealthStore(ttlMs = 10_000L)
+        val events = mutableListOf<Boolean>()
+        store.addAvailabilityListener { _, available -> events += available }
+
+        store.update(health(available = true), nowMs = 1_000L)
+        store.update(health(available = true), nowMs = 2_000L)
+        store.update(health(available = false), nowMs = 3_000L)
+        store.update(health(available = false), nowMs = 14_000L)
+
+        assertEquals(listOf(true, false, false), events)
+    }
+
     private fun health(profileId: Int = 10, available: Boolean): ShuttleHealth =
         ShuttleHealth(
             profileId = profileId,

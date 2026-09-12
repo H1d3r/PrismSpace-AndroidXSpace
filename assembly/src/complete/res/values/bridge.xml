@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <bool name="bridge_require_installer_port">true</bool>
+</resources>

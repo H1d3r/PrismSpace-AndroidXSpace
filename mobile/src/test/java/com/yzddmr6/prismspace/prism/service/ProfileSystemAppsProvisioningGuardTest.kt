@@ -40,6 +40,15 @@ class ProfileSystemAppsProvisioningGuardTest {
         assertTrue(criticalIndex > pruneIndex)
     }
 
+    @Test
+    fun profileOwnerProvisioningPreservesSystemInputMethods() {
+        val source = String(Files.readAllBytes(deleteNonRequiredAppsSource()), StandardCharsets.UTF_8)
+        val imeGuard = source.substringAfter("Product deviation from AOSP")
+            .substringBefore("packagesToDelete.addAll")
+        assertTrue(imeGuard.contains("mProvisioningType == PROFILE_OWNER"))
+        assertTrue(imeGuard.contains("packagesToDelete.removeAll(getSystemInputMethods())"))
+    }
+
     private fun systemAppsManagerSource(): Path {
         return sourcePath("shared/src/main/java/com/yzddmr6/prismspace/provisioning/SystemAppsManager.java")
     }
@@ -47,6 +56,9 @@ class ProfileSystemAppsProvisioningGuardTest {
     private fun prismProvisioningSource(): Path {
         return sourcePath("engine/src/main/java/com/yzddmr6/prismspace/provisioning/PrismProvisioning.java")
     }
+
+    private fun deleteNonRequiredAppsSource(): Path =
+        sourcePath("engine/src/main/java/com/yzddmr6/prismspace/provisioning/task/DeleteNonRequiredAppsTask.java")
 
     private fun sourcePath(relativePath: String): Path {
         var current = Paths.get(System.getProperty("user.dir")).toAbsolutePath()

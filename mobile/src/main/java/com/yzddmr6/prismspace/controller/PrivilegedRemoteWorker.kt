@@ -74,10 +74,14 @@ class PrivilegedRemoteWorker: Binder() {
             DiagnosticLog.i(TAG, "onTransact clone pkg=$pkg userId=$userId")
             try {
                 val result = cloneAppViaShizuku(getSystemContext(), pkg, userId)
-                reply?.writeInt(if (result) 1 else 0) }
+                writeResult(
+                    reply,
+                    if (result) 1 else 0,
+                    message = if (result) null else "Package installation could not be verified for target user $userId",
+                ) }
             catch (e: Exception) {
                 DiagnosticLog.e(TAG, "Error cloning $pkg via Shizuku", e)
-                reply?.writeInt(-1) }
+                writeResult(reply, -1, e.javaClass.name, e.message) }
             return true
         }
         if (code == TRANSACTION_SET_APP_OP_MODE) {
@@ -87,13 +91,24 @@ class PrivilegedRemoteWorker: Binder() {
             val mode = data.readInt()
             try {
                 val result = setAppOpModeViaShizuku(getSystemContext(), pkg, userId, op, mode)
-                reply?.writeInt(if (result) 1 else 0) }
+                writeResult(reply, if (result) 1 else 0) }
             catch (e: Exception) {
                 DiagnosticLog.e(TAG, "Error setting app-op $op to $mode for $pkg via Shizuku", e)
-                reply?.writeInt(-1) }
+                writeResult(reply, -1, e.javaClass.name, e.message) }
             return true
         }
         return super.onTransact(code, data, reply, flags)
+    }
+
+    private fun writeResult(
+        reply: Parcel?,
+        resultCode: Int,
+        exceptionClass: String? = null,
+        message: String? = null,
+    ) {
+        reply?.writeInt(resultCode)
+        reply?.writeString(exceptionClass)
+        reply?.writeString(message)
     }
 
     private fun scheduleProcessExit() {

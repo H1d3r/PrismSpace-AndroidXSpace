@@ -7,9 +7,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 
 object AppLaunchSignals {
-    private val channel = Channel<Unit>(capacity = Channel.CONFLATED)
-    val resetToHome: Flow<Unit> = channel.receiveAsFlow()
-    fun signalResetToHome() { channel.trySend(Unit) }
+    private val activationChannel = Channel<Unit>(capacity = Channel.CONFLATED)
+    val activateSpace: Flow<Unit> = activationChannel.receiveAsFlow()
+    fun signalActivateSpace() { activationChannel.trySend(Unit) }
 
     // "去启用" from the clone install-method selector (which lives in a Fragment, not the Compose
     // NavHost): jump to Settings and auto-open the run-mode guide so the user can enable Shizuku/Root.
@@ -23,4 +23,17 @@ object AppLaunchSignals {
     private val _multiSelectActive = MutableStateFlow(false)
     val multiSelectActive: StateFlow<Boolean> = _multiSelectActive
     fun setMultiSelectActive(active: Boolean) { _multiSelectActive.value = active }
+
+    // Home「添加分身」→ Space tab with the MAIN segment selected (the clone source list).
+    // Nonce StateFlow (not a Channel): the Space screen may be recreated after the signal and must
+    // still see it once — collectors acknowledge via a remembered last-handled nonce.
+    private val _openSpaceMainSegment = MutableStateFlow(0)
+    val openSpaceMainSegment: StateFlow<Int> = _openSpaceMainSegment
+    fun signalOpenSpaceMainSegment() { _openSpaceMainSegment.value += 1 }
+
+    // Settings「系统应用」→ Space tab (PrismNavHost switches tabs), dual segment + system-apps
+    // view open (SpaceScreen consumes the same nonce).
+    private val _openSpaceSystemApps = MutableStateFlow(0)
+    val openSpaceSystemApps: StateFlow<Int> = _openSpaceSystemApps
+    fun signalOpenSpaceSystemApps() { _openSpaceSystemApps.value += 1 }
 }

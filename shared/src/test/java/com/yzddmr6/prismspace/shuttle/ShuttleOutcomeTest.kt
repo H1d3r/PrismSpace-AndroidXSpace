@@ -19,9 +19,9 @@ class ShuttleOutcomeTest {
         assertEquals(ShuttleNotReadyCause.UnknownAuthority, cause)
     }
 
-    @Test fun illegalArgumentWithGrantIsCallFailedWithoutChangingOldSwallowBehavior() {
+    @Test fun protocolIllegalArgumentIsNotMisclassifiedAsRepairable() {
         val cause = classifyShuttleNotReadyCause(IllegalArgumentException("bad call"), permissionGranted = true)
-        assertEquals(ShuttleNotReadyCause.PermissionPresentCallFailed, cause)
+        assertEquals(null, cause)
     }
 
     @Test fun boundedOutcomeKeepsLegitimateNullDistinctFromTimeout() {

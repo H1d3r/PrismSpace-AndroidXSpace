@@ -10,17 +10,26 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
 import com.yzddmr6.prismspace.analytics.DiagnosticSection
+import com.yzddmr6.prismspace.bridge.BridgeTargets
+import com.yzddmr6.prismspace.controller.ClonePreparationStore
 import com.yzddmr6.prismspace.controller.PrismAppControl
 import com.yzddmr6.prismspace.controller.UserCloneRegistry
 import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.prism.compose.component.PrismLevel
-import com.yzddmr6.prismspace.prism.compose.settings.ExperimentalFlags
 import com.yzddmr6.prismspace.prism.compose.space.BridgeHealthRepository
 import com.yzddmr6.prismspace.prism.compose.space.DeleteSpaceResult
-import com.yzddmr6.prismspace.prism.compose.space.SpaceProvisioningEngine
+import com.yzddmr6.prismspace.prism.compose.space.SpaceDeletionCoordinator
+import com.yzddmr6.prismspace.prism.compose.space.PrismSpace
+import com.yzddmr6.prismspace.prism.compose.space.PrismSpaceKind
 import com.yzddmr6.prismspace.prism.compose.space.SpaceRepository
 import com.yzddmr6.prismspace.prism.compose.space.SpaceRepositoryProvider
 import com.yzddmr6.prismspace.prism.compose.space.SpaceUsability
+import com.yzddmr6.prismspace.prism.compose.space.SpaceRecoveryPlan
+import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository
+import com.yzddmr6.prismspace.prism.compose.space.SpaceSnapshot
+import com.yzddmr6.prismspace.prism.compose.space.recoveryPlan
+import com.yzddmr6.prismspace.prism.compose.space.presentSpace
+import com.yzddmr6.prismspace.prism.compose.space.SpacePresentationKind
 import com.yzddmr6.prismspace.prism.model.CapabilityAvailability
 import com.yzddmr6.prismspace.prism.model.CapabilityState
 import com.yzddmr6.prismspace.prism.model.PrismRootStatus
@@ -29,19 +38,21 @@ import com.yzddmr6.prismspace.prism.model.PrismShizukuAdbStatus
 import com.yzddmr6.prismspace.prism.model.SettingsActionPlanner
 import com.yzddmr6.prismspace.prism.service.CapabilityService
 import com.yzddmr6.prismspace.prism.service.ProfileEntryLauncher
+import com.yzddmr6.prismspace.prism.service.ProfileBridgeResult
+import com.yzddmr6.prismspace.prism.service.ProfileRecoveryService
 import com.yzddmr6.prismspace.setup.PrismSetup
 import com.yzddmr6.prismspace.setup.SetupFlow
-import com.yzddmr6.prismspace.shuttle.Shuttle
-import com.yzddmr6.prismspace.shuttle.ShuttleOutcome
 import com.yzddmr6.prismspace.shuttle.ShuttleProvider
 import com.yzddmr6.prismspace.util.PrismLocale
 import com.yzddmr6.prismspace.util.Users
 import com.yzddmr6.prismspace.util.Users.Companion.toId
+import com.yzddmr6.prismspace.util.UserHandles
+import com.yzddmr6.prismspace.space.SpaceState
 import eu.chainfire.libsuperuser.Shell
-import java.io.FileInputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import rikka.shizuku.Shizuku
@@ -71,17 +82,22 @@ data class SettingsUiModel(
     // Feedback message shown below the screen (e.g. snapshot result)
     val feedbackMessage: String? = null,
     val feedbackIsError: Boolean = false,
-    // Space suspended state
-    val spaceSuspended: Boolean = false,
+    val spaceFreezeState: SpaceFreezeState = SpaceFreezeState.Unknown,
+    // Real aggregated dual-space usability (locked / bridge-down drive the 暂停所有分身 switch's
+    // disabled reason) and the clone count used by the danger-zone delete confirmation.
+    val spaceUsability: SpaceUsability = SpaceUsability.Unknown,
+    val cloneCount: Int = 0,
     // Single source of truth for which mode the user has selected
     val selectedMode: PrismMode = PrismMode.Normal,
-    val experimentalMultiProfile: Boolean = false,
     // Non-null when an update check found a newer release.
     val updateInfo: UpdateInfo? = null,
     val spaceActionTitle: String = "",
     val spaceActionSummary: String = "",
     val spaceActionNeedsConfirmation: Boolean = true,
-)
+    val spaceActionEnabled: Boolean = true,
+) {
+    val spaceSuspended: Boolean get() = spaceFreezeState == SpaceFreezeState.Frozen
+}
 
 /** A newer GitHub release than the installed build. */
 data class UpdateInfo(val version: String, val notes: String, val url: String)
@@ -111,35 +127,40 @@ private const val GITHUB_REPO = "yzddmr6/PrismSpace"
 /**
  * Pure mapper: given boolean flags, builds the SettingsUiModel.
  * selectedMode is the user's explicit choice.
- * isActive on each row reflects selectedMode, not live re-detection.
- * Gating (shizukuAvailable/rootAvailable) only determines what modes CAN be
- * selected — it doesn't retroactively change the checkmark once selected.
+ * Selection reflects persisted user intent; status text and capability availability reflect runtime facts.
  */
 internal fun mapSettingsUiModel(
     profileOwner: Boolean,
     shizukuAuthorized: Boolean,
-    shizukuAvailable: Boolean,
     modeState: PrismSettingsModeState,
     capabilityState: CapabilityState,
     selectedMode: PrismMode = PrismMode.Normal,
-    res: StringResolver = zhFallback,
+    res: StringResolver,
 ): SettingsUiModel {
-    // Mode card body depends on profile-owner and Shizuku authorization state.
+    val shizukuCapable = shizukuAuthorized && capabilityState.shizuku is CapabilityAvailability.Available
+    val rootCapable = capabilityState.root is CapabilityAvailability.Available
+    val preferredReady = when (selectedMode) {
+        PrismMode.Normal -> true
+        PrismMode.Shizuku -> shizukuCapable
+        PrismMode.Root -> rootCapable
+    }
+    val selectedTitle = when (selectedMode) {
+        PrismMode.Normal -> modeState.normal.title
+        PrismMode.Shizuku -> modeState.shizukuAdb.title
+        PrismMode.Root -> modeState.root.title
+    }
     val modeBody = when {
         !profileOwner -> res(R.string.lz_setvm_mode_body_not_created, emptyArray())
-        shizukuAuthorized -> res(R.string.lz_setvm_mode_body_shizuku, emptyArray())
+        !preferredReady -> res(R.string.lz_setvm_mode_body_preference_unavailable, arrayOf(selectedTitle))
+        selectedMode == PrismMode.Shizuku -> res(R.string.lz_setvm_mode_body_shizuku, emptyArray())
+        selectedMode == PrismMode.Root -> res(R.string.lz_setvm_mode_body_root, emptyArray())
         else -> res(R.string.lz_setvm_mode_body_normal, emptyArray())
     }
     val level = when {
         !profileOwner -> PrismLevel.Error
-        shizukuAuthorized -> PrismLevel.Ok
+        !preferredReady -> PrismLevel.Warn
         else -> PrismLevel.Ok
     }
-
-    // isActive follows the USER's selectedMode choice (single source of truth).
-    // Capability availability is still used for gating, but not for the checkmark.
-    val shizukuCapable = capabilityState.shizuku is CapabilityAvailability.Available
-    val rootCapable = capabilityState.root is CapabilityAvailability.Available
 
     return SettingsUiModel(
         modeTitle = res(R.string.lz_setvm_mode_title, emptyArray()),
@@ -156,13 +177,13 @@ internal fun mapSettingsUiModel(
             title = modeState.shizukuAdb.title,
             summary = modeState.shizukuAdb.summary,
             statusLabel = modeState.shizukuAdb.status,
-            isActive = selectedMode == PrismMode.Shizuku && shizukuCapable,
+            isActive = selectedMode == PrismMode.Shizuku,
         ),
         rootMode = SettingsModeRow(
             title = modeState.root.title,
             summary = modeState.root.summary,
             statusLabel = modeState.root.status,
-            isActive = selectedMode == PrismMode.Root && rootCapable,
+            isActive = selectedMode == PrismMode.Root,
         ),
         selectedMode = selectedMode,
         spaceActionTitle = if (profileOwner) {
@@ -195,6 +216,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
 
     private val spaceRepo: SpaceRepository by lazy { SpaceRepositoryProvider.get(getApplication()) }
     private val bridgeHealthRepo: BridgeHealthRepository by lazy { BridgeHealthRepository(getApplication()) }
+    private val stateRepo: SpaceStateRepository by lazy { SpaceStateRepository(getApplication()) }
     private val capRepo: CapabilityRepository by lazy { CapabilityRepositoryProvider.get(getApplication()) }
 
     private val _uiState = MutableStateFlow<SettingsUiModel?>(null)
@@ -203,14 +225,31 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     // Selected mode is owned by CapabilityRepository and shared with Home.
     val selectedMode: StateFlow<PrismMode> get() = capRepo.selectedMode
 
+    init {
+        viewModelScope.launch {
+            stateRepo.state.collectLatest { snapshot ->
+                when (snapshot) {
+                    SpaceSnapshot.Loading -> _uiState.value = null
+                    is SpaceSnapshot.Failed -> {
+                        _uiState.value = withContext(Dispatchers.IO) { buildUnavailableUiModel(snapshot) }
+                    }
+                    is SpaceSnapshot.Loaded -> {
+                        _uiState.value = withContext(Dispatchers.IO) { buildUiModel(snapshot.state) }
+                    }
+                }
+            }
+        }
+    }
+
     // ---------------------------------------------------------------------------
     // Capability refresh
     // ---------------------------------------------------------------------------
 
     fun refreshCapabilities() {
         viewModelScope.launch {
-            val model = withContext(Dispatchers.IO) { buildUiModel() }
-            _uiState.value = model
+            stateRepo.refresh("settings_explicit")
+            val state = (stateRepo.state.value as? SpaceSnapshot.Loaded)?.state ?: return@launch
+            _uiState.value = withContext(Dispatchers.IO) { buildUiModel(state) }
         }
     }
 
@@ -226,7 +265,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun handleShizukuAction() {
         val available = isShizukuAvailable()
-        val authorized = isShizukuAuthorized(available)
+        val authorized = isShizukuAuthorized()
         val action = SettingsActionPlanner.shizukuAction(available, authorized)
         when (action) {
             com.yzddmr6.prismspace.prism.model.ShizukuSettingsAction.OpenManager -> openShizukuManager()
@@ -293,14 +332,16 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     private data class ReleaseInfo(val version: String, val notes: String, val url: String)
 
     fun checkShizuku(): Boolean {
-        val available = isShizukuAvailable()
-        val authorized = isShizukuAuthorized(available)
+        val authorized = isShizukuAuthorized()
         if (authorized) {
+            capRepo.markShizukuReady()
             capRepo.setSelectedMode(PrismMode.Shizuku)
             setFeedback(str(R.string.lz_setvm_shizuku_connected), isError = false)
             refreshCapabilities()
         } else {
-            setFeedback(str(R.string.lz_setvm_shizuku_not_ready), isError = true)
+            // The mode sheet is the user-facing Shizuku setup entry. Merely re-checking
+            // permission here leaves the documented authorization flow unreachable.
+            handleShizukuAction()
         }
         return authorized
     }
@@ -326,9 +367,11 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
             if (result) {
+                capRepo.markRootReady()
                 capRepo.setSelectedMode(PrismMode.Root)
                 setFeedback(str(R.string.lz_setvm_root_granted), isError = false)
             } else {
+                capRepo.markRootUnavailable()
                 // Keep current mode unchanged — do NOT switch to Root on failure
                 setFeedback(str(R.string.lz_setvm_root_denied), isError = true)
             }
@@ -379,8 +422,6 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                         else str(R.string.lz_setvm_space_resumed),
                         isError = false,
                     )
-                    val current = _uiState.value ?: return@launch
-                    _uiState.value = current.copy(spaceSuspended = suspend)
                 }
                 SuspendResult.NoSpace -> setFeedback(
                     str(R.string.lz_setvm_space_not_ready), isError = true)
@@ -398,6 +439,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                     if (suspend) str(R.string.lz_setvm_suspend_failed, result.detail)
                     else str(R.string.lz_setvm_resume_failed, result.detail), isError = true)
             }
+            refreshCapabilities()
         }
     }
 
@@ -410,55 +452,50 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         data class Error(val detail: String) : SuspendResult()
     }
 
-    fun setExperimentalMultiProfile(enabled: Boolean) {
-        ExperimentalFlags.setMultiProfileEnabled(getApplication(), enabled)
-        _uiState.value = _uiState.value?.copy(experimentalMultiProfile = enabled)
-    }
-
     // ---------------------------------------------------------------------------
     // Create/repair entry point. When the profile is absent, this opens the normal setup
     // wizard. When it exists but is paused/locked, it asks Android to bring that profile back.
     // ---------------------------------------------------------------------------
-    fun repairSpace(context: Context) {
+    fun repairSpace(context: Context, activationOnly: Boolean = false) {
         viewModelScope.launch {
             val appContext = context.applicationContext
-            val outcome = withContext(Dispatchers.IO) {
-                runCatching { Users.refreshUsers(appContext) }
-                    .onFailure { DiagnosticLog.w(TAG, "refresh users before repair failed", it) }
-                val profile = Users.profile ?: return@withContext RepairSpaceOutcome.StartSetup
-                val dual = spaceRepo.dualSpace() ?: return@withContext RepairSpaceOutcome.StartSetup
-                val usability = spaceRepo.usabilityOf(dual).let { current ->
-                    if (current == SpaceUsability.Unknown || current == SpaceUsability.BridgeNotReady) {
+            if (!stateRepo.refresh("settings_repair")) {
+                setFeedback(str(R.string.lz_setvm_state_refresh_failed), isError = true)
+                return@launch
+            }
+            val plan = withContext(Dispatchers.IO) {
+                val initial = (stateRepo.state.value as? SpaceSnapshot.Loaded)?.state
+                    ?: return@withContext null
+                if (initial is SpaceState.HalfProvisioned || initial is SpaceState.BridgeDown) {
+                    initial.userId?.let(UserHandles::of)?.let { profile ->
                         runCatching { bridgeHealthRepo.refreshHealth(profile) }
                             .onFailure { DiagnosticLog.w(TAG, "refresh bridge health before repair failed", it) }
-                        spaceRepo.usabilityOf(dual)
-                    } else {
-                        current
                     }
                 }
-                when (usability) {
-                    SpaceUsability.NotProvisioned ->
-                        RepairSpaceOutcome.StartSetup
-                    SpaceUsability.Suspended,
-                    SpaceUsability.LockedNeedsUnlock ->
-                        RepairSpaceOutcome.Activate(profile)
-                    SpaceUsability.BridgeNotReady ->
-                        RepairSpaceOutcome.RepairBridge(profile)
-                    SpaceUsability.Unknown ->
-                        RepairSpaceOutcome.RepairBridge(profile)
-                    SpaceUsability.Usable ->
-                        RepairSpaceOutcome.AlreadyReady
-                }
+                if (!stateRepo.refresh("settings_repair_health")) return@withContext null
+                (stateRepo.state.value as? SpaceSnapshot.Loaded)?.state?.let(::recoveryPlan)
             }
-            when (outcome) {
-                RepairSpaceOutcome.StartSetup -> {
+            if (plan == null) {
+                setFeedback(str(R.string.lz_setvm_state_refresh_failed), isError = true)
+                return@launch
+            }
+            // A home-page resume request must not turn into setup or policy repair if facts
+            // changed while navigating. Those operations retain their explicit settings entry.
+            if (activationOnly && plan !is SpaceRecoveryPlan.Activate &&
+                plan !is SpaceRecoveryPlan.OpenProfileUnlock && plan !is SpaceRecoveryPlan.AlreadyReady) {
+                refreshCapabilities()
+                return@launch
+            }
+            when (plan) {
+                SpaceRecoveryPlan.StartSetup -> {
                     setFeedback(str(R.string.lz_setvm_opening_setup), isError = false)
                     SetupFlow.open(context)
                 }
-				is RepairSpaceOutcome.Activate -> {
+				is SpaceRecoveryPlan.Activate -> {
 					setFeedback(str(R.string.lz_setvm_repairing), isError = false)
+					val profile = UserHandles.of(plan.userId)
 					val ok = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-						runCatching { Users.requestQuietModeDisabled(context, outcome.profile) }
+						runCatching { Users.requestQuietModeDisabled(context, profile) }
 							.onFailure { DiagnosticLog.e(TAG, "profile activation failed", it) }
 							.getOrDefault(false)
 					} else {
@@ -471,9 +508,46 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     refreshCapabilities()
                 }
-                is RepairSpaceOutcome.RepairBridge -> {
+                is SpaceRecoveryPlan.ActivateThenOpenEntry -> {
+                    setFeedback(str(R.string.lz_setvm_repairing), isError = false)
+                    val profile = UserHandles.of(plan.userId)
+                    val active = Users.isProfileAvailable(context, profile) ||
+                        (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
+                            runCatching { Users.requestQuietModeDisabled(context, profile) }.getOrDefault(false))
+                    val opened = active && ProfileEntryLauncher.start(context, profile)
+                    setFeedback(
+                        if (opened) str(R.string.lz_setvm_bridge_repair_opened_profile)
+                        else str(R.string.lz_setvm_incomplete_cannot_auto_repair),
+                        isError = !opened,
+                    )
+                    refreshCapabilities()
+                }
+                is SpaceRecoveryPlan.OpenProfileUnlock -> {
+                    val profile = UserHandles.of(plan.userId)
+                    val opened = ProfileEntryLauncher.start(context, profile)
+                    setFeedback(
+                        if (opened) str(R.string.lz_setvm_unlock_opened_profile)
+                        else str(R.string.lz_setvm_repair_failed, str(R.string.lz_setvm_profile_activation_failed)),
+                        isError = !opened,
+                    )
+                    refreshCapabilities()
+                }
+                is SpaceRecoveryPlan.RepairIncrementally -> {
+                    setFeedback(str(R.string.lz_setvm_repairing), isError = false)
+                    val result = withContext(Dispatchers.IO) {
+                        ProfileRecoveryService.repair(appContext, UserHandles.of(plan.userId))
+                    }
+                    val repaired = result is ProfileBridgeResult.Value && result.value == true
+                    setFeedback(
+                        if (repaired) str(R.string.lz_setvm_incomplete_repaired)
+                        else str(R.string.lz_setvm_incomplete_cannot_auto_repair),
+                        isError = !repaired,
+                    )
+                    refreshCapabilities()
+                }
+                is SpaceRecoveryPlan.ReconnectBridge -> {
                     setFeedback(str(R.string.lz_setvm_bridge_repairing), isError = false)
-                    val opened = ProfileEntryLauncher.start(context, outcome.profile)
+                    val opened = ProfileEntryLauncher.start(context, UserHandles.of(plan.userId))
                     if (opened) {
                         setFeedback(str(R.string.lz_setvm_bridge_repair_opened_profile), isError = false)
                     } else {
@@ -481,7 +555,15 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     refreshCapabilities()
                 }
-                RepairSpaceOutcome.AlreadyReady -> {
+                is SpaceRecoveryPlan.OpenSystemProfileSettings -> {
+                    val manager = stateRepo.profileOwnerPackage(plan.userId)
+                        ?: str(R.string.lz_setvm_orphan_manager_unknown)
+                    setFeedback(str(R.string.lz_setvm_orphan_profile, manager), isError = true)
+                    (context as? Activity)?.let(PrismSetup::promptManualRemoval)
+                }
+                is SpaceRecoveryPlan.WaitForProvisioning ->
+                    setFeedback(str(R.string.lz_setvm_provisioning_active), isError = false)
+                is SpaceRecoveryPlan.AlreadyReady -> {
                     setFeedback(str(R.string.lz_setvm_space_already_ready), isError = false)
                     refreshCapabilities()
                 }
@@ -498,21 +580,39 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         val res: StringResolver = prismResolver(getApplication())
         viewModelScope.launch {
             setFeedback(res(R.string.lz_vm_deleting_space, emptyArray()), isError = false)
+            if (!stateRepo.refresh("settings_delete_preflight")) {
+                setFeedback(str(R.string.lz_setvm_state_refresh_failed), isError = true)
+                return@launch
+            }
             val space = withContext(Dispatchers.IO) {
-                runCatching { Users.refreshUsers(getApplication()) }
-                    .onFailure { DiagnosticLog.w(TAG, "refresh users before settings delete failed", it) }
-                spaceRepo.dualSpace()
+                val state = (stateRepo.state.value as? SpaceSnapshot.Loaded)?.state
+                    ?: return@withContext null
+                state.userId?.let { userId ->
+                    spaceRepo.dualSpace() ?: PrismSpace(
+                        id = "space_$userId",
+                        userId = userId,
+                        kind = PrismSpaceKind.Dual,
+                        displayName = res(R.string.lz_vm_default_space_name, emptyArray()),
+                    )
+                }
             }
             if (space == null) {
                 setFeedback(res(R.string.lz_space_delete_target_missing, emptyArray()), isError = true)
                 refreshCapabilities()
                 return@launch
             }
-            val result: DeleteSpaceResult =
-                if (space.userId == Users.currentId())
-                    DeleteSpaceResult.FellBackToSelfDestroy(PrismSetup.destroyProfileDirect(activity))
-                else SpaceProvisioningEngine.deleteSpace(getApplication(), space)
+            val result = SpaceDeletionCoordinator.delete(
+                getApplication(),
+                space,
+                capabilities = capRepo,
+            )
             val fb = provisioningFeedback(result, res)
+            if (result == DeleteSpaceResult.Success) {
+                UserCloneRegistry.clear(getApplication())
+                // Pending-install markers target a space that no longer exists — clear them so the
+                // home todo card and the main-space rows stop offering 待安装 for a deleted space.
+                ClonePreparationStore.clear(getApplication())
+            }
             setFeedback(fb.message, isError = fb.isError)
             if (fb.routeToSystemRemoval) PrismSetup.promptManualRemoval(activity)
             refreshCapabilities()
@@ -591,17 +691,18 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     // Private helpers
     // ---------------------------------------------------------------------------
 
-    private fun buildUiModel(): SettingsUiModel {
+    private fun buildUiModel(spaceState: SpaceState): SettingsUiModel {
         val context: Context = getApplication()
-        runCatching { Users.refreshUsers(context) }
-            .onFailure { DiagnosticLog.w(TAG, "refresh users before settings state failed", it) }
+        val presentation = presentSpace(spaceState)
         val shizukuAvailable = isShizukuAvailable()
-        val shizukuAuthorized = isShizukuAuthorized(shizukuAvailable)
-        val profileOwner = Users.profile?.let { Users.isProfileManagedByPrism(context, it) } == true
+        val runtime = capRepo.runtimeSnapshot()
+        val shizukuAuthorized = runtime.shizukuReady
+        val profileOwner = presentation.hasProfile && presentation.kind != SpacePresentationKind.Orphan
         DiagnosticLog.d(
             TAG,
             "settings state profile=${Users.profile?.toId() ?: Users.NULL_ID} " +
-                "profileOwner=$profileOwner shizukuAvailable=$shizukuAvailable shizukuAuthorized=$shizukuAuthorized",
+                "profileOwner=$profileOwner state=$spaceState " +
+                "shizukuAvailable=$shizukuAvailable shizukuAuthorized=$shizukuAuthorized",
         )
 
         val modeState = PrismSettingsModeState.from(
@@ -610,7 +711,13 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                 shizukuAvailable -> PrismShizukuAdbStatus.WaitingAuthorization
                 else -> PrismShizukuAdbStatus.NotRunning
             },
-            root = PrismRootStatus.NotDetected,
+            root = when (runtime.rootReadiness) {
+                is RootReadiness.ReadyUntil -> if (runtime.preferredMode == PrismMode.Root) {
+                    PrismRootStatus.Enabled
+                } else PrismRootStatus.AvailableButDisabled
+                RootReadiness.Unknown -> PrismRootStatus.NotDetected
+                RootReadiness.Unavailable -> PrismRootStatus.Unavailable
+            },
             res = prismResolver(context),
         )
 
@@ -618,11 +725,10 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         // Home shows the configured mode via CapabilityRepository.
         val capabilityState = CapabilityService().buildState(
             profileOwner = profileOwner,
-            shizukuAvailable = shizukuAvailable,
             shizukuReady = shizukuAuthorized,
             adbReady = false,
-            rootDetected = false,
-            rootEnabled = false,
+            rootDetected = runtime.rootReady,
+            rootEnabled = runtime.rootReady && runtime.preferredMode == PrismMode.Root,
         )
 
         val current = _uiState.value
@@ -630,26 +736,71 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         val result = mapSettingsUiModel(
             profileOwner = profileOwner,
             shizukuAuthorized = shizukuAuthorized,
-            shizukuAvailable = shizukuAvailable,
             modeState = modeState,
             capabilityState = capabilityState,
-            selectedMode = capRepo.selectedMode.value,
+            selectedMode = runtime.preferredMode,
             res = prismResolver(getApplication()),
         )
-        // Preserve existing feedback message + spaceSuspended if any
+        val freezeState = observeSpaceFreezeState(context, presentation.kind)
+        val spaceAction = settingsSpaceAction(presentation.kind, presentation.bridgeCause, prismResolver(context))
+        val dual = spaceRepo.dualSpace()
+        val usability = dual?.let { spaceRepo.usabilityOf(it) } ?: SpaceUsability.NotProvisioned
+        val cloneCount = runCatching {
+            val self = context.packageName
+            spaceRepo.dualSpaces().sumOf { d ->
+                runCatching {
+                    // Same counting rule as Home: user apps and explicitly added system clones.
+                    spaceRepo.installedApps(d).count { app ->
+                        app.isInstalled && app.shouldShowAsEnabled() && app.packageName != self &&
+                            (!app.isSystem || UserCloneRegistry.contains(context, app.packageName))
+                    }
+                }.getOrElse { 0 }
+            }
+        }.getOrElse { 0 }
         return result.copy(
             feedbackMessage = current?.feedbackMessage,
             feedbackIsError = current?.feedbackIsError ?: false,
-            spaceSuspended = current?.spaceSuspended ?: false,
-            experimentalMultiProfile = ExperimentalFlags.isMultiProfileEnabled(getApplication()),
+            spaceFreezeState = freezeState,
+            spaceUsability = usability,
+            cloneCount = cloneCount,
+            spaceActionTitle = spaceAction.title,
+            spaceActionSummary = spaceAction.summary,
+            spaceActionNeedsConfirmation = spaceAction.needsConfirmation,
+            spaceActionEnabled = spaceAction.enabled,
         )
     }
 
-    private sealed interface RepairSpaceOutcome {
-        data object StartSetup : RepairSpaceOutcome
-        data class Activate(val profile: android.os.UserHandle) : RepairSpaceOutcome
-        data class RepairBridge(val profile: android.os.UserHandle) : RepairSpaceOutcome
-        data object AlreadyReady : RepairSpaceOutcome
+    private fun observeSpaceFreezeState(context: Context, kind: SpacePresentationKind): SpaceFreezeState {
+        if (kind != SpacePresentationKind.Ready) return SpaceFreezeState.Unknown
+        return runCatching {
+            val dual = spaceRepo.dualSpace() ?: return@runCatching SpaceFreezeState.Unknown
+            val self = context.packageName
+            val facts = spaceRepo.installedApps(dual)
+                .filter {
+                    it.isInstalled && it.packageName != self &&
+                        (!it.isSystem || UserCloneRegistry.contains(context, it.packageName))
+                }
+                .map { AppFreezeFact(it.isHidden, it.isSuspended) }
+            aggregateSpaceFreeze(facts)
+        }.getOrElse {
+            DiagnosticLog.w(TAG, "whole-space freeze observation failed", it)
+            SpaceFreezeState.Unknown
+        }
+    }
+
+    private fun buildUnavailableUiModel(snapshot: SpaceSnapshot.Failed): SettingsUiModel {
+        val base = buildUiModel(snapshot.lastKnown ?: SpaceState.NoProfile)
+        return base.copy(
+            modeBody = str(R.string.lz_setvm_state_refresh_failed),
+            // 读取失败且无可用快照：无法判定好坏，呈现为 Neutral（不阻断、不渲染为正常）。
+            level = PrismLevel.Neutral,
+            profileOwnerReady = false,
+            spaceFreezeState = SpaceFreezeState.Unknown,
+            spaceActionTitle = str(R.string.lz_set_state_unavailable_title),
+            spaceActionSummary = str(R.string.lz_set_state_unavailable_summary),
+            spaceActionNeedsConfirmation = false,
+            spaceActionEnabled = false,
+        )
     }
 
     private fun collectProfileDiagnostics(context: Context): List<DiagnosticSection> {
@@ -657,27 +808,48 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             title = "Dual-space diagnostic snapshot",
             body = "No managed profile is currently known to the main space.",
         ))
-        val health = ShuttleProvider.health(context, profile)
-        val healthSection = DiagnosticSection(
-            title = "Dual-space shuttle health user=${profile.toId()}",
-            body = health.diagnosticLine(),
-        )
+        val healthSection = try {
+            DiagnosticSection(
+                title = "Dual-space shuttle health user=${profile.toId()}",
+                body = ShuttleProvider.health(context, profile).diagnosticLine(),
+            )
+        } catch (error: Exception) {
+            DiagnosticLog.w(TAG, "dual-space shuttle health collection failed user=${profile.toId()}", error)
+            DiagnosticSection(
+                title = "Dual-space shuttle health user=${profile.toId()}",
+                body = "Health check failed: ${error.javaClass.name}: ${error.message.orEmpty()}",
+            )
+        }
         return try {
-            val descriptorOutcome = Shuttle(context, to = profile).invokeOutcomeWithin(timeoutMs = 4_500L) {
-                DiagnosticLog.openSnapshotDescriptor(this)
+            DiagnosticLog.i(TAG, "dual-space diagnostic chunk collection start user=${profile.toId()}")
+            val target = BridgeTargets.profile(profile.toId())
+            val result = if (target == null) {
+                DiagnosticsCollectionResult.Failure(
+                    "Dual-space diagnostic snapshot unavailable: managed profile target is invalid.",
+                    openAttempts = 0,
+                )
+            } else {
+                collectDiagnosticsSnapshot(BridgeDiagnosticsSnapshotTransport(context, target))
             }
-            val body = when (descriptorOutcome) {
-                is ShuttleOutcome.Value -> descriptorOutcome.value?.use { pfd ->
-                    FileInputStream(pfd.fileDescriptor).use { it.readBytes().toString(Charsets.UTF_8) }
-                } ?: "Dual-space diagnostic snapshot returned no descriptor."
-                is ShuttleOutcome.NotReady ->
-                    "Dual-space diagnostic snapshot unavailable: shuttle is not ready (${descriptorOutcome.cause})."
-                ShuttleOutcome.TimedOut ->
-                    "Dual-space diagnostic snapshot unavailable: shuttle timed out."
-                is ShuttleOutcome.Failed ->
-                    "Failed to collect dual-space diagnostics: ${descriptorOutcome.error.message ?: descriptorOutcome.error.javaClass.simpleName}"
-                is ShuttleOutcome.Skipped ->
-                    "Dual-space diagnostic snapshot skipped: ${descriptorOutcome.reason}"
+            val body = when (result) {
+                is DiagnosticsCollectionResult.Success -> {
+                    DiagnosticLog.i(
+                        TAG,
+                        "dual-space diagnostic chunk collection success user=${profile.toId()} " +
+                            "bytes=${result.bytes.size} attempts=${result.openAttempts}",
+                    )
+                    result.bytes.toString(Charsets.UTF_8).ifBlank {
+                        "Dual-space diagnostic snapshot was empty (profileBytes=${result.expectedLength})."
+                    }
+                }
+                is DiagnosticsCollectionResult.Failure -> {
+                    DiagnosticLog.w(
+                        TAG,
+                        "dual-space diagnostic chunk collection failed user=${profile.toId()} " +
+                            "attempts=${result.openAttempts} reason=${result.reason}",
+                    )
+                    result.reason
+                }
             }
             listOf(healthSection, DiagnosticSection(
                 title = "Dual-space diagnostic snapshot user=${profile.toId()}",
@@ -687,7 +859,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             DiagnosticLog.e(TAG, "dual-space diagnostic collection failed", e)
             listOf(healthSection, DiagnosticSection(
                 title = "Dual-space diagnostic snapshot user=${profile.toId()}",
-                body = "Failed to collect dual-space diagnostics: ${e.message ?: e.javaClass.simpleName}",
+                body = "Failed to read dual-space diagnostic snapshot: ${e.javaClass.name}: ${e.message.orEmpty()}",
             ))
         }
     }
@@ -732,9 +904,10 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         if (current != null) {
             _uiState.value = current.copy(feedbackMessage = message, feedbackIsError = isError)
         } else {
-            // state not yet loaded; create a minimal placeholder
+            // state not yet loaded; create a minimal placeholder — level Neutral, never green
+            // for an unknown state.
             _uiState.value = SettingsUiModel(
-                modeTitle = "", modeBody = "", level = PrismLevel.Ok,
+                modeTitle = "", modeBody = "", level = PrismLevel.Neutral,
                 profileOwnerReady = false,
                 normalMode = SettingsModeRow("", "", "", false),
                 shizukuAdbMode = SettingsModeRow("", "", "", false),
@@ -749,8 +922,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun isShizukuAvailable(): Boolean = ShizukuUtil.isAvailable()
 
-    private fun isShizukuAuthorized(available: Boolean = isShizukuAvailable()): Boolean =
-        ShizukuUtil.isAuthorized()
+    private fun isShizukuAuthorized(): Boolean = ShizukuUtil.isAuthorized()
 }
 
 private const val TAG = "Prism.SettingsVM"

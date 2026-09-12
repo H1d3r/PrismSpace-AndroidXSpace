@@ -15,7 +15,9 @@ import com.yzddmr6.prismspace.util.UserHandles
 import com.yzddmr6.prismspace.util.Apps
 import com.yzddmr6.prismspace.analytics.analytics
 import com.yzddmr6.prismspace.settings.PrismSettings
-import com.yzddmr6.prismspace.shuttle.Shuttle
+import com.yzddmr6.prismspace.bridge.Bridge
+import com.yzddmr6.prismspace.bridge.BridgeTargets
+import com.yzddmr6.prismspace.bridge.NotifyPackageRestarted
 import com.yzddmr6.prismspace.util.Users
 
 private const val HELPER_NOTIFICATION_TIMEOUT = 10_000L
@@ -60,9 +62,15 @@ class AppSettingsHelperService: Service() {
 
 		val uptimeMillis = SystemClock.uptimeMillis()
 		if (intent.action == Intent.ACTION_PACKAGE_RESTARTED) {     // If triggered by system Settings, it will be followed by ACTION_QUERY_PACKAGE_RESTART immediately.
-			return Unit.also { Shuttle(context, to = Users.parentProfile).launchNoThrows {     // Shuttle may not be ready as persistent service is started early
-				try { onPackageRestarted(pkg, uid, uptimeMillis) }
-				catch (e: RuntimeException) { analytics().logAndReport(TAG, "Error transferring ACTION_PACKAGE_RESTARTED to parent user", e) }}}}
+			return Unit.also {
+				try {
+					BridgeTargets.parent()?.let { target ->
+						Bridge.inParent(context, target).execute(NotifyPackageRestarted(pkg, uid, uptimeMillis))
+					}
+				} catch (e: RuntimeException) {
+					analytics().logAndReport(TAG, "Error transferring ACTION_PACKAGE_RESTARTED to parent user", e)
+				}
+			}}
 
 		if (intent.action == ACTION_QUERY_PACKAGE_RESTART) {
 			if (! shouldEnableForApp(pkg, uid)) return
@@ -84,7 +92,7 @@ class AppSettingsHelperService: Service() {
 
 	companion object {
 
-		private fun onPackageRestarted(pkg: String, uid: Int, uptimeMillis: Long) {
+		internal fun onPackageRestarted(pkg: String, uid: Int, uptimeMillis: Long) {
 			sLastPackageRestart = Triple(uptimeMillis, pkg, uid)
 		}
 

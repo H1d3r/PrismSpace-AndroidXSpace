@@ -38,12 +38,19 @@ import com.yzddmr6.prismspace.PrismNameManager
 import com.yzddmr6.prismspace.home.HomeRole
 import com.yzddmr6.prismspace.notification.NotificationIds
 import com.yzddmr6.prismspace.notification.post
-import com.yzddmr6.prismspace.shuttle.Shuttle
+import com.yzddmr6.prismspace.bridge.ACTION_START_PROFILE_DEACTIVATION
+import com.yzddmr6.prismspace.bridge.Bridge
+import com.yzddmr6.prismspace.bridge.BridgeTargets
+import com.yzddmr6.prismspace.bridge.EXTRA_PROFILE_USER_ID
+import com.yzddmr6.prismspace.bridge.QueryParentIsProfileOwner
+import com.yzddmr6.prismspace.bridge.StartProfileDeactivation
+import com.yzddmr6.prismspace.shuttle.ShuttleOutcome
 import com.yzddmr6.prismspace.util.DPM
 import com.yzddmr6.prismspace.util.DevicePolicies
 import com.yzddmr6.prismspace.util.OwnerUser
 import com.yzddmr6.prismspace.util.Toasts
 import com.yzddmr6.prismspace.util.Users
+import com.yzddmr6.prismspace.util.UserHandles
 import com.yzddmr6.prismspace.util.Users.Companion.ACTION_USER_INFO_CHANGED
 import com.yzddmr6.prismspace.util.Users.Companion.EXTRA_USER_HANDLE
 import com.yzddmr6.prismspace.util.Users.Companion.toId
@@ -108,6 +115,12 @@ import kotlinx.coroutines.launch
 		@OptIn(DelicateCoroutinesApi::class)
 		override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
 			val action = intent?.action
+			if (action == ACTION_START_PROFILE_DEACTIVATION) {
+				val profileId = intent.getIntExtra(EXTRA_PROFILE_USER_ID, Users.NULL_ID)
+				if (profileId != Users.NULL_ID) requestQuietMode(UserHandles.of(profileId))
+				stopSelf()
+				return START_NOT_STICKY
+			}
 			if (action == Intent.ACTION_REBOOT) {
 				DevicePolicies(this).manager.lockNow(DevicePolicyManager.FLAG_EVICT_CREDENTIAL_ENCRYPTION_KEY)
 			} else if (SDK_INT >= Q) {      // "Deactivate"
@@ -116,9 +129,12 @@ import kotlinx.coroutines.launch
 						GlobalScope.launch { requestQuietModeApi29(this@PrismDeactivationService, profile) }
 						return START_STICKY }   // Still ongoing
 				} else {
-					if (isParentProfileOwner(this) == true) // The automatic way
-						Shuttle(this, to = Users.parentProfile).launch(with = Users.current()) {
-							startService(Intent(this, PrismDeactivationService::class.java).putExtra(Intent.EXTRA_USER, it)) }
+					if (isParentProfileOwner(this) == true) { // The automatic way
+						val profile = Users.current()
+						BridgeTargets.parent()?.let { target ->
+							Bridge.inParent(this, target).execute(StartProfileDeactivation(profile.toId()))
+						}
+					}
 					else try {                              // The manual way
 						startActivity(Intent(Settings.ACTION_SYNC_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 						Toasts.showLong(applicationContext, R.string.toast_manual_quiet_mode) }
@@ -162,8 +178,13 @@ import kotlinx.coroutines.launch
 			finally { stopForeground(STOP_FOREGROUND_REMOVE) }
 		}
 
-		private fun isParentProfileOwner(context: Context)
-		= Shuttle(context, to = Users.parentProfile).invokeNoThrows { DevicePolicies(this).isProfileOwner }
+		private fun isParentProfileOwner(context: Context): Boolean? {
+			val target = BridgeTargets.parent() ?: return null
+			return when (val outcome = Bridge.inParent(context, target).execute(QueryParentIsProfileOwner)) {
+				is ShuttleOutcome.Value -> outcome.value
+				else -> null
+			}
+		}
 
 		private fun startSystemSyncSettings() {
 			try {

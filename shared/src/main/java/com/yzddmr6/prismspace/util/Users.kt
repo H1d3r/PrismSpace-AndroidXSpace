@@ -21,6 +21,7 @@ import com.yzddmr6.prismspace.home.HomeRole
 import com.yzddmr6.prismspace.util.PseudoContentProvider
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import java.util.concurrent.CopyOnWriteArraySet
 import kotlin.coroutines.resume
 
 /**
@@ -33,20 +34,31 @@ class Users : PseudoContentProvider() {
 	override fun onCreate(): Boolean {
 		Log.v(TAG, "onCreate()")
 		val priority = IntentFilter.SYSTEM_HIGH_PRIORITY - 1
-		context().registerReceiver(mProfileChangeObserver,
-			IntentFilters.forActions(Intent.ACTION_MANAGED_PROFILE_ADDED,  // ACTION_MANAGED_PROFILE_ADDED is sent by DevicePolicyManagerService.setProfileEnabled()
-				Intent.ACTION_MANAGED_PROFILE_REMOVED,
-				DevicePolicyManager.ACTION_PROFILE_OWNER_CHANGED // ACTION_PROFILE_OWNER_CHANGED is sent after "dpm set-profile-owner ..."
-			).inPriority(priority))
+		val filter = IntentFilters.forActions(
+			Intent.ACTION_MANAGED_PROFILE_ADDED,
+			Intent.ACTION_MANAGED_PROFILE_REMOVED,
+			Intent.ACTION_MANAGED_PROFILE_AVAILABLE,
+			Intent.ACTION_MANAGED_PROFILE_UNAVAILABLE,
+			Intent.ACTION_USER_UNLOCKED,
+			Intent.ACTION_MY_PACKAGE_REPLACED,
+			DevicePolicyManager.ACTION_PROFILE_OWNER_CHANGED,
+		).inPriority(priority)
+		if (SDK_INT >= TIRAMISU) {
+			context().registerReceiver(mProfileChangeObserver, filter, Context.RECEIVER_NOT_EXPORTED)
+		} else {
+			@Suppress("UnspecifiedRegisterReceiverFlag")
+			context().registerReceiver(mProfileChangeObserver, filter)
+		}
 		refreshUsers(context())
 		return true
 	}
 
 	private val mProfileChangeObserver: BroadcastReceiver = object : BroadcastReceiver() { override fun onReceive(context: Context, intent: Intent) {
-		val added = intent.action == Intent.ACTION_MANAGED_PROFILE_ADDED
 		val user = intent.getParcelableExtra<UserHandle>(Intent.EXTRA_USER)
-		Log.i(TAG, (if (added) "Profile added: " else "Profile removed: ") + (user?.toId()?.toString() ?: "null"))
+		val action = intent.action ?: return
+		Log.i(TAG, "User state changed action=$action user=${user?.toId() ?: NULL_ID}")
 		refreshUsers(context)
+		notifyChanged(action)
 	}}
 
 	companion object {
@@ -59,31 +71,51 @@ class Users : PseudoContentProvider() {
 
 		private val CURRENT: UserHandle = Process.myUserHandle()
 		private val CURRENT_ID = CURRENT.toId()
+		private val changeListeners = CopyOnWriteArraySet<(String) -> Unit>()
 		@JvmStatic fun current() = CURRENT
 		@JvmStatic fun currentId() = CURRENT_ID
 		const val NULL_ID = -10000
+
+		/** Reuses the provider's single persistent receiver as the process-wide invalidation source. */
+		@JvmStatic fun addChangeListener(listener: (String) -> Unit) {
+			changeListeners += listener
+		}
+
+		private fun notifyChanged(action: String) {
+			changeListeners.forEach { it(action) }
+		}
 
 		/** This method should not be called under normal circumstance.  */
 		@JvmStatic fun refreshUsers(context: Context) {
 			mDebugBuild = context.applicationInfo.flags and FLAG_DEBUGGABLE != 0
 			val um = context.getSystemService<UserManager>()!!
-			val profiles = um.userProfiles.filter { profile -> (profile.toId() < 100).also {	// "Secure Folder" on Samsung devices uses user ID 150.
-				if (! it) Log.w(TAG, "Skip profile ${profile.toId()} (most probably not normal profile)") }}
+			// User ids are opaque Android identifiers. Profiles such as Samsung Secure Folder and
+			// vendor clone users legitimately use ids >= 100, so classification must use evidence.
+			val profiles = um.userProfiles.orEmpty()
 			sProfileCount = profiles.size
-			val profilesByPrism = ArrayList<UserHandle>(profiles.size - 1)
-			parentProfile = profiles[0]
+			val profilesByPrism = ArrayList<UserHandle>(profiles.size)
+			parentProfile = profiles.firstOrNull() ?: CURRENT
+			sCurrentProfileManagedByPrism = false
 			if (parentProfile == CURRENT) {      // Running in parent profile
 				val uiModule = Modules.getMainLaunchActivity(context).packageName
 				val la = context.getSystemService<LauncherApps>()!!
-				val activityInOwner = la.getActivityList(uiModule, CURRENT)[0].name
-				for (profile in profiles.drop(1)/* skip parent */)
-					for (activity in la.getActivityList(uiModule, profile))
-						// Separate "PrismSpace Settings" launcher activity is enabled, only if profile is managed by PrismSpace.
-						if (activity.name == activityInOwner) Log.i(TAG, "Profile not managed by PrismSpace: ${profile.toId()}")
-						else profilesByPrism.add(profile).also { Log.i(TAG, "Profile managed by PrismSpace: ${profile.toId()}") }
-			} else for (user in profiles.drop(1)/* skip parent */)
-				if (user != CURRENT) Log.w(TAG, "Skip sibling profile (may not managed by PrismSpace): ${user.toId()}")
-				else profilesByPrism.add(user).also { Log.i(TAG, "Profile managed by PrismSpace: ${user.toId()}") }
+				val activityInOwner = la.getActivityList(uiModule, CURRENT).firstOrNull()?.name
+				if (activityInOwner == null) Log.w(TAG, "Main launcher activity is unavailable; ownership marker cannot be read")
+				for (profile in profiles.filterNot { it == parentProfile }) {
+					val marked = activityInOwner != null && la.getActivityList(uiModule, profile).orEmpty()
+						.any { activity -> activity.name != activityInOwner }
+					if (marked) profilesByPrism.add(profile).also {
+						Log.i(TAG, "Profile managed by PrismSpace: ${profile.toId()}")
+					} else Log.i(TAG, "Profile not managed by PrismSpace: ${profile.toId()}")
+				}
+			} else {
+				sCurrentProfileManagedByPrism = runCatching { DevicePolicies(context).isProfileOwner }.getOrDefault(false)
+				for (user in profiles.filterNot { it == parentProfile })
+					if (user != CURRENT) Log.w(TAG, "Skip sibling profile (may not managed by PrismSpace): ${user.toId()}")
+					else if (sCurrentProfileManagedByPrism) profilesByPrism.add(user).also {
+						Log.i(TAG, "Profile managed by PrismSpace: ${user.toId()}")
+					} else Log.w(TAG, "Current profile is not managed by PrismSpace: ${user.toId()}")
+			}
 
 			profile = profilesByPrism.lastOrNull()
 
@@ -117,13 +149,19 @@ class Users : PseudoContentProvider() {
 		@JvmStatic fun isParentProfile() = CURRENT_ID == parentProfile.toId()
 		@JvmStatic fun UserHandle?.isParentProfile() = this == parentProfile
 		@JvmStatic fun isParentProfile(userId: Int) = userId == parentProfile.toId()
+		@JvmStatic fun isCurrentProfileManagedByPrism() = sCurrentProfileManagedByPrism
 
 		@OwnerUser @JvmStatic fun isProfileManagedByPrism(context: Context, user: UserHandle): Boolean {
 			ensureParentProfile()
 			if (user.isParentProfile()) {
 				if (isParentProfile()) return DevicePolicies(context).isProfileOwner
 				throw IllegalArgumentException("Not working for profile parent user") }
-			return sProfilesManagedByPrism.contains(user)
+			return isProfileManagedByPrism(user)
+		}
+
+		@OwnerUser @JvmStatic fun isProfileManagedByPrism(user: UserHandle): Boolean {
+			ensureParentProfile()
+			return ! user.isParentProfile() && sProfilesManagedByPrism.contains(user)
 		}
 
 		/** Excluding parent profile */
@@ -152,23 +190,35 @@ class Users : PseudoContentProvider() {
 					launch {
 						Log.i(TAG, "Activating PrismSpace ${profile.toId()}...")
 						val activating = runCatching {
-							HomeRole.runWithHomeRole(context) {
-								um.requestQuietModeEnabled(false, profile) }
+							if (DevicePolicies(context).isProfileOrDeviceOwnerOnCallingUser) {
+								HomeRole.runWithHomeRole(context) { um.requestQuietModeEnabled(false, profile) }
+							} else {
+								// A normal parent app cannot change DPM preferred activities. Launching
+								// its profile entry lets Android present the work-profile activation UI.
+								val launcher = context.getSystemService<LauncherApps>()!!
+								val entry = launcher.getActivityList(context.packageName, profile).firstOrNull()
+								if (entry == null) false else {
+									launcher.startMainActivity(entry.componentName, profile, null, null)
+									true
+								}
+							}
 						}.onFailure { e ->
 							Log.e(TAG, "Failed to request quiet mode disabled for user ${profile.toId()}", e)
 						}.getOrDefault(false)
 						if (! activating) it.resume(null)
 						Log.i(TAG, "Waiting for PrismSpace ${profile.toId()} to be ready...") }}
 			val user = intent?.getParcelableExtra<UserHandle>(Intent.EXTRA_USER)
-			Log.i(TAG, "PrismSpace ${user?.toId()} is ready")
-			return@coroutineScope user != null
+				val ready = user == profile && isProfileAvailable(context, profile)
+				Log.i(TAG, "PrismSpace ${profile.toId()} activation confirmed=$ready")
+				return@coroutineScope ready
 		}
 
 		private const val ACTIVATION_TIMEOUT: Long = 15_000		// May need to wait for user credential
 
 		private var mDebugBuild = false
 		private var sProfileCount: Int = 0
-		private lateinit var sProfilesManagedByPrism: List<UserHandle> //  class is accidentally used in other process.
+		@Volatile private var sCurrentProfileManagedByPrism = false
+		private var sProfilesManagedByPrism: List<UserHandle> = emptyList() // Also safe if initialized in another process.
 		private const val PER_USER_RANGE = 100000
 		private const val TAG = "Prism.Users"
 	}

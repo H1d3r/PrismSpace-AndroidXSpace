@@ -2,19 +2,21 @@ package com.yzddmr6.prismspace.prism.compose.space
 
 import android.content.Context
 import android.content.pm.LauncherApps
-import android.os.UserManager
+import android.os.SystemClock
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
-import com.yzddmr6.prismspace.mobile.BuildConfig
 import com.yzddmr6.prismspace.util.DeviceAdmins
-import com.yzddmr6.prismspace.util.DevicePolicies
-import com.yzddmr6.prismspace.util.Hack
 import com.yzddmr6.prismspace.util.Hacks
 import com.yzddmr6.prismspace.util.Modules
+import com.yzddmr6.prismspace.util.UserHandles
 import com.yzddmr6.prismspace.util.Users
-import com.yzddmr6.prismspace.util.Users.Companion.toId
+import com.yzddmr6.prismspace.prism.compose.vm.CapabilityRepositoryProvider
+import com.yzddmr6.prismspace.space.SpaceState
 import eu.chainfire.libsuperuser.Shell
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /** Root-gated create/delete of PrismSpace-managed profile spaces. PUBLIC APIs only;
  *  pure parsing/decisions delegated to SpaceProvisioningParsers. Activity-free. */
@@ -22,73 +24,114 @@ object SpaceProvisioningEngine {
 
     private const val DEFAULT_MAX_USERS_SETPROP = 10  // historical fw.max_users AOSP default; used only when the real cap is Unknown
 
-    private fun rootOk(): Boolean = isRootOutput(Shell.SU.run("id"))
+    private fun rootOk(context: Context): Boolean {
+        val available = isRootOutput(Shell.SU.run("id"))
+        CapabilityRepositoryProvider.get(context).let {
+            if (available) it.markRootReady() else it.markRootUnavailable()
+        }
+        return available
+    }
 
-    private fun maxUsers(): Int? =
-        Hacks.SystemProperties_getInt.invoke("fw.max_users", -1).statically()
-            ?.takeIf { it > 0 }
-            ?: runCatching {
+    private fun maxUsersProperty(): String? =
+        (Hacks.SystemProperties_get.invoke(MAX_USERS_PROPERTY).statically() as? String)?.takeIf { it.isNotBlank() }
+
+    private fun maxUsers(): Int? {
+        val property = maxUsersProperty()?.toIntOrNull()
+        val resource = runCatching {
                 val r = android.content.res.Resources.getSystem()
                 val id = r.getIdentifier("config_multiuserMaximumUsers", "integer", "android")
                 if (id == 0) null else r.getInteger(id)
             }.getOrNull()
+        return effectiveMaxUsers(property, resource)
+    }
 
     fun probeMaxSpaces(): SpaceCapProbe =
         computeCap(maxUsers(), Users.getProfilesManagedByPrism().size)
 
+    @JvmStatic fun createSpaceBlocking(context: Context): CreateSpaceResult =
+        runBlocking { createSpace(context) }
+
     suspend fun createSpace(context: Context): CreateSpaceResult = withContext(Dispatchers.IO) {
-        runCatching { Users.refreshUsers(context) }
-            .onFailure { DiagnosticLog.w(TAG, "refresh users before root create failed", it) }
-        if (!rootOk()) return@withContext CreateSpaceResult.RootUnavailable
+        val stateRepository = SpaceStateRepository(context)
+        val preflight = stateRepository.preflightCreate()
+            ?: return@withContext CreateSpaceResult.StateRefreshFailed
+        if (preflight != SpaceState.NoProfile) {
+            DiagnosticLog.w(TAG, "root create blocked by state=$preflight")
+            return@withContext CreateSpaceResult.BlockedByState(preflight)
+        }
+        if (!rootOk(context)) return@withContext CreateSpaceResult.RootUnavailable
         val probe = probeMaxSpaces()
         (probe as? SpaceCapProbe.Known)
             ?.takeIf { it.current >= it.max }
             ?.let { return@withContext CreateSpaceResult.CapReached(it.max) }
         val cap = (probe as? SpaceCapProbe.Known)?.max ?: DEFAULT_MAX_USERS_SETPROP
-        val create = parsePmCreateOutput(Shell.SU.run(listOf(
-            "setprop fw.max_users $cap",
-            "pm create-user --profileOf ${Users.currentId()} --managed PrismSpace 2>&1", "echo END")))
+        val maxUsersOriginal = maxUsersProperty()
+        val admin = DeviceAdmins.getComponentName(context).flattenToString()
+        val command = buildRootProvisioningCommand(
+            RootProvisioningCommandInput(
+                parentUserId = Users.currentId(),
+                temporaryMaxUsers = cap,
+                packageName = Modules.MODULE_ENGINE,
+                adminComponent = admin,
+                maxUsersOriginal = maxUsersOriginal,
+            ),
+        )
+        ProvisioningSideEffects.logMaxUsersWrite(maxUsersOriginal, cap)
+        SpaceProvisioningTracker.markStarted()
+        val output = try {
+            runDetachedProvisioningTransaction(context, command)
+        } catch (e: RuntimeException) {
+            DiagnosticLog.e(TAG, "root provisioning shell failed", e)
+            SpaceProvisioningTracker.clear()
+            return@withContext CreateSpaceResult.Failed(e.message, analyticsPhase = 2)
+        }
+        val create = parsePmCreateOutput(output)
         when (create) {
-            PmCreateOutcome.LimitReached -> return@withContext CreateSpaceResult.CapReached(cap)
-            PmCreateOutcome.ManagedProfileLimit -> return@withContext CreateSpaceResult.ManagedProfileLimitReached
-            is PmCreateOutcome.Failed -> return@withContext CreateSpaceResult.Failed(create.reason)
+            PmCreateOutcome.LimitReached -> {
+                SpaceProvisioningTracker.clear()
+                return@withContext CreateSpaceResult.CapReached(cap)
+            }
+            PmCreateOutcome.ManagedProfileLimit -> {
+                SpaceProvisioningTracker.clear()
+                return@withContext CreateSpaceResult.ManagedProfileLimitReached
+            }
+            is PmCreateOutcome.Failed -> {
+                SpaceProvisioningTracker.clear()
+                return@withContext CreateSpaceResult.Failed(create.reason, analyticsPhase = 1)
+            }
             is PmCreateOutcome.Created -> Unit
         }
-        val um = context.getSystemService(Context.USER_SERVICE) as UserManager
-        val pending = Hack.into(um).with(Hacks.UserManagerHack::class.java)
-            .getProfiles(Users.currentId())
-            .map { it.getUserHandle() }
-            .firstOrNull { it != Users.current() &&
-                DevicePolicies.getProfileOwnerAsUser(context, it).let { o -> o == null || !o.isPresent } }
-            ?: return@withContext CreateSpaceResult.Failed("created user not found for provisioning")
-        val pid = pending.toId()
-        val src = context.packageManager.getApplicationInfo(Modules.MODULE_ENGINE, 0).sourceDir
-        val admin = DeviceAdmins.getComponentName(context).flattenToString()
-        val dbg = if (BuildConfig.DEBUG) "-t " else ""
-        val install = Shell.SU.run(
-            "settings put global verifier_verify_adb_installs 0 ; " +
-            "pm install -r --user $pid $dbg$src ; " +
-            "settings put global verifier_verify_adb_installs 1 ; " +
-            "dpm set-profile-owner --user $pid $admin && am start-user $pid")
-        Users.refreshUsers(context)
+        val pid = (create as PmCreateOutcome.Created).userId
+        if (!provisioningCompleted(output, pid)) {
+            SpaceProvisioningTracker.clear()
+            val reason = provisioningFailure(output) ?: "provisioning transaction incomplete"
+            DiagnosticLog.w(TAG, "root create incomplete user=$pid reason=$reason")
+            return@withContext CreateSpaceResult.Failed(reason, analyticsPhase = 2)
+        }
+        val pending = UserHandles.of(pid)
         val la = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
         return@withContext if (la.getActivityList(context.packageName, pending).isNotEmpty()) {
+            SpaceProvisioningTracker.markReturnedSuccess()
             DiagnosticLog.i(TAG, "root create success user=$pid")
             CreateSpaceResult.Success(pid)
         } else {
-            val reason = install?.joinToString("\n")?.ifBlank { null } ?: "provisioning incomplete"
+            SpaceProvisioningTracker.clear()
+            val reason = output?.joinToString("\n")?.ifBlank { null } ?: "provisioning incomplete"
             DiagnosticLog.w(TAG, "root create incomplete user=$pid reason=$reason")
-            CreateSpaceResult.Failed(reason)
+            CreateSpaceResult.Failed(reason, analyticsPhase = 2)
         }
     }
 
     suspend fun deleteSpace(context: Context, space: PrismSpace): DeleteSpaceResult = withContext(Dispatchers.IO) {
-        runCatching { Users.refreshUsers(context) }
-            .onFailure { DiagnosticLog.w(TAG, "refresh users before root delete failed", it) }
-        if (!rootOk()) return@withContext DeleteSpaceResult.RootUnavailable
-        when (val r = parsePmRemoveOutput(Shell.SU.run("pm remove-user ${space.userId}"))) {
+        if (!rootOk(context)) return@withContext DeleteSpaceResult.RootUnavailable
+        val output = Shell.SU.run(buildVerifiedRootRemovalCommand(space.userId, Modules.MODULE_ENGINE))
+        if (rootRemovalOwnerMismatch(output)) {
+            DiagnosticLog.w(TAG, "root delete refused: owner mismatch user=${space.userId}")
+            return@withContext DeleteSpaceResult.ManualRemovalRequired("PrismSpace is not profile owner")
+        }
+        when (val r = parsePmRemoveOutput(output)) {
             PmRemoveOutcome.Removed -> {
-                Users.refreshUsers(context)
+                SpaceStateRepository(context).refresh("root_delete_success")
                 DiagnosticLog.i(TAG, "root delete success user=${space.userId}")
                 DeleteSpaceResult.Success
             }
@@ -99,5 +142,39 @@ object SpaceProvisioningEngine {
         }
     }
 
+    private suspend fun runDetachedProvisioningTransaction(context: Context, command: String): List<String>? {
+        val outputFile = File(context.cacheDir, ROOT_TRANSACTION_OUTPUT_FILE)
+        if (runCatching {
+                outputFile.parentFile?.mkdirs()
+                outputFile.writeText("")
+            }.isFailure) {
+            return null
+        }
+        val pid = Shell.SU.run(detachedRootProvisioningLauncher(command, outputFile.absolutePath))
+            ?.asSequence()
+            ?.map(String::trim)
+            ?.mapNotNull(String::toLongOrNull)
+            ?.lastOrNull()
+            ?: return null
+        val deadline = SystemClock.elapsedRealtime() + ROOT_TRANSACTION_TIMEOUT_MS
+        var lines = emptyList<String>()
+        while (SystemClock.elapsedRealtime() < deadline) {
+            lines = runCatching { outputFile.readLines() }.getOrDefault(emptyList())
+            if (provisioningTransactionFinished(lines)) {
+                outputFile.delete()
+                return lines
+            }
+            delay(ROOT_TRANSACTION_POLL_MS)
+        }
+        Shell.SU.run("kill -TERM $pid")
+        delay(ROOT_TRANSACTION_POLL_MS)
+        lines = runCatching { outputFile.readLines() }.getOrDefault(lines)
+        outputFile.delete()
+        return lines + "PRISM_PROVISION_FAILED stage=timeout"
+    }
+
     private const val TAG = "Prism.SpaceProvision"
+    private const val ROOT_TRANSACTION_OUTPUT_FILE = "root-provisioning-transaction.log"
+    private const val ROOT_TRANSACTION_TIMEOUT_MS = 120_000L
+    private const val ROOT_TRANSACTION_POLL_MS = 200L
 }

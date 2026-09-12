@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- SpaceViewModel: status chip text -->
-    <string name="lz_vm_chip_frozen">Frozen</string>
-    <string name="lz_vm_chip_running">Running</string>
-    <string name="lz_vm_chip_cloned">Cloned</string>
-    <string name="lz_vm_chip_not_cloned">Not cloned</string>
+    <!-- Row tags: healthy rows carry no tag; only exceptional states are labelled. -->
+    <string name="lz_vm_chip_paused">Paused</string>
+    <string name="lz_vm_chip_system">System app</string>
+    <string name="lz_vm_chip_pending_install">Ready to install</string>
 
     <!-- SpaceViewModel: batch progress -->
     <string name="lz_vm_batch_progress">Processing %1$d/%2$d…</string>
@@ -25,8 +25,16 @@
     <string name="lz_vm_batch_freeze_partial">Freeze finished: %1$d succeeded, %2$d failed</string>
     <string name="lz_vm_batch_uninstall_ok">Uninstalling %1$d apps</string>
     <string name="lz_vm_batch_uninstall_partial">Uninstall started: %1$d succeeded, %2$d failed</string>
-    <string name="lz_vm_batch_clone_ok">Cloning %1$d apps to the dual space</string>
-    <string name="lz_vm_batch_clone_partial">Clone started: %1$d succeeded, %2$d failed</string>
+    <string name="lz_vm_uninstall_queue_summary">Uninstall complete: %1$d removed, %2$d not removed, %3$d unconfirmed.</string>
+    <string name="lz_vm_uninstall_queue_aborted">Uninstall stopped: %1$d removed, %2$d not removed, %3$d unconfirmed, %4$d not attempted. %5$s</string>
+
+    <!-- Batch clone results: staging is "prepared" (never "cloned"); installed = verified enhanced-route install. -->
+    <string name="lz_vm_batch_clone_prepared">Prepared install packages for %1$d apps — confirm installation in the dual space</string>
+    <string name="lz_vm_batch_clone_prepared_partial">Prepared %1$d apps (%2$d failed) — confirm installation in the dual space</string>
+    <string name="lz_vm_batch_clone_installed">Cloned %1$d apps to the dual space</string>
+    <string name="lz_vm_batch_clone_installed_partial">Cloned %1$d apps, %2$d failed</string>
+    <string name="lz_vm_batch_clone_mixed">Cloned %1$d, prepared %2$d (confirm installation in the dual space), failed %3$d</string>
+    <string name="lz_vm_batch_clone_failed">Failed to clone %1$d apps</string>
 
     <!-- ProvisioningFeedback: create -->
     <string name="lz_vm_create_success">A new dual space has been created</string>
@@ -34,6 +42,9 @@
     <string name="lz_vm_create_cap_reached">Reached this device\'s space limit (up to %1$d users); cannot create more</string>
     <string name="lz_vm_create_managed_profile_limit">This device only allows one dual space (the system work-profile limit has been reached); cannot create more</string>
     <string name="lz_vm_create_failed">Failed to create space: %1$s. You can retry</string>
+    <string name="lz_vm_create_blocked_existing">A dual-space profile already exists. Repair it or remove it before creating another.</string>
+    <string name="lz_vm_create_blocked_orphan">Android already has a work profile not managed by PrismSpace. Remove it from system settings before creating a dual space.</string>
+    <string name="lz_vm_delete_manual_required">PrismSpace cannot remove this profile in-app. Complete removal in Android system settings.</string>
 
     <!-- ProvisioningFeedback: delete -->
     <string name="lz_vm_delete_success">The dual space has been deleted</string>
@@ -42,11 +53,6 @@
 
     <!-- Shared fallback for unknown reasons -->
     <string name="lz_vm_unknown_error">Unknown error</string>
-
-    <!-- DestroyProfileFeedback -->
-    <string name="lz_vm_destroy_in_progress">Deleting dual space…</string>
-    <string name="lz_vm_destroy_not_profile_owner">No management permission; the dual space must be removed manually in system Settings</string>
-    <string name="lz_vm_destroy_failed">Deletion failed: %1$s. The space was not destroyed; you can retry</string>
 
     <!-- LaunchFeedback -->
     <string name="lz_vm_launch_space_not_ready">The dual space is not ready yet; check the space status or permission mode in Settings</string>
@@ -64,7 +70,7 @@
     <string name="lz_vm_mode_shizuku_summary_not_running">Start Shizuku or wireless debugging to enable enhanced capabilities.</string>
     <string name="lz_vm_mode_shizuku_summary_not_installed">Shizuku was not detected; standard dual-open features still work.</string>
     <string name="lz_vm_mode_root_title">Root mode</string>
-    <string name="lz_vm_mode_root_summary">Root is only used for advanced diagnostics and fallback maintenance; it is not required for standard dual-open features.</string>
+    <string name="lz_vm_mode_root_summary">Root is only used for advanced diagnostics and fallback maintenance. Root setup temporarily adjusts the system user limit, then restores it.</string>
 
     <!-- PrismShizukuAdbStatus labels -->
     <string name="lz_vm_shizuku_status_not_installed">Not installed</string>
@@ -74,6 +80,7 @@
 
     <!-- PrismRootStatus labels -->
     <string name="lz_vm_root_status_not_detected">Not detected</string>
+    <string name="lz_vm_root_status_unavailable">Unavailable</string>
     <string name="lz_vm_root_status_available_disabled">Available but off</string>
     <string name="lz_vm_root_status_enabled">Enabled</string>
 </resources>

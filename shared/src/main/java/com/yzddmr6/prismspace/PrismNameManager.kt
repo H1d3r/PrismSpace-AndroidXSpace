@@ -5,8 +5,13 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.UserHandle
+import androidx.annotation.WorkerThread
+import com.yzddmr6.prismspace.bridge.Bridge
+import com.yzddmr6.prismspace.bridge.BridgeTargets
+import com.yzddmr6.prismspace.bridge.ParentTarget
+import com.yzddmr6.prismspace.bridge.SaveProfileName
+import com.yzddmr6.prismspace.shuttle.ShuttleOutcome
 import com.yzddmr6.prismspace.shared.R
-import com.yzddmr6.prismspace.shuttle.Shuttle
 import com.yzddmr6.prismspace.util.DevicePolicies
 import com.yzddmr6.prismspace.util.OwnerUser
 import com.yzddmr6.prismspace.util.ProfileUser
@@ -16,6 +21,7 @@ import com.yzddmr6.prismspace.util.Users.Companion.EXTRA_USER_HANDLE
 import com.yzddmr6.prismspace.util.Users.Companion.isParentProfile
 import com.yzddmr6.prismspace.util.Users.Companion.toId
 import com.yzddmr6.prismspace.util.sendProtectedBroadcastInternally
+import com.yzddmr6.prismspace.util.UserHandles
 
 object PrismNameManager {
 
@@ -49,6 +55,11 @@ object PrismNameManager {
 	@OwnerUser @ProfileUser private fun saveProfileName(context: Context, profile: UserHandle?, name: String)
 			= getStore(context).edit().putString(buildPrismNameKey(context, profile), name).apply()
 
+	/** Typed bridge entry; the validated ParentCommand prevents arbitrary cross-user execution. */
+	internal fun saveProfileNameFromBridge(context: Context, profileUserId: Int, name: String) {
+		saveProfileName(context, UserHandles.of(profileUserId), name)
+	}
+
 	@Suppress("DEPRECATION") private fun getStore(context: Context) =
 		android.preference.PreferenceManager.getDefaultSharedPreferences(context.createDeviceProtectedStorageContext())
 
@@ -57,20 +68,35 @@ object PrismNameManager {
 		return if (user != null) "$key.${user.toId()}" else key
 	}
 
-	@ProfileUser fun setName(context: Context, name: String) {  // Extra spaces for better readability in system UI (e.g. app Uninstall confirmation dialog)
+	@ProfileUser fun setName(context: Context, name: String) = applyName(context, name, syncToParent = true)
+
+	// Extra spaces improve readability in system UI (for example, app uninstall confirmation).
+	@ProfileUser private fun applyName(context: Context, name: String, syncToParent: Boolean) {
 		DevicePolicies(context).invoke(DevicePolicyManager::setProfileName, " $name ")
 		saveProfileName(context, null, name)
 		sendProtectedBroadcastInternally(context, Intent(ACTION_USER_INFO_CHANGED).putExtra(EXTRA_USER_HANDLE, Users.currentId()))
-		syncNameToParentProfile(context, name)
+		if (syncToParent) syncNameToParentProfile(context, name)
 	}
 
-	@ProfileUser fun syncNameToParentProfile(context: Context, name: String = getName(context))
-			= Shuttle(context, to = Users.parentProfile).launchNoThrows(with = Users.current()) { saveProfileName(this, it, name) }
+	@ProfileUser @JvmStatic @JvmOverloads fun syncNameToParentProfile(
+		context: Context,
+		name: String = getName(context),
+	): Boolean = syncNameToParentProfile(context, name, BridgeTargets.parent())
+
+	@ProfileUser @WorkerThread @JvmStatic fun syncNameToParentProfileAfterProvisioning(context: Context): Boolean =
+		syncNameToParentProfile(context, getName(context), BridgeTargets.parentFresh(context))
+
+	private fun syncNameToParentProfile(context: Context, name: String, target: ParentTarget?): Boolean {
+		val profile = Users.current()
+		return target?.let { Bridge.inParent(context, it).execute(SaveProfileName(profile.toId(), name)) }
+			.let { it is ShuttleOutcome.Value && it.value == true }
+	}
 
 	class NameInitializer: BroadcastReceiver() {
 
 		override fun onReceive(context: Context, intent: Intent?) {
-			if (intent?.action == Intent.ACTION_USER_INITIALIZE) setName(context, getDefaultName(context))
+			if (intent?.action == Intent.ACTION_USER_INITIALIZE)
+				applyName(context, getDefaultName(context), syncToParent = false)
 		}
 	}
 }

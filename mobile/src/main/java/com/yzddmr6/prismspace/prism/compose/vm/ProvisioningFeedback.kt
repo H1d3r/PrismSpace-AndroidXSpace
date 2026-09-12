@@ -1,11 +1,19 @@
 package com.yzddmr6.prismspace.prism.compose.vm
 
+import android.content.Context
 import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.prism.compose.space.CreateSpaceResult
 import com.yzddmr6.prismspace.prism.compose.space.DeleteSpaceResult
+import com.yzddmr6.prismspace.space.SpaceState
+
+data class DestroyFeedback(
+    val message: String,
+    val isError: Boolean,
+    val routeToSystemRemoval: Boolean,
+)
 
 /** Single source of all provisioning user-facing text. Pure (no Android). */
-fun provisioningFeedback(result: CreateSpaceResult, res: StringResolver = zhFallback): DestroyFeedback = when (result) {
+fun provisioningFeedback(result: CreateSpaceResult, res: StringResolver): DestroyFeedback = when (result) {
     is CreateSpaceResult.Success ->
         DestroyFeedback(res(R.string.lz_vm_create_success, emptyArray()), isError = false, routeToSystemRemoval = false)
     CreateSpaceResult.RootUnavailable ->
@@ -14,16 +22,45 @@ fun provisioningFeedback(result: CreateSpaceResult, res: StringResolver = zhFall
         DestroyFeedback(res(R.string.lz_vm_create_cap_reached, arrayOf(result.max)), isError = true, routeToSystemRemoval = false)
     CreateSpaceResult.ManagedProfileLimitReached ->
         DestroyFeedback(res(R.string.lz_vm_create_managed_profile_limit, emptyArray()), isError = true, routeToSystemRemoval = false)
+    CreateSpaceResult.StateRefreshFailed ->
+        DestroyFeedback(res(R.string.lz_setvm_state_refresh_failed, emptyArray()), isError = true, routeToSystemRemoval = false)
+    is CreateSpaceResult.BlockedByState -> DestroyFeedback(
+        res(
+            if (result.state is SpaceState.OrphanProfile) R.string.lz_vm_create_blocked_orphan
+            else R.string.lz_vm_create_blocked_existing,
+            emptyArray(),
+        ),
+        isError = true,
+        routeToSystemRemoval = result.state is SpaceState.OrphanProfile,
+    )
     is CreateSpaceResult.Failed ->
         DestroyFeedback(res(R.string.lz_vm_create_failed, arrayOf(result.reason?.takeIf { it.isNotBlank() } ?: res(R.string.lz_vm_unknown_error, emptyArray()))), isError = true, routeToSystemRemoval = false)
 }
 
-fun provisioningFeedback(result: DeleteSpaceResult, res: StringResolver = zhFallback): DestroyFeedback = when (result) {
+fun provisioningFeedback(result: DeleteSpaceResult, res: StringResolver): DestroyFeedback = when (result) {
     DeleteSpaceResult.Success ->
         DestroyFeedback(res(R.string.lz_vm_delete_success, emptyArray()), isError = false, routeToSystemRemoval = false)
     DeleteSpaceResult.RootUnavailable ->
         DestroyFeedback(res(R.string.lz_vm_delete_root_unavailable, emptyArray()), isError = true, routeToSystemRemoval = true)
-    is DeleteSpaceResult.FellBackToSelfDestroy -> destroyProfileFeedback(result.inner, res)
+    is DeleteSpaceResult.ManualRemovalRequired ->
+        DestroyFeedback(res(R.string.lz_vm_delete_manual_required, emptyArray()), isError = true, routeToSystemRemoval = true)
     is DeleteSpaceResult.Failed ->
         DestroyFeedback(res(R.string.lz_vm_delete_failed, arrayOf(result.reason?.takeIf { it.isNotBlank() } ?: res(R.string.lz_vm_unknown_error, emptyArray()))), isError = true, routeToSystemRemoval = false)
+}
+
+/** Java bridge for the legacy setup Activity shell. Only cap failures replace its staged
+ * diagnostic copy; all other failures keep the existing stage-specific presentation. */
+fun specificRootSetupFailure(
+    result: CreateSpaceResult,
+    res: StringResolver,
+): String? = when (result) {
+    is CreateSpaceResult.CapReached,
+    CreateSpaceResult.ManagedProfileLimitReached,
+    CreateSpaceResult.StateRefreshFailed -> provisioningFeedback(result, res).message
+    else -> null
+}
+
+object ProvisioningFeedbackBridge {
+    @JvmStatic fun specificRootSetupFailure(context: Context, result: CreateSpaceResult): String? =
+        specificRootSetupFailure(result, prismResolver(context))
 }

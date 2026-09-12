@@ -53,8 +53,10 @@ import android.widget.Toast;
 import androidx.annotation.Nullable;
 import androidx.annotation.WorkerThread;
 
+import com.yzddmr6.prismspace.PrismNameManager;
 import com.yzddmr6.prismspace.util.Dialogs;
 import com.yzddmr6.prismspace.analytics.Analytics;
+import com.yzddmr6.prismspace.analytics.DiagnosticLog;
 import com.yzddmr6.prismspace.api.Api;
 import com.yzddmr6.prismspace.appops.AppOpsCompat;
 import com.yzddmr6.prismspace.engine.CrossProfile;
@@ -96,7 +98,9 @@ public class PrismProvisioning extends IntentService {
 	/** Provision type: 0 (default) - Managed provisioning, 1 - Manual provisioning */
 	private static final String PREF_KEY_PROFILE_PROVISION_TYPE = "profile.provision.type";
 	/** The revision for post-provisioning. Increase this const value if post-provisioning needs to be re-performed after upgrade. */
-	private static final int POST_PROVISION_REV = 9;
+	private static final int POST_PROVISION_REV = 10;
+	/** States below this value describe a fresh or still-running initial provisioning transaction. */
+	private static final int FIRST_COMPLETED_POST_PROVISION_REV = 3;
 	private static final String AFFILIATION_ID = "com.yzddmr6.prismspace";
 	private static final String SCHEME_PACKAGE = "package";
 
@@ -128,10 +132,8 @@ public class PrismProvisioning extends IntentService {
 		}
 		if (DevicePolicyManager.ACTION_PROVISION_MANAGED_PROFILE.equals(intent.getAction())) {		// Borrow this activity intent for re-provision.
 			Log.d(TAG, "Re-provisioning PrismSpace.");
-				// "repair" starts this service in the OWNER user (user 0), where PrismSpace is not the
-			// admin, so the profile-owner post-provisioning DPM/app-ops calls throw SecurityException.
-			// The normal provisioning path tolerates such failures via try-catch (see below); the repair
-			// path must too, otherwise the uncaught exception crashes the app.
+			// Repair normally starts this service inside the managed profile through Shuttle. Keep the
+			// boundary defensive because vendor service routing can still fail at runtime.
 			try {
 				reprovisionManagedProfile(context);
 				Toasts.show(context, R.string.toast_reprovision_done, Toast.LENGTH_SHORT);
@@ -148,11 +150,21 @@ public class PrismProvisioning extends IntentService {
 			return;
 		}
 
+		proceedProfileProvisioning(context, intent);
+	}
+
+	@WorkerThread private static synchronized void proceedProfileProvisioning(final Context context, final Intent intent) {
 		final boolean is_manual_setup = Intent.ACTION_USER_INITIALIZE.equals(intent.getAction()) || intent.getAction() == null/* recovery procedure triggered by MainActivity */;
+		final SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+		final int provisionState = prefs.getInt(PREF_KEY_PROVISION_STATE, 0);
+		if (! shouldRunProfilePostProvisioning(intent.getAction(), provisionState, POST_PROVISION_REV)) {
+			DiagnosticLog.INSTANCE.i(TAG, "Skipping duplicate profile completion state=" + provisionState
+					+ " revision=" + POST_PROVISION_REV);
+			return;
+		}
 		Analytics.$().setProperty(Analytics.Property.PrismSetup, is_manual_setup ? "manual" : "managed");
 		Log.d(TAG, "Provisioning profile (" + Users.toId(android.os.Process.myUserHandle()) + (is_manual_setup ? ", manual) " : ")"));
 
-		final SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
 		prefs.edit().putInt(PREF_KEY_PROVISION_STATE, 1).putInt(PREF_KEY_PROFILE_PROVISION_TYPE, is_manual_setup ? 1 : 0).apply();
 		final DevicePolicies policies = new DevicePolicies(context);
 		if (is_manual_setup) {		// Do the similar job of ManagedProvisioning here.
@@ -181,15 +193,28 @@ public class PrismProvisioning extends IntentService {
 			Log.d(TAG, "Enable profile now.");
 			policies.execute(DevicePolicyManager::setProfileEnabled);
 		}
+		if (! PrismNameManager.syncNameToParentProfileAfterProvisioning(context))
+			Log.w(TAG, "Failed to synchronize the profile name after provisioning.");
 		Analytics.$().event("profile_post_provision_done").send();
 
 		prefs.edit().putInt(PREF_KEY_PROVISION_STATE, POST_PROVISION_REV).apply();
 
+		// ManagedProvisioning owns the normal task hand-off. Starting the parent UI from this profile
+		// activity races with the system restoring the original task, so only historical manual setup
+		// keeps the compatibility launch attempt.
+		if (is_manual_setup) finishByLaunchingOwnerUser(context);
+	}
+
+	private static void finishByLaunchingOwnerUser(final Context context) {
 		if (! launchMainActivityInOwnerUser(context)) {
 			Analytics.$().event("error_launch_main_ui").send();
-			Log.e(TAG, "Failed to launch main activity in owner user.");
+			DiagnosticLog.INSTANCE.e(TAG, "Failed to launch main activity in owner user.", null);
 			Toasts.show(context, R.string.toast_setup_complete, Toast.LENGTH_LONG);
 		}
+	}
+
+	static boolean shouldRunProfilePostProvisioning(final @Nullable String action, final int state, final int revision) {
+		return ! ACTION_PROFILE_PROVISIONING_COMPLETE.equals(action) || state < revision;
 	}
 
 	@ProfileUser private static void hideUnnecessaryAppsInManagedProfile(final Context context) {
@@ -206,11 +231,29 @@ public class PrismProvisioning extends IntentService {
 	@WorkerThread public static void performIncrementalProfileOwnerProvisioningIfNeeded(final Context context) {
 		try {
 			final DevicePolicies policies = new DevicePolicies(context);
-			startProfileOwnerPostProvisioning(context, policies);
+			final SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+			final int state = prefs.getInt(PREF_KEY_PROVISION_STATE, 0);
+			if (shouldRunOneTimePostProvisionMigration(state, POST_PROVISION_REV)) {
+				Log.i(TAG, "Running post-provision migration " + state + " -> " + POST_PROVISION_REV);
+				startProfileOwnerPostProvisioning(context, policies);
+				prefs.edit().putInt(PREF_KEY_PROVISION_STATE, POST_PROVISION_REV).commit();
+			} else if (state < FIRST_COMPLETED_POST_PROVISION_REV) {
+				Log.i(TAG, "Initial profile provisioning owns state " + state + "; skipping incremental migration.");
+			} else Log.i(TAG, "Post-provision migration already current at " + state);
+			// Availability of installer/DocumentsUI packages is a runtime invariant, not a migration.
 			enableCriticalAppsIfNeeded(context, policies);
 		} catch (final RuntimeException e) {
 			Analytics.$().logAndReport(TAG, "Error provisioning profile", e);
 		}
+	}
+
+	static boolean shouldRunOneTimePostProvisionMigration(final int state, final int revision) {
+		return state >= FIRST_COMPLETED_POST_PROVISION_REV && state < revision;
+	}
+
+	static boolean shouldAdvanceRevisionAfterExplicitRepair(final boolean runningInParent,
+			final int state, final int revision) {
+		return ! runningInParent && state < revision;
 	}
 
 	@Override public void onCreate() {
@@ -224,22 +267,24 @@ public class PrismProvisioning extends IntentService {
 	}
 
 	@ProfileUser private static boolean launchMainActivityInOwnerUser(final Context context) {
-		// Never use CrossProfileApps, which is not working here on Android 10+ and some Android 9 devices (e.g. EMUI).
+		final ComponentName activity = Modules.getMainLaunchActivity(context);
 		final LauncherApps apps = (LauncherApps) context.getSystemService(Context.LAUNCHER_APPS_SERVICE);
 		if (apps == null) return false;
-		final ComponentName activity = Modules.getMainLaunchActivity(context);
 		if (apps.isActivityEnabled(activity, Users.getParentProfile())) {
-			Log.i(TAG, "Launching main activity in owner user..");
+			DiagnosticLog.INSTANCE.i(TAG, "Launching main activity through LauncherApps compatibility route.");
 			apps.startMainActivity(activity, Users.getParentProfile(), null, null);
 			return true;
 		}
-		Log.i(TAG, "Launching main activity in owner user...");
+		DiagnosticLog.INSTANCE.i(TAG, "Launching main activity through intent-forwarder compatibility route.");
 		try {   // Since Android O, activities in owner user is invisible to managed profile.
 			final Intent intent = new Intent(ACTION_MAIN).addFlags(FLAG_ACTIVITY_NEW_TASK);
 			CrossProfile.decorateIntentForActivityInParentProfile(context, intent);
 			context.startActivity(intent);
 			return true;
-		} catch (final RuntimeException e) { return false; }
+		} catch (final RuntimeException e) {
+			DiagnosticLog.INSTANCE.w(TAG, "Intent-forwarder main launch failed.", e);
+			return false;
+		}
 	}
 
 	@ProfileUser private static void setupLauncherActivityInPrism(final Context context) {
@@ -269,16 +314,23 @@ public class PrismProvisioning extends IntentService {
 	@OwnerUser @ProfileUser @WorkerThread public static void reprovisionManagedProfile(final Context context) {
 		final DevicePolicies policies = new DevicePolicies(context);
 		final boolean owner = Users.isParentProfile();
+		final SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
 		if (! owner) {
 			// Always perform all the required provisioning steps covered by stock ManagedProvisioning, in case something is missing there.
 			// This is also required for manual provision via ADB shell.
 			policies.execute(DevicePolicyManager::clearCrossProfileIntentFilters);
-			final int provision_type = PreferenceManager.getDefaultSharedPreferences(context).getInt(PREF_KEY_PROFILE_PROVISION_TYPE, 0);
+			final int provision_type = prefs.getInt(PREF_KEY_PROFILE_PROVISION_TYPE, 0);
 			if (provision_type == 1) ProfileOwnerManualProvisioning.start(context, policies);	// Simulate the stock managed profile provision
 			}
 			startProfileOwnerPostProvisioning(context, policies);
 			enableCriticalAppsIfNeeded(context, policies);
-			if (! owner) setupLauncherActivityInPrism(context);
+			if (! owner) {
+				setupLauncherActivityInPrism(context);
+				final int state = prefs.getInt(PREF_KEY_PROVISION_STATE, 0);
+				if (shouldAdvanceRevisionAfterExplicitRepair(owner, state, POST_PROVISION_REV)
+						&& ! prefs.edit().putInt(PREF_KEY_PROVISION_STATE, POST_PROVISION_REV).commit())
+					throw new IllegalStateException("Failed to persist completed profile repair revision");
+			}
 	}
 
 	public static void startDeviceAndProfileOwnerSharedPostProvisioning(final Context context, final DevicePolicies policies) {
@@ -356,6 +408,7 @@ public class PrismProvisioning extends IntentService {
 
 	@ProfileUser private static void startProfileOwnerPostProvisioningForNonOwnerProfile(final Context context, final DevicePolicies policies) {
 		policies.addUserRestrictionIfNeeded(UserManager.ALLOW_PARENT_PROFILE_APP_LINKING);
+		CrossProfileIntentFiltersHelper.setFilters(policies);
 		enableAdditionalForwarding(context, policies);
 
 		// Prepare API

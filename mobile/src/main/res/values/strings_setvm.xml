@@ -3,13 +3,15 @@
     <!-- SettingsViewModel: mapSettingsUiModel mode card -->
     <string name="lz_setvm_mode_title">Current mode</string>
     <string name="lz_setvm_mode_body_not_created">Dual space not created. Please finish initial setup first.</string>
-    <string name="lz_setvm_mode_body_shizuku">Shizuku mode active. Enhanced capabilities enabled.</string>
+    <string name="lz_setvm_mode_body_shizuku">Shizuku/Sui mode active. Enhanced capabilities enabled.</string>
+    <string name="lz_setvm_mode_body_root">Root mode is ready for enhanced operations.</string>
+    <string name="lz_setvm_mode_body_preference_unavailable">%1$s is selected but is not currently ready. Equivalent operations use Normal mode when safe.</string>
     <string name="lz_setvm_mode_body_normal">Normal mode. Core dual-app features available.</string>
 
     <!-- SettingsViewModel: mode switching feedback -->
     <string name="lz_setvm_switched_normal">Switched to Normal mode</string>
     <string name="lz_setvm_shizuku_connected">Shizuku connected · switched to Shizuku mode</string>
-    <string name="lz_setvm_shizuku_not_ready">Shizuku is not ready. Please start the Shizuku service and grant authorization first.</string>
+    <string name="lz_setvm_shizuku_not_ready">Shizuku or Sui is not ready. Start Shizuku or install/enable Sui, then grant authorization.</string>
     <string name="lz_setvm_root_requesting">Requesting Root authorization from the system…</string>
     <string name="lz_setvm_root_granted">Root authorization granted · switched to Root mode</string>
     <string name="lz_setvm_root_denied">Root authorization not granted. Mode unchanged.</string>
@@ -38,6 +40,13 @@
     <string name="lz_setvm_space_already_ready">Dual space is already ready</string>
     <string name="lz_setvm_bridge_repairing">Reconnecting dual space…</string>
     <string name="lz_setvm_bridge_repair_opened_profile">Opened the dual space. Return to PrismSpace and retry after it reconnects.</string>
+    <string name="lz_setvm_unlock_opened_profile">Opened the dual-space entry. Complete Android’s work-profile unlock, then return to PrismSpace.</string>
+    <string name="lz_setvm_incomplete_repaired">Dual-space repair started. Rechecking its state…</string>
+    <string name="lz_setvm_incomplete_cannot_auto_repair">PrismSpace cannot safely resume this incomplete profile automatically. Remove it and create the dual space again.</string>
+    <string name="lz_setvm_orphan_profile">This work profile is managed by %1$s, not PrismSpace. Remove it from Android system settings; PrismSpace will not delete another manager’s profile.</string>
+    <string name="lz_setvm_orphan_manager_unknown">an unknown device-policy controller</string>
+    <string name="lz_setvm_provisioning_active">Dual-space setup is still in progress. Keep the Android setup screen open.</string>
+    <string name="lz_setvm_state_refresh_failed">Could not confirm the latest dual-space state. Try again; no changes were made.</string>
 
     <!-- SettingsViewModel: diagnostic report export -->
     <string name="lz_setvm_report_subject">PrismSpace diagnostic report</string>

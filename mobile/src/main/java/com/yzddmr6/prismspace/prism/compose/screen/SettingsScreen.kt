@@ -23,7 +23,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -42,8 +41,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavHostController
 import com.yzddmr6.prismspace.prism.compose.component.AboutSheet
+import com.yzddmr6.prismspace.prism.compose.nav.AppLaunchSignals
 import com.yzddmr6.prismspace.prism.compose.component.ActionRow
 import com.yzddmr6.prismspace.prism.compose.component.DeleteFinalSheet
 import com.yzddmr6.prismspace.prism.compose.component.DeleteWarningSheet
@@ -51,7 +50,9 @@ import com.yzddmr6.prismspace.prism.compose.component.GroupCard
 import com.yzddmr6.prismspace.prism.compose.component.ModeGuideSheet
 import com.yzddmr6.prismspace.prism.compose.component.NavRow
 import com.yzddmr6.prismspace.prism.compose.component.PrismIcons
+import com.yzddmr6.prismspace.prism.compose.component.PrismTextButton
 import com.yzddmr6.prismspace.prism.compose.component.RepairConfirmSheet
+import com.yzddmr6.prismspace.prism.compose.component.StatusRow
 import com.yzddmr6.prismspace.prism.compose.component.SwitchRow
 import com.yzddmr6.prismspace.prism.compose.theme.PrismSpacing
 import com.yzddmr6.prismspace.mobile.R
@@ -60,6 +61,7 @@ import com.yzddmr6.prismspace.prism.compose.vm.AppFeedbackBus
 import com.yzddmr6.prismspace.prism.compose.vm.PrismMode
 import com.yzddmr6.prismspace.prism.compose.vm.prismModeLabelRes
 import com.yzddmr6.prismspace.prism.compose.vm.SettingsViewModel
+import com.yzddmr6.prismspace.prism.compose.vm.suspendSwitchPresentation
 import com.yzddmr6.prismspace.util.Activities
 import com.yzddmr6.prismspace.util.PrismLocale
 
@@ -69,12 +71,15 @@ import com.yzddmr6.prismspace.util.PrismLocale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(nav: NavHostController) {
+fun SettingsScreen() {
     val vm: SettingsViewModel = viewModel()
     val uiState by vm.uiState.collectAsState()
     val context = LocalContext.current
 
     LaunchedEffect(Unit) { vm.refreshCapabilities() }
+    LaunchedEffect(Unit) {
+        AppLaunchSignals.activateSpace.collect { vm.repairSpace(context, activationOnly = true) }
+    }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -86,18 +91,26 @@ fun SettingsScreen(nav: NavHostController) {
 
     // Sheet visibility state
     var showModeSheet by remember { mutableStateOf(false) }
+    var showSpaceDetails by remember { mutableStateOf(false) }
     var showAboutSheet by remember { mutableStateOf(false) }
     var showRepairConfirm by remember { mutableStateOf(false) }
     var showDeleteWarning by remember { mutableStateOf(false) }
     var showDeleteFinal by remember { mutableStateOf(false) }
     var showLangDialog by remember { mutableStateOf(false) }
 
+    if (showSpaceDetails) AlertDialog(
+        onDismissRequest = { showSpaceDetails = false },
+        title = { Text(stringResource(R.string.lz_shell_space_details)) },
+        text = { Text(stringResource(R.string.lz_shell_space_details_summary, uiState?.cloneCount ?: 0)) },
+        confirmButton = { PrismTextButton(onClick = { showSpaceDetails = false }) { Text(stringResource(android.R.string.ok)) } },
+    )
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.lz_set_title)) },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
+                    containerColor = MaterialTheme.colorScheme.background,
                 ),
             )
         },
@@ -110,63 +123,99 @@ fun SettingsScreen(nav: NavHostController) {
                 .padding(horizontal = PrismSpacing.Lg, vertical = PrismSpacing.Sm),
             verticalArrangement = Arrangement.spacedBy(PrismSpacing.Md),
         ) {
+            val state = uiState
 
+            // ── 双开空间 ─────────────────────────────────────────────────
             // modeLabel derives from selectedMode, not transient capability detection.
-            GroupCard(title = null) {
+            GroupCard(title = stringResource(R.string.lz_set_group_space)) {
+                if (state == null) {
+                    ActionRow(
+                        title = stringResource(R.string.lz_home_loading),
+                        leadingIcon = PrismIcons.Shield,
+                        enabled = false,
+                        onClick = {},
+                    )
+                } else {
+                    // 状态/操作行（创建/恢复/解锁/重连/修复，统一呈现策略驱动）。
+                    ActionRow(
+                        title = state.spaceActionTitle,
+                        summary = state.spaceActionSummary,
+                        leadingIcon = PrismIcons.Wrench,
+                        enabled = state.spaceActionEnabled || state.spaceUsability == com.yzddmr6.prismspace.prism.compose.space.SpaceUsability.Usable,
+                        onClick = {
+                            if (state.spaceUsability == com.yzddmr6.prismspace.prism.compose.space.SpaceUsability.Usable) showSpaceDetails = true
+                            else if (state.spaceActionNeedsConfirmation) showRepairConfirm = true
+                            else vm.repairSpace(context)
+                        },
+                    )
+                    if (state.spaceUsability != com.yzddmr6.prismspace.prism.compose.space.SpaceUsability.NotProvisioned) {
+                        val switch = suspendSwitchPresentation(state.spaceFreezeState, state.spaceUsability)
+                        SwitchRow(
+                            title = stringResource(R.string.lz_set_suspend_title),
+                            summary = stringResource(switch.summaryRes),
+                            leadingIcon = PrismIcons.Snow,
+                            checked = state.spaceSuspended,
+                            enabled = switch.enabled,
+                            onCheckedChange = { vm.suspendSpace(it) },
+                        )
+                        NavRow(
+                            title = stringResource(R.string.lz_system_apps_title),
+                            summary = stringResource(R.string.lz_set_system_apps_summary),
+                            leadingIcon = PrismIcons.Droid,
+                            onClick = { AppLaunchSignals.signalOpenSpaceSystemApps() },
+                        )
+                    }
+                }
+            }
+
+            // ── 添加分身方式：当前方式 + 实时能力（每次添加不再询问） ──────────────
+            GroupCard(title = stringResource(R.string.lz_set_group_clone_method)) {
                 // Single label source avoids Home/Settings drift.
                 val modeLabel = stringResource(prismModeLabelRes(uiState?.selectedMode ?: PrismMode.Normal))
                 NavRow(
-                    title = stringResource(R.string.lz_set_run_mode),
-                    summary = modeLabel,
+                    title = if (uiState?.selectedMode == PrismMode.Normal || uiState == null)
+                        stringResource(R.string.lz_app_method_filesync_title) else modeLabel,
+                    summary = if (uiState?.selectedMode == PrismMode.Normal || uiState == null)
+                        stringResource(R.string.lz_app_method_filesync_summary) else stringResource(R.string.lz_shell_enhanced_method),
                     leadingIcon = PrismIcons.Key,
                     onClick = { showModeSheet = true },
                 )
             }
 
-            // Space suspend and repair actions.
-            GroupCard(title = null) {
-                val suspended = uiState?.spaceSuspended ?: false
-                SwitchRow(
-                    title = stringResource(R.string.lz_set_suspend_title),
-                    summary = stringResource(R.string.lz_set_suspend_summary),
-                    leadingIcon = PrismIcons.Snow,
-                    checked = suspended,
-                    onCheckedChange = { vm.suspendSpace(it) },
-                )
-                ActionRow(
-                    title = uiState?.spaceActionTitle?.takeIf { it.isNotBlank() }
-                        ?: stringResource(R.string.lz_set_repair_title),
-                    summary = uiState?.spaceActionSummary?.takeIf { it.isNotBlank() }
-                        ?: stringResource(R.string.lz_set_repair_summary),
-                    leadingIcon = PrismIcons.Wrench,
-                    onClick = {
-                        if (uiState?.spaceActionNeedsConfirmation == true) showRepairConfirm = true
-                        else vm.repairSpace(context)
-                    },
-                )
-                if (uiState?.profileOwnerReady == true) {
-                    ActionRow(
-                        title = stringResource(R.string.lz_set_delete_space_title),
-                        summary = stringResource(R.string.lz_set_delete_space_summary),
-                        leadingIcon = PrismIcons.Trash,
-                        danger = true,
-                        onClick = { showDeleteWarning = true },
-                    )
+            // ── 通用 ────────────────────────────────────────────────────
+            GroupCard(title = stringResource(R.string.lz_set_group_general)) {
+                val curLang = PrismLocale.getStored(context)
+                val langLabel = when (curLang) {
+                    PrismLocale.ZH -> stringResource(R.string.prism_language_zh)
+                    PrismLocale.ZH_TW -> stringResource(R.string.prism_language_zh_tw)
+                    PrismLocale.EN -> stringResource(R.string.prism_language_en)
+                    else -> stringResource(R.string.prism_language_system)
                 }
+                NavRow(
+                    title = stringResource(R.string.prism_settings_language),
+                    summary = langLabel,
+                    leadingIcon = Icons.Outlined.Language,
+                    onClick = { showLangDialog = true },
+                )
+                // GitHub Releases update check.
+                ActionRow(
+                    title = stringResource(R.string.lz_set_check_update_title),
+                    summary = stringResource(R.string.lz_shell_current_version, context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""),
+                    leadingIcon = PrismIcons.Refresh,
+                    onClick = { vm.checkForUpdate() },
+                )
             }
 
-            // Diagnostic log export.
-            GroupCard(title = null) {
+            // ── 支持 ────────────────────────────────────────────────────
+            GroupCard(title = stringResource(R.string.lz_set_group_support)) {
+                // Diagnostic log export.
                 ActionRow(
                     title = stringResource(R.string.lz_set_export_logs_title),
                     summary = stringResource(R.string.lz_set_export_logs_summary),
                     leadingIcon = Icons.Outlined.IosShare,
                     onClick = { vm.exportLogs(context) },
                 )
-            }
-
-            // Feedback and discussion.
-            GroupCard(title = null) {
+                // Feedback and discussion.
                 val feedbackAccount = stringResource(R.string.lz_set_feedback_account)
                 val feedbackCopied = stringResource(R.string.lz_set_feedback_copied)
                 val copyFeedbackAccount = {
@@ -179,48 +228,41 @@ fun SettingsScreen(nav: NavHostController) {
                     summary = stringResource(R.string.lz_set_feedback_summary, feedbackAccount),
                     leadingIcon = PrismIcons.Info,
                     trailing = {
-                        TextButton(onClick = copyFeedbackAccount) {
+                        PrismTextButton(onClick = copyFeedbackAccount) {
                             Text(stringResource(R.string.lz_set_feedback_copy))
                         }
                     },
                     onClick = copyFeedbackAccount,
                 )
-            }
-
-            // GitHub Releases update check.
-            GroupCard(title = null) {
-                ActionRow(
-                    title = stringResource(R.string.lz_set_check_update_title),
-                    summary = stringResource(R.string.lz_set_check_update_summary),
-                    leadingIcon = PrismIcons.Refresh,
-                    onClick = { vm.checkForUpdate() },
-                )
-            }
-
-            // Language override.
-            GroupCard(title = null) {
-                val curLang = PrismLocale.getStored(context)
-                val langLabel = when (curLang) {
-                    PrismLocale.ZH -> stringResource(R.string.prism_language_zh)
-                    PrismLocale.EN -> stringResource(R.string.prism_language_en)
-                    else -> stringResource(R.string.prism_language_system)
-                }
-                NavRow(
-                    title = stringResource(R.string.prism_settings_language),
-                    summary = langLabel,
-                    leadingIcon = Icons.Outlined.Language,
-                    onClick = { showLangDialog = true },
-                )
-            }
-
-            // About PrismSpace.
-            GroupCard(title = null) {
                 NavRow(
                     title = stringResource(R.string.lz_set_about_title),
                     summary = stringResource(R.string.lz_set_about_summary),
                     leadingIcon = PrismIcons.Info,
                     onClick = { showAboutSheet = true },
                 )
+            }
+
+            // ── 实验性功能 ────────────────────────────────────────────────
+            GroupCard(title = stringResource(R.string.lz_set_group_experimental)) {
+                // 只读行：系统已存在第二个双开空间时 PrismSpace 自动识别；没有自建创建入口。
+                StatusRow(
+                    title = stringResource(R.string.lz_set_multi_space_title),
+                    summary = stringResource(R.string.lz_set_multi_space_summary),
+                    leadingIcon = PrismIcons.Grid,
+                )
+            }
+
+            // ── 危险区 ───────────────────────────────────────────────────
+            if (state?.profileOwnerReady == true) {
+                GroupCard(title = stringResource(R.string.lz_set_group_danger)) {
+                    ActionRow(
+                        title = stringResource(R.string.lz_set_delete_space_title),
+                        summary = stringResource(R.string.lz_set_delete_space_summary),
+                        leadingIcon = PrismIcons.Trash,
+                        danger = true,
+                        onClick = { showDeleteWarning = true },
+                    )
+                }
             }
         }
     }
@@ -260,6 +302,7 @@ fun SettingsScreen(nav: NavHostController) {
     }
     if (showDeleteWarning) {
         DeleteWarningSheet(
+            cloneCount = uiState?.cloneCount ?: 0,
             onContinue = {
                 showDeleteWarning = false
                 showDeleteFinal = true
@@ -283,6 +326,7 @@ fun SettingsScreen(nav: NavHostController) {
         val options = listOf(
             PrismLocale.SYSTEM to stringResource(R.string.prism_language_system),
             PrismLocale.ZH to stringResource(R.string.prism_language_zh),
+            PrismLocale.ZH_TW to stringResource(R.string.prism_language_zh_tw),
             PrismLocale.EN to stringResource(R.string.prism_language_en),
         )
         AlertDialog(
@@ -312,7 +356,7 @@ fun SettingsScreen(nav: NavHostController) {
                 }
             },
             confirmButton = {},
-            dismissButton = { TextButton(onClick = { showLangDialog = false }) { Text(stringResource(R.string.lz_set_cancel)) } },
+            dismissButton = { PrismTextButton(onClick = { showLangDialog = false }) { Text(stringResource(R.string.lz_set_cancel)) } },
         )
     }
 
@@ -323,7 +367,7 @@ fun SettingsScreen(nav: NavHostController) {
             title = { Text(stringResource(R.string.lz_set_update_title, info.version)) },
             text = { Text(info.notes) },
             confirmButton = {
-                TextButton(onClick = {
+                PrismTextButton(onClick = {
                     runCatching {
                         context.startActivity(
                             android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(info.url))
@@ -332,7 +376,7 @@ fun SettingsScreen(nav: NavHostController) {
                     vm.dismissUpdate()
                 }) { Text(stringResource(R.string.lz_set_update_download)) }
             },
-            dismissButton = { TextButton(onClick = { vm.dismissUpdate() }) { Text(stringResource(R.string.lz_set_update_later)) } },
+            dismissButton = { PrismTextButton(onClick = { vm.dismissUpdate() }) { Text(stringResource(R.string.lz_set_update_later)) } },
         )
     }
 

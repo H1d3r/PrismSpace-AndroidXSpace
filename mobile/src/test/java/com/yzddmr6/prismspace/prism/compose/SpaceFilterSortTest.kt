@@ -6,6 +6,7 @@ import com.yzddmr6.prismspace.prism.compose.vm.SpaceAppInput
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceRow
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceSegment
 import com.yzddmr6.prismspace.prism.compose.vm.applyListTransform
+import com.yzddmr6.prismspace.prism.compose.vm.filterSystemAppRows
 import com.yzddmr6.prismspace.prism.compose.vm.mapRows
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -52,6 +53,19 @@ class SpaceFilterSortTest {
     private val dualX = makeRow("com.twitter.android", "X", segment = SpaceSegment.Dual, loadIndex = 0)
     private val dualTelegram = makeRow("org.telegram.messenger", "Telegram", segment = SpaceSegment.Dual, loadIndex = 1)
     private val dualRows = listOf(dualX, dualTelegram)
+
+    @Test
+    fun `system app search is empty until the user enters a query`() {
+        assertTrue(filterSystemAppRows(listOf(camera), "  ").isEmpty())
+    }
+
+    @Test
+    fun `system app search matches package and excludes non-system rows`() {
+        val nonSystem = makeRow("com.android.fake", "Fake", system = false)
+        val result = filterSystemAppRows(listOf(camera, nonSystem), "com.android")
+
+        assertEquals(listOf(camera), result)
+    }
 
     // -----------------------------------------------------------------------
     // Search / keyword matching
@@ -266,33 +280,7 @@ class SpaceFilterSortTest {
     }
 
     // -----------------------------------------------------------------------
-    // Sort: time (uses stable load order via loadIndex, most-recent-first)
-    // -----------------------------------------------------------------------
-
-    @Test
-    fun `time sort uses load index descending (most-recent-first)`() {
-        // loadIndex is assigned by position in the rows list; higher index = more recently loaded
-        val rows = listOf(
-            makeRow("com.first", "First", loadIndex = 0),
-            makeRow("com.second", "Second", loadIndex = 1),
-            makeRow("com.third", "Third", loadIndex = 2),
-        )
-        val result = applyListTransform(
-            rows = rows,
-            segment = SpaceSegment.Main,
-            query = "",
-            sort = SortOrder.Time,
-            cloneFilter = CloneFilter.All,
-            showSystem = true,
-        )
-        // Most recent (highest load index = last in list) should come first
-        assertEquals("com.third", result[0].pkg)
-        assertEquals("com.second", result[1].pkg)
-        assertEquals("com.first", result[2].pkg)
-    }
-
-    // -----------------------------------------------------------------------
-    // Sort: cloned (已双开 first; main segment only)
+    // Sort: cloned (已添加优先; main segment only)
     // -----------------------------------------------------------------------
 
     @Test

@@ -11,14 +11,23 @@
     <!-- HomeScreen: 统计卡片 -->
     <string name="lz_home_main_space">主空间</string>
     <string name="lz_home_dual_space">双开空间</string>
-    <string name="lz_home_main_count">%1$d 应用</string>
-    <string name="lz_home_clone_count">%1$d 分身</string>
 
     <!-- HomeScreen: 信息行 -->
     <string name="lz_home_work_profile">工作资料</string>
     <string name="lz_home_run_mode">运行模式</string>
     <string name="lz_home_android_version">Android 版本</string>
     <string name="lz_home_device">设备</string>
+    <string name="lz_home_pending_title_one">%1$s 等待安装确认</string>
+    <string name="lz_home_pending_title_more">%1$s 等 %2$d 个应用等待安装确认</string>
+    <string name="lz_home_pending_body">安装包已传到双开空间，下一步在 Android 系统安装器中确认。</string>
+    <string name="lz_home_pending_action">前往安装</string>
+    <string name="lz_home_task_add_clone">添加分身</string>
+    <string name="lz_home_task_send_files">发送文件</string>
+    <string name="lz_home_overview_title">空间概览</string>
+    <string name="lz_home_overview_clones">%1$d 个分身</string>
+    <string name="lz_home_recent_transfer">最近传输</string>
+    <string name="lz_home_no_transfer">暂无记录</string>
+    <string name="lz_home_device_version">设备与版本</string>
 
     <!-- HomeViewModel: 状态标题 / 正文 / 标签 / 主按钮 -->
     <string name="lz_home_status_normal_title">双开空间正常</string>
@@ -30,6 +39,11 @@
     <string name="lz_home_status_notcreated_body">请前往设置创建双开空间。</string>
     <string name="lz_home_tag_notcreated">未创建</string>
     <string name="lz_home_label_create">创建双开空间</string>
+
+    <string name="lz_home_status_provisioning_title">双开空间配置进行中</string>
+    <string name="lz_home_status_provisioning_body">Android 与 PrismSpace 正在完成工作资料配置。</string>
+    <string name="lz_home_tag_provisioning">配置中</string>
+    <string name="lz_home_label_provisioning">打开设置</string>
 
     <string name="lz_home_status_suspended_title">双开空间已暂停</string>
     <string name="lz_home_status_suspended_body">双开空间已暂停，分身应用暂不可用。</string>
@@ -47,7 +61,7 @@
     <string name="lz_home_label_checking">打开设置</string>
 
     <string name="lz_home_status_needsrepair_title">双开空间需要修复</string>
-    <string name="lz_home_status_needsrepair_body">上次检测发现问题，请前往设置修复。</string>
+    <string name="lz_home_status_needsrepair_body">双开空间连接需要修复。点击“修复”并完成可见的空间内步骤；即使拒绝通知权限，此入口仍可使用。</string>
     <string name="lz_home_tag_needsrepair">需要修复</string>
     <string name="lz_home_label_repair">修复双开空间</string>
 

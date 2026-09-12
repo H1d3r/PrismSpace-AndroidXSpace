@@ -25,7 +25,11 @@ import com.yzddmr6.prismspace.util.Hack;
 import com.yzddmr6.prismspace.util.annotation.UserIdInt;
 import com.yzddmr6.prismspace.RestrictedBinderProxy;
 import com.yzddmr6.prismspace.appops.AppOpsHelper;
-import com.yzddmr6.prismspace.shuttle.Shuttle;
+import com.yzddmr6.prismspace.bridge.Bridge;
+import com.yzddmr6.prismspace.bridge.BridgeTargets;
+import com.yzddmr6.prismspace.bridge.ProfileTarget;
+import com.yzddmr6.prismspace.bridge.SetAppOpMode;
+import com.yzddmr6.prismspace.shuttle.ShuttleOutcome;
 import com.yzddmr6.prismspace.util.Hacks;
 import com.yzddmr6.prismspace.util.Users;
 
@@ -92,9 +96,12 @@ public class DelegatedAppOpsManager extends DerivedAppOpsManager {
 			if (! Users.isProfileManagedByPrism(mContext, user))
 				throw new IllegalArgumentException("User " + user_id + " is not managed by PrismSpace");
 
-			new Shuttle(mContext, user).launch(context -> {
-				new AppOpsHelper(context).setMode(pkg, op, mode, uid); return Unit.INSTANCE;
-			});
+			final ProfileTarget target = BridgeTargets.INSTANCE.profile(user_id);
+			if (target == null) throw new IllegalArgumentException("Invalid managed profile " + user_id);
+			final ShuttleOutcome<Unit> outcome = Bridge.INSTANCE.inProfile(mContext, target)
+					.execute(new SetAppOpMode(pkg, op, mode, uid));
+			if (! (outcome instanceof ShuttleOutcome.Value))
+				throw new IllegalStateException("Profile bridge unavailable: " + outcome);
 			return true;
 		}
 

@@ -3,19 +3,27 @@
     <!-- SpaceScreen: top bar -->
     <string name="lz_space_title">Spaces</string>
     <string name="lz_space_selected_count">%1$d selected</string>
+    <string name="lz_space_row_selected">Selected</string>
+    <string name="lz_space_row_not_selected">Not selected</string>
     <string name="lz_space_select_all">Select all</string>
     <string name="lz_space_deselect_all">Deselect all</string>
     <string name="lz_space_exit_multiselect">Exit selection</string>
+    <string name="lz_space_batch_manage">Manage in batch</string>
+    <string name="lz_space_view_controls">List view</string>
+    <string name="lz_space_row_open">Open</string>
+    <string name="lz_space_row_resume">Resume</string>
+    <string name="lz_space_row_add_clone">Add clone</string>
+    <string name="lz_space_row_install">Install</string>
 
     <!-- SpaceScreen: batch action bar -->
-    <string name="lz_space_batch_copy_to_dual">Copy to dual</string>
-    <string name="lz_space_batch_freeze">Freeze</string>
+    <string name="lz_space_batch_copy_to_dual">Add clones</string>
+    <string name="lz_space_batch_freeze">Pause</string>
     <string name="lz_space_batch_uninstall">Uninstall</string>
     <string name="lz_space_batch_cancel">Cancel</string>
 
     <!-- SpaceScreen: batch confirm dialogs -->
     <string name="lz_space_batch_uninstall_title">Uninstall %1$d apps?</string>
-    <string name="lz_space_batch_uninstall_body">The selected %1$d apps will be uninstalled from the dual space, and their data will be permanently deleted and cannot be recovered. The system will prompt for confirmation for each one.</string>
+    <string name="lz_space_batch_uninstall_body">The selected %1$d apps will be uninstalled inside the dual space, deleting their accounts and app data — the same-named apps in the main space are not affected. The system will prompt for confirmation for each one.</string>
     <string name="lz_space_batch_uninstall_confirm">Uninstall</string>
     <string name="lz_space_batch_clone_title">Clone %1$d apps to the dual space?</string>
     <string name="lz_space_batch_clone_body">The selected %1$d apps will be cloned to the dual space one by one according to the current run mode. In standard mode the installation packages are transferred one by one and must be installed manually in the dual space.</string>
@@ -28,19 +36,16 @@
     <!-- SpaceScreen: search -->
     <string name="lz_space_search_dual">Search within the dual space</string>
     <string name="lz_space_search_main">Search within the main space</string>
-    <string name="lz_space_more_options">More options</string>
 
     <!-- SpaceScreen: overflow menu -->
     <string name="lz_space_menu_sort">Sort by</string>
     <string name="lz_space_menu_sort_name">Name (A→Z)</string>
-    <string name="lz_space_menu_sort_time">Install time (most recent first)</string>
-    <string name="lz_space_menu_sort_cloned">Clone status (cloned first)</string>
+    <string name="lz_space_menu_sort_cloned">Added first</string>
     <string name="lz_space_menu_filter">Filter</string>
     <string name="lz_space_menu_filter_all">All apps</string>
     <string name="lz_space_menu_filter_cloned_only">Cloned only</string>
     <string name="lz_space_menu_filter_not_cloned_only">Not cloned only</string>
     <string name="lz_space_menu_show_system">Show system apps</string>
-    <string name="lz_space_menu_actions">Actions</string>
     <string name="lz_space_menu_refresh">Refresh</string>
 
     <!-- SpaceScreen: empty states -->
@@ -58,8 +63,32 @@
     <string name="lz_space_empty_dual_unknown_hint">Open Settings and repair the dual space</string>
     <string name="lz_space_empty_dual_none_hint">Go to “Main space”, tap an app, and clone it to the dual space</string>
     <string name="lz_space_empty_none_hint">Adjust the filter or search criteria</string>
-    <string name="lz_space_new_space">＋ New space</string>
-    <string name="lz_space_exp_title">Multi-profile is experimental</string>
-    <string name="lz_space_exp_dismiss">Got it</string>
-    <string name="lz_space_exp_body">Current: %1$s (user %2$d) · dual spaces %3$d/1\n\nThis device caps work/clone profiles at 1 per primary user — hardwired in the system; neither Root nor enterprise policy can lift it. Multi-profile only works on custom ROMs that remove that cap, so it is experimental.\n\nYou can still run more different apps inside your existing dual space.</string>
+    <string name="lz_space_main_copy_lost_title">Main-space app is no longer installed</string>
+    <string name="lz_space_main_copy_lost_body">After the system uninstall flow for %1$s, its main-space copy is no longer present. This is the state reported by Android. Restore the app and its data from your backup if needed.</string>
+
+    <!-- Clone uninstall gate: guidance shown when the dual space cannot present the uninstaller. -->
+    <string name="lz_uninstall_gate_suspended">Resume the dual space in Settings before uninstalling clones</string>
+    <string name="lz_uninstall_gate_locked">Unlock the dual space (lock-screen password) before uninstalling clones</string>
+    <string name="lz_uninstall_gate_bridge">Repair the dual-space connection in Settings before uninstalling clones</string>
+    <string name="lz_uninstall_gate_missing">Set up the dual space before uninstalling clones</string>
+    <string name="lz_uninstall_gate_unknown">Repair the dual space in Settings before uninstalling clones</string>
+
+    <!-- Pending-install continue gate: guidance shown when the dual space cannot present the installer. -->
+    <string name="lz_install_gate_suspended">Resume the dual space in Settings before continuing installation</string>
+    <string name="lz_install_gate_locked">Unlock the dual space (lock-screen password) before continuing installation</string>
+    <string name="lz_install_gate_bridge">Repair the dual-space connection in Settings before continuing installation</string>
+    <string name="lz_install_gate_missing">Set up the dual space before continuing installation</string>
+    <string name="lz_install_gate_unknown">Repair the dual space in Settings before continuing installation</string>
+
+    <!-- Dual-space system apps: search-first to avoid exposing a destructive bulk list. -->
+    <string name="lz_system_apps_title">System apps</string>
+    <string name="lz_system_apps_back">Back</string>
+    <string name="lz_system_apps_search">Search system app name or package</string>
+    <string name="lz_system_apps_empty_search_title">Find a system app</string>
+    <string name="lz_system_apps_empty_search_hint">Enter an app name or package name. Only system packages actually installed in the dual space are searched.</string>
+    <string name="lz_system_apps_empty_result_title">No matching system apps</string>
+    <string name="lz_system_apps_empty_result_hint">Try a different name or package fragment.</string>
+    <string name="lz_system_app_freeze_critical_title">Freeze a critical system app?</string>
+    <string name="lz_system_app_freeze_critical_body">%1$s (%2$s) is required by Android or other apps. Freezing it may break the dual space, including setup, input, installation, or connectivity. Continue only if you know how to undo this change.</string>
+    <string name="lz_system_app_freeze_critical_confirm">Freeze anyway</string>
 </resources>

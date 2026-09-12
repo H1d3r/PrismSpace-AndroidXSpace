@@ -26,7 +26,11 @@ fun parsePmCreateOutput(lines: List<String>?): PmCreateOutcome {
     if (low.contains("cannot add more profiles")) return PmCreateOutcome.ManagedProfileLimit
     if (low.contains("maximum number of users") || low.contains("limit reached"))
         return PmCreateOutcome.LimitReached
-    return PmCreateOutcome.Failed(lines.firstOrNull { it.isNotBlank() && it.trim() != "END" })
+    return PmCreateOutcome.Failed(lines.firstOrNull {
+        val line = it.trim()
+        line.isNotEmpty() && line != "END" && !line.startsWith("PRISM_SIDE_EFFECT_") &&
+            !line.startsWith("PRISM_PROVISION_")
+    })
 }
 
 fun parsePmRemoveOutput(lines: List<String>?): PmRemoveOutcome {
@@ -40,3 +44,21 @@ fun parsePmRemoveOutput(lines: List<String>?): PmRemoveOutcome {
 fun computeCap(maxUsers: Int?, currentManaged: Int): SpaceCapProbe =
     if (maxUsers == null) SpaceCapProbe.Unknown
     else SpaceCapProbe.Known(max = maxUsers, current = 1 + currentManaged)
+
+/** A low vendor property is precisely what the root flow temporarily raises. */
+internal fun effectiveMaxUsers(property: Int?, resource: Int?): Int? =
+    listOfNotNull(property?.takeIf { it > 0 }, resource?.takeIf { it > 0 }).maxOrNull()
+
+internal const val ROOT_DELETE_OWNER_MISMATCH = "PRISM_DELETE_REFUSED owner_mismatch"
+
+/** Verifies ownership immediately before removal in the same privileged shell. */
+internal fun buildVerifiedRootRemovalCommand(userId: Int, ownerPackage: String): String {
+    require(userId >= 0) { "Invalid user id $userId" }
+    val ownerPattern = "^User[[:space:]]+$userId: admin=${ownerPackage.replace(".", "\\.")}/[^,]+,.*ProfileOwner"
+    return "dpm list-owners 2>/dev/null | grep -Eq ${shellQuote(ownerPattern)} || " +
+        "{ echo ${shellQuote("$ROOT_DELETE_OWNER_MISMATCH user=$userId")}; exit 42; }; " +
+        "pm remove-user $userId"
+}
+
+internal fun rootRemovalOwnerMismatch(lines: List<String>?): Boolean =
+    lines.orEmpty().any { it.startsWith(ROOT_DELETE_OWNER_MISMATCH) }

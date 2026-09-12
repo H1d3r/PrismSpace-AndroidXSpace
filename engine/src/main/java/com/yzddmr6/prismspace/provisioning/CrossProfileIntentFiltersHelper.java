@@ -24,6 +24,7 @@ import android.util.Log;
 import com.yzddmr6.prismspace.util.DevicePolicies;
 
 import static android.app.admin.DevicePolicyManager.FLAG_PARENT_CAN_ACCESS_MANAGED;
+import static android.app.admin.DevicePolicyManager.FLAG_MANAGED_CAN_ACCESS_PARENT;
 import static android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH;
 /**
  * Class to set CrossProfileIntentFilters during managed profile creation, and reset them after an
@@ -38,13 +39,22 @@ class CrossProfileIntentFiltersHelper {
 		static void logd(final String message) { Log.d(TAG, message); }
 		static void loge(final Exception e) { Log.e(TAG, "", e); }
 	}
-	private interface PackageManager {
-		int SKIP_CURRENT_PROFILE = 0;
+	interface PackageManager {
+		int SKIP_CURRENT_PROFILE = 0x00000002;
 		void addCrossProfileIntentFilter(IntentFilter filter, int user, int parent_user, int flags);
 	}
 
 	public static void setFilters(final DevicePolicies policies) {
-		setFilters((filter, u, p, f) -> policies.addCrossProfileIntentFilter(filter, FLAG_PARENT_CAN_ACCESS_MANAGED), 0, 0);
+		final int parent = 0;
+		final int managed = 10;
+		setFilters((filter, source, target, resolverFlags) -> policies.addCrossProfileIntentFilter(
+				filter, directionFlagFor(source, target, parent, managed)), parent, managed);
+	}
+
+	static int directionFlagFor(final int source, final int target, final int parent, final int managed) {
+		if (source == parent && target == managed) return FLAG_PARENT_CAN_ACCESS_MANAGED;
+		if (source == managed && target == parent) return FLAG_MANAGED_CAN_ACCESS_PARENT;
+		throw new IllegalArgumentException("Invalid cross-profile route " + source + " -> " + target);
 	}
 
 	public static void setFilters(PackageManager pm, int parentUserId, int managedProfileUserId) {

@@ -2,8 +2,13 @@ package com.yzddmr6.prismspace.prism.compose
 
 import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.prism.compose.component.PrismLevel
+import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceHealth
 import com.yzddmr6.prismspace.prism.compose.vm.mapHomeState
+import com.yzddmr6.prismspace.prism.compose.vm.profileStatusLabelRes
+import com.yzddmr6.prismspace.prism.compose.vm.spaceHealth
+import com.yzddmr6.prismspace.space.SpaceBridgeCause
+import com.yzddmr6.prismspace.space.SpaceState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -13,6 +18,36 @@ import org.junit.Test
  * Tests the extended HomeUiModel produced by mapHomeState().
  */
 class HomeStateTest {
+
+    @Test fun `initial routing opens setup only for confirmed absence`() {
+        assertTrue(SpaceStateRepository.shouldOpenSetup(SpaceState.NoProfile))
+        assertFalse(SpaceStateRepository.shouldOpenSetup(null))
+        assertFalse(SpaceStateRepository.shouldOpenSetup(SpaceState.OrphanProfile(22)))
+        assertFalse(SpaceStateRepository.shouldOpenSetup(SpaceState.HalfProvisioned(22, resumable = true)))
+    }
+
+    @Test fun `canonical space states map to truthful home health`() {
+        assertEquals(SpaceHealth.NotCreated, spaceHealth(SpaceState.NoProfile))
+        assertEquals(SpaceHealth.Provisioning, spaceHealth(SpaceState.Provisioning(22)))
+        assertEquals(SpaceHealth.NeedsRepair, spaceHealth(SpaceState.HalfProvisioned(22, true)))
+        assertEquals(SpaceHealth.NeedsRepair, spaceHealth(SpaceState.OrphanProfile(22)))
+        assertEquals(SpaceHealth.NeedsRepair, spaceHealth(SpaceState.BridgeDown(22, SpaceBridgeCause.Failed)))
+        assertEquals(SpaceHealth.Locked, spaceHealth(SpaceState.Locked(22)))
+        assertEquals(SpaceHealth.Suspended, spaceHealth(SpaceState.Inactive(22)))
+        assertEquals(SpaceHealth.Normal, spaceHealth(SpaceState.Healthy(22)))
+    }
+
+    @Test fun `existing abnormal profile is never labelled not created`() {
+        assertEquals(
+            R.string.lz_home_tag_needsrepair,
+            profileStatusLabelRes(SpaceState.HalfProvisioned(22, resumable = true)),
+        )
+        assertEquals(
+            R.string.lz_home_tag_needsrepair,
+            profileStatusLabelRes(SpaceState.OrphanProfile(22)),
+        )
+        assertEquals(R.string.lz_home_profile_not_created, profileStatusLabelRes(SpaceState.NoProfile))
+    }
 
     // Fake string resolver maps the lz_home_ resource IDs that drive the
     // tags asserted below to their Chinese values; unknown IDs fall back to "".
@@ -87,7 +122,7 @@ class HomeStateTest {
     }
 
     @Test
-    fun `Checking - showRepair true and level Warn`() {
+    fun `Checking - non actionable and level Neutral`() {
         val model = mapHomeState(
             health = SpaceHealth.Checking,
             mainCount = 4,
@@ -98,8 +133,8 @@ class HomeStateTest {
             deviceText = "Xiaomi arm64-v8a",
             resolve = resolve,
         )
-        assertTrue("Checking should keep the settings affordance visible", model.showRepair)
-        assertEquals(PrismLevel.Warn, model.level)
+        assertFalse("Checking must not offer a state-changing action", model.showRepair)
+        assertEquals(PrismLevel.Neutral, model.level)
         assertEquals("检查中", model.tag)
         assertEquals("打开设置", model.primaryLabel)
     }

@@ -14,6 +14,8 @@ data class TransferRecord(
     val location: String,   // human-readable destination, e.g. "下载/PrismSpace"
     val isImage: Boolean,
     val timeMillis: Long,
+    /** Null for records written before bidirectional in-app transfer was introduced. */
+    val direction: TransferDirection? = null,
 )
 
 /**
@@ -24,22 +26,9 @@ data class TransferRecord(
 fun TransferRecord.displayTitle(): String =
     if (! packageName.isNullOrBlank()) "$name-$packageName" else name
 
-data class TransferRecordUiActions(
-    val canOpenWithFileManager: Boolean,
-    val canInstall: Boolean,
-)
-
-object TransferRecordActions {
-    fun forRecord(record: TransferRecord, hasInstallableApkSet: Boolean): TransferRecordUiActions =
-        TransferRecordUiActions(
-            canOpenWithFileManager = true,
-            canInstall = !record.packageName.isNullOrBlank() && hasInstallableApkSet,
-        )
-}
-
 /**
- * Persists the file-transfer history per user (SharedPreferences-backed, mirrors [ExperimentalFlags]
- * / SharedPrefsModeStore). The receiver records here when a share is imported into this space; the
+ * Persists the file-transfer history per user in credential-protected SharedPreferences. The receiver
+ * records here when a share is imported into this space; the
  * Files page reads it. Per-user by construction: each profile's PrismSpace has its own prefs, so the
  * main space shows main imports and the dual space shows dual imports.
  */
@@ -48,7 +37,14 @@ object TransferHistoryStore {
     private const val KEY = "prism_transfer_history"
     private const val MAX = 50
 
-    fun record(context: Context, name: String, location: String, isImage: Boolean, packageName: String? = null) {
+    fun record(
+        context: Context,
+        name: String,
+        location: String,
+        isImage: Boolean,
+        packageName: String? = null,
+        direction: TransferDirection? = null,
+    ) {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
         val arr = runCatching { JSONArray(prefs.getString(KEY, "[]")) }.getOrDefault(JSONArray())
         val entry = JSONObject().apply {
@@ -57,15 +53,16 @@ object TransferHistoryStore {
             put("location", location)
             put("isImage", isImage)
             put("time", System.currentTimeMillis())
+            direction?.let { put("direction", it.wireValue) }
         }
         // newest first, capped
         val out = JSONArray().apply { put(entry) }
         for (i in 0 until minOf(arr.length(), MAX - 1)) out.put(arr.get(i))
-        // commit() (synchronous), NOT apply(): the dual-space record is written inside a Shuttle
-        // closure running in the profile process, which can be torn down immediately after the
-        // closure returns — an async apply() may never flush, so the record silently vanishes.
+        // commit() (synchronous), NOT apply(): the dual-space record is written inside a bridge
+        // command handler in the profile process, which can be torn down immediately after the
+        // command returns — an async apply() may never flush, so the record silently vanishes.
         prefs.edit().putString(KEY, out.toString()).commit()
-        DiagnosticLog.i(TAG, "transfer recorded name=$name pkg=${packageName ?: ""} location=$location isImage=$isImage")
+        DiagnosticLog.i(TAG, "transfer recorded name=$name pkg=${packageName ?: ""} location=$location isImage=$isImage direction=${direction?.wireValue}")
     }
 
     fun load(context: Context): List<TransferRecord> {
@@ -81,6 +78,7 @@ object TransferHistoryStore {
                         location = o.optString("location", ""),
                         isImage = o.optBoolean("isImage", false),
                         timeMillis = o.optLong("time", 0L),
+                        direction = TransferDirection.fromWireValue(o.optString("direction", "")),
                     )
                 )
             }

@@ -31,4 +31,15 @@ class ImportToSpaceDestinationTest {
 
         assertEquals("com.example.provider", location)
     }
+
+    @Test fun sourceAuthorityFallbackIsLimitedToOneVerifiedPairedUser() {
+        assertEquals(
+            "18@com.android.fileexplorer.myprovider",
+            SourceUriPlanner.qualifiedAuthority("com.android.fileexplorer.myprovider", 18),
+        )
+        assertEquals(null, SourceUriPlanner.qualifiedAuthority("18@com.android.fileexplorer.myprovider", 0))
+        assertEquals(null, SourceUriPlanner.qualifiedAuthority("com.example.provider", null))
+        assertEquals(null, SourceUriPlanner.qualifiedAuthority("com.example.provider", -1))
+        assertEquals(null, SourceUriPlanner.qualifiedAuthority(null, 18))
+    }
 }

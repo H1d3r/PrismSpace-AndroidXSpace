@@ -3,18 +3,14 @@ package com.yzddmr6.prismspace;
 import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED;
 import static android.content.pm.PackageManager.DONT_KILL_APP;
 
-import android.app.SearchManager;
 import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
-import android.content.pm.LauncherActivityInfo;
-import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.os.Bundle;
-import android.os.UserHandle;
 import android.util.Log;
 
 import androidx.core.view.WindowCompat;
@@ -25,9 +21,9 @@ import com.yzddmr6.prismspace.analytics.Analytics.Property;
 import com.yzddmr6.prismspace.mobile.BuildConfig;
 import com.yzddmr6.prismspace.mobile.R;
 import com.yzddmr6.prismspace.prism.compose.host.PrismComposeHostFragment;
-import com.yzddmr6.prismspace.prism.compose.nav.AppLaunchSignals;
+import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository;
 import com.yzddmr6.prismspace.setup.SetupActivity;
-import com.yzddmr6.prismspace.util.CallerAwareActivity;
+import com.yzddmr6.prismspace.space.SpaceState;
 import com.yzddmr6.prismspace.util.DeviceAdmins;
 import com.yzddmr6.prismspace.util.DevicePolicies;
 import com.yzddmr6.prismspace.util.Loopers;
@@ -54,39 +50,47 @@ public class MainActivity extends FragmentActivity {
 				} else startSetupWizard();
 			return;
 		}
-		Users.refreshUsers(this);     // Managed-profile create/remove can happen outside our task; never trust a hot-process cache at the entry point.
-		final String caller = CallerAwareActivity.getCallingPackage(this);
-		if (Modules.MODULE_ENGINE.equals(caller)) Users.refreshUsers(this);     // Possibly started by PrismProvisioning, refresh user state as profile or its owner may be changed.
-
 		mIsDeviceOwner = new DevicePolicies(this).isProfileOrDeviceOwnerOnCallingUser();
+		// Restored fragments attach during onStart. Their container must exist before asynchronous
+		// profile discovery returns, otherwise a theme/language recreation leaves an unattached view.
+		WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+		getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
+		getWindow().setNavigationBarColor(android.graphics.Color.TRANSPARENT);
+		setContentView(R.layout.activity_main);
+		continueParentStartup(savedInstanceState);
+	}
+
+	private void continueParentStartup(final Bundle savedInstanceState) {
 		if (mIsDeviceOwner) {
 			startMainUi(savedInstanceState);	// As device owner, always show main UI.
 			return;
 		}
-		if (! Users.hasProfile()) {					// Nothing setup yet
-			Log.i(TAG, "Profile not setup yet");
-			startSetupWizard();
-			return;
-		}
-		final UserHandle profile = Users.profile;
+		resolveInitialRoute(savedInstanceState);
+	}
 
-		final LauncherApps launcher_apps = (LauncherApps) getSystemService(Context.LAUNCHER_APPS_SERVICE);
-		final List<LauncherActivityInfo> our_activities_in_launcher;
-		if (launcher_apps != null && ! (our_activities_in_launcher = launcher_apps.getActivityList(getPackageName(), profile)).isEmpty()
-				&& our_activities_in_launcher.get(0).getComponentName().getClassName().equals(MainActivity.class.getName())) {
-			// Main activity is left enabled, probably due to pending post-provisioning in manual setup. Some domestic ROMs may block implicit broadcast, causing ACTION_USER_INITIALIZE being dropped.
-			Analytics.$().event("profile_provision_leftover").send();
-			Log.w(TAG, "Setup in PrismSpace is not complete, continue it now.");
+	private void resolveInitialRoute(final Bundle savedInstanceState) {
+		new Thread(() -> {
+			SpaceState resolved;
 			try {
-				launcher_apps.startMainActivity(our_activities_in_launcher.get(0).getComponentName(), profile, null, null);
-			} catch (final RuntimeException e) {
-				Analytics.$().logAndReport(TAG, "Error starting self in profile " + Users.toId(profile), e);
-				startSetupWizard();
+				resolved = new SpaceStateRepository(getApplicationContext())
+						.awaitInitialStateBlocking(INITIAL_STATE_TIMEOUT_MS);
+			} catch (final RuntimeException error) {
+				Log.e(TAG, "Initial space-state collection failed", error);
+				resolved = null;
 			}
-			finish();
-			return;
-		}
-		startMainUi(savedInstanceState);
+			final SpaceState state = resolved;
+			runOnUiThread(() -> {
+				if (isFinishing() || isDestroyed()) return;
+				// Only a confirmed absence enters setup. Unknown/failed states stay on the repair-capable UI.
+				if (SpaceStateRepository.shouldOpenSetup(state)) {
+					Log.i(TAG, "Profile not setup yet");
+					startSetupWizard();
+				} else {
+					if (state == null) Log.w(TAG, "Initial space-state collection timed out; opening main UI");
+					startMainUi(savedInstanceState);
+				}
+			});
+		}, "Prism-initial-space-state").start();
 	}
 
 	@Override protected void onNewIntent(final Intent intent) {
@@ -95,6 +99,15 @@ public class MainActivity extends FragmentActivity {
 		// Launcher taps on a running task land here. Do NOT signal reset-to-Home — that would
 		// override the last visited tab. The signal only fires on fresh MainActivity creation
 		// (see startMainUi below, gated on savedInstanceState == null).
+	}
+
+	@Override protected void onPostResume() {
+		super.onPostResume();
+		if (! mMainUiPending) return;
+		final Bundle savedInstanceState = mPendingMainUiState;
+		mMainUiPending = false;
+		mPendingMainUiState = null;
+		startMainUi(savedInstanceState);
 	}
 
 	private void onCreateInProfile() {
@@ -123,23 +136,19 @@ public class MainActivity extends FragmentActivity {
 	}
 
 	private void startMainUi(final Bundle savedInstanceState) {
-		WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
-		getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
-		getWindow().setNavigationBarColor(android.graphics.Color.TRANSPARENT);
-		setContentView(R.layout.activity_main);
-		if (savedInstanceState != null) return;
-		// Fresh MainActivity creation (cold start, force-kill restart). System-killed restoration
-		// has savedInstanceState != null and returns above, preserving the last visited tab.
-		AppLaunchSignals.INSTANCE.signalResetToHome();
-		final PrismComposeHostFragment fragment = new PrismComposeHostFragment();
-		final Intent intent = getIntent();
-		if (Intent.ACTION_SEARCH.equals(intent.getAction())) {
-			final Bundle arguments = new Bundle();
-			arguments.putString(SearchManager.QUERY, intent.getStringExtra(SearchManager.QUERY));
-			final UserHandle user = intent.getParcelableExtra(Intent.EXTRA_USER);
-			if (user != null) arguments.putParcelable(Intent.EXTRA_USER, user);
-			fragment.setArguments(arguments);
+		if (mMainUiStarted) return;
+		// Initial routing runs off-main. A locked screen or a quick background transition can save
+		// FragmentManager state before that result arrives; committing then crashes instead of merely
+		// waiting for the Activity to become interactive again. onPostResume is the first lifecycle
+		// callback where FragmentManager has cleared its saved-state guard.
+		if (getSupportFragmentManager().isStateSaved()) {
+			mMainUiPending = true;
+			mPendingMainUiState = savedInstanceState;
+			return;
 		}
+		mMainUiStarted = true;
+		if (getSupportFragmentManager().findFragmentById(R.id.container) != null) return;
+		final PrismComposeHostFragment fragment = new PrismComposeHostFragment();
 		getSupportFragmentManager().beginTransaction().replace(R.id.container, fragment).commit();
 		performOverallAnalyticsIfNeeded();
 	}
@@ -160,6 +169,10 @@ public class MainActivity extends FragmentActivity {
 	}
 
 	private boolean mIsDeviceOwner;
+	private boolean mMainUiStarted;
+	private boolean mMainUiPending;
+	private Bundle mPendingMainUiState;
 
+	private static final long INITIAL_STATE_TIMEOUT_MS = 5_000L;
 	private static final String TAG = "Prism.Main";
 }

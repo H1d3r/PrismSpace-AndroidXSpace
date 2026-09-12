@@ -3,6 +3,7 @@ package com.yzddmr6.prismspace.util;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageInfo;
 
 import org.junit.Test;
 
@@ -50,6 +51,34 @@ public class AppsTest {
 		when(packageManager.getApplicationLabel(second)).thenThrow(new RuntimeException("missing label"));
 
 		assertEquals("pkg.one, pkg.two", Apps.of(context).getAppNames(Arrays.asList("pkg.one", "pkg.two"), ", "));
+	}
+
+	@Test public void appInfoRetriesWithoutMatchAnyUserAfterSecurityException() throws Exception {
+		final Context context = mock(Context.class);
+		final PackageManager packageManager = mock(PackageManager.class);
+		final ApplicationInfo expected = appInfo("pkg");
+		when(context.getPackageManager()).thenReturn(packageManager);
+		when(context.checkPermission(eq(Permissions.INTERACT_ACROSS_USERS), anyInt(), anyInt()))
+				.thenReturn(PackageManager.PERMISSION_GRANTED);
+		when(packageManager.getApplicationInfo(eq("pkg"), anyInt()))
+				.thenThrow(new SecurityException("cross-user denied"))
+				.thenReturn(expected);
+
+		assertEquals(expected, Apps.of(context).getAppInfo("pkg"));
+	}
+
+	@Test public void packageInfoRetriesWithoutMatchAnyUserAfterSecurityException() throws Exception {
+		final Context context = mock(Context.class);
+		final PackageManager packageManager = mock(PackageManager.class);
+		final PackageInfo expected = new PackageInfo();
+		when(context.getPackageManager()).thenReturn(packageManager);
+		when(context.checkPermission(eq(Permissions.INTERACT_ACROSS_USERS), anyInt(), anyInt()))
+				.thenReturn(PackageManager.PERMISSION_GRANTED);
+		when(packageManager.getPackageInfo(eq("pkg"), anyInt()))
+				.thenThrow(new SecurityException("cross-user denied"))
+				.thenReturn(expected);
+
+		assertEquals(expected, Apps.of(context).getPackageInfo("pkg", 0));
 	}
 
 	private static ApplicationInfo appInfo(final String pkg) {

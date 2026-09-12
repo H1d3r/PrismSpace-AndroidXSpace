@@ -8,23 +8,45 @@
     <string name="lz_set_update_title">New version %1$s available</string>
     <string name="lz_set_update_download">Download</string>
     <string name="lz_set_update_later">Later</string>
-    <string name="lz_set_suspend_title">Freeze entire space</string>
-    <string name="lz_set_suspend_summary">Freezes all your clones at once and stops their background processes; toggle off to unfreeze — no data loss</string>
+    <string name="lz_set_suspend_title">Pause all clones</string>
+    <string name="lz_set_suspend_summary">Clones cannot open while paused; apps and data are preserved</string>
+    <string name="lz_set_suspend_state_frozen">All eligible clones are paused. Turn this off to resume them.</string>
+    <string name="lz_set_suspend_state_mixed">Some clones are paused. Turn this on to pause all eligible clones.</string>
+    <string name="lz_set_suspend_state_unknown">Pause state is unavailable. Try refreshing.</string>
     <string name="lz_set_repair_title">Repair dual space</string>
     <string name="lz_set_repair_summary">Rebuilds the work profile connection; clones will close during the process</string>
     <string name="lz_set_create_title">Create dual space</string>
     <string name="lz_set_create_summary">Create a new Android work profile for cloned apps</string>
+    <string name="lz_set_state_unavailable_title">Space status unavailable</string>
+    <string name="lz_set_state_unavailable_summary">PrismSpace could not confirm current profile facts. No changes can be made until refresh succeeds.</string>
+    <string name="lz_set_orphan_title">Open Android profile settings</string>
+    <string name="lz_set_orphan_summary">This work profile is not owned by PrismSpace and will not be modified here.</string>
+    <string name="lz_set_provisioning_title">Setup in progress</string>
+    <string name="lz_set_provisioning_summary">Finish the visible Android work-profile setup before continuing.</string>
+    <string name="lz_set_resume_title">Resume dual space</string>
+    <string name="lz_set_resume_summary">Ask Android to turn off quiet mode for this work profile.</string>
+    <string name="lz_set_unlock_title">Unlock dual space</string>
+    <string name="lz_set_unlock_summary">Open the dual-space entry so Android can show the work-profile credential challenge.</string>
+    <string name="lz_set_reconnect_title">Reconnect dual space</string>
+    <string name="lz_set_reconnect_permission_denied">The cross-profile permission was denied. Open the dual-space entry to restore the connection.</string>
+    <string name="lz_set_reconnect_profile_unavailable">The profile is not currently reachable. Resume or unlock it, then reconnect.</string>
+    <string name="lz_set_reconnect_provider_unavailable">The profile bridge provider is unavailable. Open the dual-space entry to re-establish it.</string>
+    <string name="lz_set_reconnect_timed_out">The profile bridge timed out. Open the dual-space entry and retry.</string>
+    <string name="lz_set_reconnect_failed">The profile bridge failed. Open the dual-space entry to diagnose and reconnect it.</string>
+    <string name="lz_set_reconnect_not_checked">The profile bridge has not completed a successful check. Open the dual-space entry and retry.</string>
+    <string name="lz_set_ready_title">Dual space ready</string>
+    <string name="lz_set_ready_summary">Tap to view clone count and space details.</string>
     <string name="lz_set_delete_space_title">Delete dual space</string>
     <string name="lz_set_delete_space_summary">Permanently removes the dual space and all clone data inside it</string>
-    <string name="lz_set_export_logs_title">Export diagnostic logs</string>
-    <string name="lz_set_export_logs_summary">Exports a detailed 2 MB rolling log and current system snapshot</string>
+    <string name="lz_set_export_logs_title">Export diagnostics</string>
+    <string name="lz_set_export_logs_summary">Includes logs and device status, without file contents</string>
     <string name="lz_set_feedback_title">Feedback and discussion</string>
     <string name="lz_set_feedback_summary">For feedback and discussion, search WeChat for “%1$s”.</string>
     <string name="lz_set_feedback_account">熵减矩阵</string>
     <string name="lz_set_feedback_copy">Copy</string>
     <string name="lz_set_feedback_copied">WeChat account name copied</string>
-    <string name="lz_set_about_title">About PrismSpace (棱镜空间)</string>
-    <string name="lz_set_about_summary">Project intro</string>
+    <string name="lz_set_about_title">About PrismSpace</string>
+    <string name="lz_set_about_summary">Project, version and open-source information</string>
     <string name="lz_set_cancel">Cancel</string>
 
     <!-- ModeGuideSheet.kt -->
@@ -32,12 +54,24 @@
     <string name="lz_set_mode_normal_summary">No extra authorization needed; core cloning, launch, freeze and file transfer all work</string>
     <string name="lz_set_mode_shizuku_summary">Enhances cloning and cross-user operations; requires a Shizuku service connection</string>
     <string name="lz_set_mode_root_summary">Advanced repair and diagnostics; requires Root permission</string>
-    <string name="lz_set_shizuku_intro">Shizuku lets PrismSpace use ADB privileges to enhance cloning and cross-user operations.</string>
-    <string name="lz_set_shizuku_step1">Step 1  Install and open the Shizuku app.</string>
-    <string name="lz_set_shizuku_step2">Step 2  Pair via Wireless debugging, or connect a computer and run ADB to start Shizuku; if you have Root you can start it from within Shizuku with one tap.</string>
-    <string name="lz_set_shizuku_step3">Step 3  Return to this page and tap the button below to check and authorize the connection.</string>
-    <string name="lz_set_shizuku_check_button">Check Shizuku connection</string>
+    <string name="lz_set_shizuku_intro">Shizuku or Sui lets PrismSpace use privileged system APIs to enhance cloning and cross-user operations.</string>
+    <string name="lz_set_shizuku_step1">Step 1  Start Shizuku, or install and enable Sui in a supported Root environment.</string>
+    <string name="lz_set_shizuku_step2">Step 2  For Shizuku, pair through Wireless debugging or start it with ADB/Root. Sui is detected automatically after it is enabled.</string>
+    <string name="lz_set_shizuku_step3">Step 3  Return here and tap below to check the transport and grant authorization when requested.</string>
+    <string name="lz_set_shizuku_check_button">Check Shizuku / Sui</string>
 
     <!-- AboutSheet.kt -->
     <string name="lz_set_about_intro">A dual-space manager for Android. Built on top of the system work profile, it provides isolated runtime environments so the same app can run with multiple accounts in parallel, with data fully separated.</string>
+    <!-- Settings groups -->
+    <string name="lz_set_group_space">Dual space</string>
+    <string name="lz_set_group_clone_method">How clones are added</string>
+    <string name="lz_set_group_general">General</string>
+    <string name="lz_set_group_support">Support</string>
+    <string name="lz_set_group_experimental">Experimental</string>
+    <string name="lz_set_group_danger">Danger zone</string>
+    <string name="lz_set_system_apps_summary">View or add system apps in the dual space</string>
+    <string name="lz_set_multi_space_title">Multiple dual spaces</string>
+    <string name="lz_set_multi_space_summary">Experimental · depends on the system. If the device already has another dual space, PrismSpace recognizes it automatically.</string>
+    <string name="lz_set_suspend_disabled_locked">Unlock the dual space before changing this</string>
+    <string name="lz_set_suspend_disabled_bridge">Reconnect the dual space before changing this</string>
 </resources>

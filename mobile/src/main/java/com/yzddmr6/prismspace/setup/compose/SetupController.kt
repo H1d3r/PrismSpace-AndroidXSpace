@@ -7,12 +7,19 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResultLauncher
 import androidx.annotation.StringRes
+import androidx.lifecycle.lifecycleScope
+import com.yzddmr6.prismspace.MainActivity
+import com.yzddmr6.prismspace.analytics.DiagnosticLog
 import com.yzddmr6.prismspace.help.PrismHelp
 import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.setup.PrismSetup
 import com.yzddmr6.prismspace.setup.SetupViewModel
 import com.yzddmr6.prismspace.util.Activities
+import com.yzddmr6.prismspace.prism.compose.space.SpaceProvisioningTracker
+import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository
+import com.yzddmr6.prismspace.space.SpaceState
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
 /**
  * Activity-scoped bridge between Compose UI and the [SetupViewModel] state machine.
@@ -34,12 +41,44 @@ class SetupController(
 
     /** Primary CTA tapped (welcome state or retry-from-error). */
     fun onPrimaryCta() {
-        val errorVm = SetupViewModel.checkManagedProvisioningPrerequisites(activity, stateVm.incompleteSetupAcked)
-        if (errorVm != null) {
-            stateVm.setUiState(errorVm.toErrorState())
-            return
+        if (stateVm.provisioningLaunched || stateVm.uiState.value is SetupUiState.Checking) return
+        stateVm.setUiState(SetupUiState.Checking)
+        activity.lifecycleScope.launch {
+            when (SpaceStateRepository(activity.applicationContext).preflightCreate()) {
+                null -> {
+                    stateVm.setUiState(SetupUiState.Error(
+                        messageRes = R.string.lz_setvm_state_refresh_failed,
+                        messageParams = null,
+                        extraActionRes = null,
+                    ))
+                    return@launch
+                }
+                SpaceState.NoProfile -> Unit
+                is SpaceState.OrphanProfile -> {
+                    stateVm.setUiState(SetupUiState.Error(
+                        messageRes = R.string.setup_error_orphan_profile,
+                        messageParams = null,
+                        extraActionRes = R.string.button_setup_help,
+                    ))
+                    return@launch
+                }
+                else -> {
+                    stateVm.setUiState(SetupUiState.Error(
+                        messageRes = R.string.setup_error_existing_space_state,
+                        messageParams = null,
+                        extraActionRes = R.string.button_setup_help,
+                    ))
+                    return@launch
+                }
+            }
+            val errorVm = SetupViewModel.checkManagedProvisioningPrerequisites(activity, stateVm.incompleteSetupAcked)
+            if (errorVm != null) {
+                stateVm.setUiState(errorVm.toErrorState())
+                return@launch
+            }
+            stateVm.setUiState(SetupUiState.Welcome)
+            launchManagedProvisioning()
         }
-        launchManagedProvisioning()
     }
 
     /** Extra action button (from error state) tapped. */
@@ -52,6 +91,10 @@ class SetupController(
             }
             R.string.button_setup_space_with_root -> {
                 PrismSetup.requestProfileOwnerSetupWithRoot(Activities.findActivityFrom(activity))
+            }
+            R.string.button_return_to_prismspace -> {
+                activity.startActivity(Intent(activity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
+                activity.finish()
             }
             else -> Log.w(TAG, "Unhandled extra action: $extraActionRes")
         }
@@ -70,8 +113,12 @@ class SetupController(
     private fun launchManagedProvisioning() {
         val intent = SetupViewModel.buildManagedProfileProvisioningIntentPublic(activity)
         try {
+            stateVm.beginProvisioning()
+            SpaceProvisioningTracker.markStarted()
             provisionLauncher.launch(intent)
         } catch (e: ActivityNotFoundException) {
+            stateVm.consumeProvisioningLaunched()
+            SpaceProvisioningTracker.clear()
             Log.w(TAG, "Managed provisioning activity not found", e)
             stateVm.setUiState(SetupUiState.Error(
                 messageRes = R.string.setup_error_missing_managed_provisioning,
@@ -89,30 +136,89 @@ class SetupController(
          * ActivityResultLauncher (rebuilt on every recreate) does not need to hold a
          * reference to a stale Controller — it dispatches directly into the retained VM.
          */
-        @JvmStatic fun handleProvisionResult(activity: Activity, vm: SetupStateViewModel, resultCode: Int) {
-            when (resultCode) {
-                Activity.RESULT_OK -> {
-                    Log.i(TAG, "Managed provisioning finished — closing setup activity.")
-                    activity.finish()
+        @JvmStatic fun handleProvisionResult(activity: ComponentActivity, vm: SetupStateViewModel, resultCode: Int) {
+            activity.lifecycleScope.launch {
+                val repository = SpaceStateRepository(activity.applicationContext)
+                val refreshed = repository.refresh("setup_result:$resultCode")
+                val state = repository.currentState().takeIf { refreshed }
+                when (setupCompletionAction(resultCode, state)) {
+                    SetupCompletionAction.Finish -> finishSuccessfulProvisioning(activity, vm, "activity_result")
+                    SetupCompletionAction.ShowCanceled -> {
+                        vm.consumeProvisioningLaunched()
+                        SpaceProvisioningTracker.clear()
+                        DiagnosticLog.i(TAG, "Managed provisioning canceled with fresh state=$state")
+                        vm.setUiState(SetupUiState.Error(
+                            messageRes = R.string.setup_solution_for_cancelled_provision,
+                            messageParams = null,
+                            extraActionRes = R.string.button_setup_space_with_root,
+                        ))
+                    }
+                    SetupCompletionAction.WaitForHealth -> {
+                        vm.setUiState(SetupUiState.Checking)
+                        DiagnosticLog.i(
+                            TAG,
+                            "Managed provisioning result=$resultCode state=$state; waiting for healthy facts",
+                        )
+                    }
                 }
-                Activity.RESULT_CANCELED -> {
-                    Log.i(TAG, "Managed provisioning was cancelled — show cancel recovery options.")
-                    vm.setUiState(SetupUiState.Error(
-                        messageRes = R.string.setup_solution_for_cancelled_provision,
-                        messageParams = null,
-                        extraActionRes = R.string.button_setup_space_with_root,
-                    ))
-                }
-                else -> Log.w(TAG, "Unexpected provision resultCode=$resultCode")
             }
         }
+
+        @JvmStatic fun finishSuccessfulProvisioning(
+            activity: Activity,
+            vm: SetupStateViewModel,
+            reason: String,
+        ): Boolean {
+            if (!vm.consumeProvisioningLaunched()) return false
+            SpaceProvisioningTracker.markReturnedSuccess()
+            DiagnosticLog.i(TAG, "Managed provisioning healthy reason=$reason; opening main activity")
+            activity.startActivity(Intent(activity, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            })
+            activity.finish()
+            return true
+        }
+
+        @JvmStatic fun finishProvisioningConvergenceTimeout(
+            vm: SetupStateViewModel,
+        ): Boolean {
+            if (!vm.consumeProvisioningLaunched()) return false
+            SpaceProvisioningTracker.clear()
+            DiagnosticLog.w(TAG, "Managed provisioning did not converge to healthy before deadline")
+            vm.setUiState(SetupUiState.Error(
+                messageRes = R.string.setup_error_provisioning_not_healthy,
+                messageParams = null,
+                extraActionRes = R.string.button_return_to_prismspace,
+            ))
+            return true
+        }
     }
+}
+
+internal enum class SetupCompletionAction { Finish, ShowCanceled, WaitForHealth }
+
+internal fun setupCompletionAction(resultCode: Int, state: SpaceState?): SetupCompletionAction = when {
+    state is SpaceState.Healthy -> SetupCompletionAction.Finish
+    resultCode == Activity.RESULT_CANCELED && state == SpaceState.NoProfile -> SetupCompletionAction.ShowCanceled
+    else -> SetupCompletionAction.WaitForHealth
+}
+
+internal enum class SetupConvergenceAction { Finish, Wait, Recover }
+
+internal fun setupConvergenceAction(snapshot: com.yzddmr6.prismspace.prism.compose.space.SpaceSnapshot, remainingMs: Long) = when {
+    snapshot is com.yzddmr6.prismspace.prism.compose.space.SpaceSnapshot.Loaded && snapshot.state is SpaceState.Healthy ->
+        SetupConvergenceAction.Finish
+    remainingMs <= 0L -> SetupConvergenceAction.Recover
+    else -> SetupConvergenceAction.Wait
 }
 
 /** Compose-friendly UI state derived from [SetupViewModel]. */
 sealed interface SetupUiState {
     /** Initial welcome screen — guided install pitch. */
     data object Welcome : SetupUiState
+
+    /** The create button is waiting for the one allowed fresh state preflight. */
+    data object Checking : SetupUiState
 
     /** Error pane shown when prerequisites fail or provisioning is cancelled. */
     data class Error(

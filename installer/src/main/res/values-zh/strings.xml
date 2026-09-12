@@ -32,5 +32,5 @@
     <string name="toast_split_apk_clone_fallback_warning">此应用含有附加组件，可能无法以这种方式正常复制。如果遇到故障，请尝试重新从应用市场安装。</string>
 
     <string name="prompt_miui_optimization">可能是“MIUI 优化”导致（可在“系统设置 - 开发者选项”中关闭）</string>
-    <string name="dialog_clone_no_installer_explanation">当前棱镜空间构建无法通过普通安装路径在系统应用商店之外安装或复制应用。请先在主空间安装目标应用后再次复制，或在可用时启用 Shizuku/ADB 模式。</string>
+    <string name="dialog_clone_no_installer_explanation">当前 PrismSpace 构建无法通过普通安装路径在系统应用商店之外安装或复制应用。请先在主空间安装目标应用后再次复制，或在可用时启用 Shizuku/ADB 模式。</string>
 </resources>

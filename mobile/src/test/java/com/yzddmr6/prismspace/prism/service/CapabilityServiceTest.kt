@@ -14,7 +14,6 @@ class CapabilityServiceTest {
 
         val disconnected = service.buildState(
             profileOwner = true,
-            shizukuAvailable = false,
             shizukuReady = false,
             adbReady = false,
             rootDetected = false,
@@ -22,7 +21,6 @@ class CapabilityServiceTest {
         )
         val waitingAuthorization = service.buildState(
             profileOwner = true,
-            shizukuAvailable = true,
             shizukuReady = false,
             adbReady = false,
             rootDetected = false,
@@ -30,22 +28,20 @@ class CapabilityServiceTest {
         )
         val ready = service.buildState(
             profileOwner = true,
-            shizukuAvailable = true,
             shizukuReady = true,
             adbReady = false,
             rootDetected = false,
             rootEnabled = false,
         )
 
-        assertEquals(CapabilityAvailability.NeedsSetup("Shizuku 未连接"), disconnected.shizuku)
-        assertEquals(CapabilityAvailability.NeedsSetup("Shizuku 等待授权"), waitingAuthorization.shizuku)
+        assertEquals(CapabilityAvailability.NeedsSetup, disconnected.shizuku)
+        assertEquals(CapabilityAvailability.NeedsSetup, waitingAuthorization.shizuku)
         assertEquals(CapabilityAvailability.Available, ready.shizuku)
     }
 
     @Test fun adbReadyUnlocksEnhancedPolicyActionsWithoutShizukuOrRoot() {
         val state = CapabilityService().buildState(
             profileOwner = true,
-            shizukuAvailable = false,
             shizukuReady = false,
             adbReady = true,
             rootDetected = false,
@@ -60,7 +56,6 @@ class CapabilityServiceTest {
     @Test fun coreDualOpenDoesNotDependOnShizukuAdbOrRoot() {
         val state = CapabilityService().buildState(
             profileOwner = true,
-            shizukuAvailable = false,
             shizukuReady = false,
             adbReady = false,
             rootDetected = false,

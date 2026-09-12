@@ -2,7 +2,6 @@ package com.yzddmr6.prismspace.prism.model
 
 import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.prism.compose.vm.StringResolver
-import com.yzddmr6.prismspace.prism.compose.vm.zhFallback
 
 data class PrismSettingsModeState(
     val normal: PrismModeCard,
@@ -13,7 +12,7 @@ data class PrismSettingsModeState(
         fun from(
             shizuku: PrismShizukuAdbStatus,
             root: PrismRootStatus,
-            res: StringResolver = zhFallback,
+            res: StringResolver,
         ): PrismSettingsModeState = PrismSettingsModeState(
             normal = PrismModeCard(
                 title = res(R.string.lz_vm_mode_normal_title, emptyArray()),
@@ -57,6 +56,7 @@ enum class PrismShizukuAdbStatus(val labelRes: Int) {
 
 enum class PrismRootStatus(val labelRes: Int) {
     NotDetected(R.string.lz_vm_root_status_not_detected),
+    Unavailable(R.string.lz_vm_root_status_unavailable),
     AvailableButDisabled(R.string.lz_vm_root_status_available_disabled),
     Enabled(R.string.lz_vm_root_status_enabled),
 }

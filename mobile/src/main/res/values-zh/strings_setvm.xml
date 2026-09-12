@@ -3,13 +3,15 @@
     <!-- SettingsViewModel: mapSettingsUiModel mode card -->
     <string name="lz_setvm_mode_title">当前模式</string>
     <string name="lz_setvm_mode_body_not_created">双开空间未创建，请先完成初始设置。</string>
-    <string name="lz_setvm_mode_body_shizuku">Shizuku 模式可用，增强能力已启用。</string>
+    <string name="lz_setvm_mode_body_shizuku">Shizuku/Sui 模式可用，增强能力已启用。</string>
+    <string name="lz_setvm_mode_body_root">Root 模式当前可用，可执行增强操作。</string>
+    <string name="lz_setvm_mode_body_preference_unavailable">已选择%1$s，但当前不可用；在语义等价且安全时会改用普通模式。</string>
     <string name="lz_setvm_mode_body_normal">普通模式运行中，核心双开功能可用。</string>
 
     <!-- SettingsViewModel: mode switching feedback -->
     <string name="lz_setvm_switched_normal">已切换到普通模式</string>
     <string name="lz_setvm_shizuku_connected">已连接 Shizuku · 已切换到 Shizuku 模式</string>
-    <string name="lz_setvm_shizuku_not_ready">Shizuku 未就绪，请先启动 Shizuku 服务并授权</string>
+    <string name="lz_setvm_shizuku_not_ready">Shizuku 或 Sui 未就绪，请先启动 Shizuku 或启用 Sui，然后完成授权</string>
     <string name="lz_setvm_root_requesting">正在向系统申请 Root 授权…</string>
     <string name="lz_setvm_root_granted">已获得 Root 授权，已切换到 Root 模式</string>
     <string name="lz_setvm_root_denied">未获得 Root 授权，模式未变更</string>
@@ -37,7 +39,14 @@
     <string name="lz_setvm_profile_activation_failed">Android 未能恢复工作资料</string>
     <string name="lz_setvm_space_already_ready">双开空间已正常，无需修复</string>
     <string name="lz_setvm_bridge_repairing">正在重新连接双开空间…</string>
-    <string name="lz_setvm_bridge_repair_opened_profile">已打开双开空间，请在完成重连后返回棱镜空间重试。</string>
+    <string name="lz_setvm_bridge_repair_opened_profile">已打开双开空间，请在完成重连后返回 PrismSpace 重试。</string>
+    <string name="lz_setvm_unlock_opened_profile">已打开双开空间入口；请完成 Android 工作资料解锁后返回 PrismSpace。</string>
+    <string name="lz_setvm_incomplete_repaired">已启动双开空间修复，正在重新检查状态…</string>
+    <string name="lz_setvm_incomplete_cannot_auto_repair">PrismSpace 无法安全地自动续接这个未完成资料。请删除后重新创建双开空间。</string>
+    <string name="lz_setvm_orphan_profile">该工作资料由 %1$s 管理，而非 PrismSpace。请在 Android 系统设置中移除；PrismSpace 不会删除其他管理器的资料。</string>
+    <string name="lz_setvm_orphan_manager_unknown">未知设备策略控制器</string>
+    <string name="lz_setvm_provisioning_active">双开空间仍在配置中，请保持 Android 创建界面开启。</string>
+    <string name="lz_setvm_state_refresh_failed">无法确认双开空间的最新状态，请稍后重试。未执行任何更改。</string>
 
     <!-- SettingsViewModel: diagnostic report export -->
     <string name="lz_setvm_report_subject">PrismSpace 诊断报告</string>

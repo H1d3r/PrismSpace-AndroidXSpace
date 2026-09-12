@@ -6,17 +6,25 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.LauncherApps
-import android.net.Uri
 import android.os.UserHandle
 import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import com.yzddmr6.prismspace.util.Dialogs
 import com.yzddmr6.prismspace.util.Apps
+import com.yzddmr6.prismspace.analytics.Analytics.Param.CONTENT
 import com.yzddmr6.prismspace.analytics.Analytics.Param.ITEM_CATEGORY
 import com.yzddmr6.prismspace.analytics.Analytics.Param.ITEM_ID
 import com.yzddmr6.prismspace.analytics.analytics
+import com.yzddmr6.prismspace.bridge.BridgeTargets
+import com.yzddmr6.prismspace.bridge.EnsureAppFreeToLaunch
+import com.yzddmr6.prismspace.bridge.EnsureAppHiddenState
+import com.yzddmr6.prismspace.bridge.MarkClonedSystemApp
+import com.yzddmr6.prismspace.bridge.ProfileCommand
+import com.yzddmr6.prismspace.bridge.SetAppFrozen
+import com.yzddmr6.prismspace.bridge.SetPackageSuspended
+import com.yzddmr6.prismspace.bridge.SetPackagesFrozen
+import com.yzddmr6.prismspace.bridge.SetPackagesSuspended
 import com.yzddmr6.prismspace.data.PrismAppInfo
-import com.yzddmr6.prismspace.data.helper.AppStateTrackingHelper
 import com.yzddmr6.prismspace.engine.ClonedHiddenSystemApps
 import com.yzddmr6.prismspace.engine.PrismManager
 import com.yzddmr6.prismspace.engine.LaunchResult
@@ -34,31 +42,46 @@ import com.yzddmr6.prismspace.util.IntentCompat
 import com.yzddmr6.prismspace.util.OwnerUser
 import com.yzddmr6.prismspace.util.ProfileUser
 import com.yzddmr6.prismspace.util.Toasts
-import com.yzddmr6.prismspace.util.Users
+import com.yzddmr6.prismspace.util.Users.Companion.toId
 import org.jetbrains.annotations.NotNull
 
 object PrismAppControl {
 
 	@JvmStatic fun requestRemoval(activity: Activity, app: PrismAppInfo) {
-		analytics().event("action_uninstall").with(ITEM_ID, app.packageName).with(ITEM_CATEGORY, "system").send()
-
+		// Non-system clones are uninstalled only through the profile-routed queue (issue #6): the
+		// old user-0 ACTION_UNINSTALL_PACKAGE + EXTRA_USER path is gone with no fallback. What
+		// remains here is the system-app path, where "removal" means the disable dialog.
+		if (! app.isSystem) return
 		if (! unfreezeIfNeeded(app)) return
 
-		if (app.isSystem) {
-			analytics().event("action_disable_sys_app").with(ITEM_ID, app.packageName).send()
-			if (app.isCritical) Dialogs.buildAlert(activity, R.string.dialog_title_warning, R.string.dialog_critical_app_warning)
-					.withCancelButton().setPositiveButton(R.string.action_continue) { _,_ -> launchSystemAppSettings(app) }.show()
-			else Dialogs.buildAlert(activity, 0, R.string.prompt_disable_sys_app_as_removal)
-					.withCancelButton().setPositiveButton(R.string.action_continue) { _,_ -> launchSystemAppSettings(app) }.show() }
-		else {
-			Activities.startActivity(activity, Intent(Intent.ACTION_UNINSTALL_PACKAGE)
-					.setData(Uri.fromParts("package", app.packageName, null)).putExtra(Intent.EXTRA_USER, app.user))
-			if (! Users.isProfileAvailable(activity, app.user))   // App clone can actually be removed in quiet mode, without callback triggered.
-				if (! activity.isDestroyed) AppStateTrackingHelper.requestSyncWhenResumed(activity, app.packageName, app.user) }
+		analytics().event("action_uninstall").with(ITEM_ID, app.packageName).with(ITEM_CATEGORY, uninstallItemCategory(app.isSystem)).send()
+
+		analytics().event("action_disable_sys_app").with(ITEM_ID, app.packageName).send()
+		if (app.isCritical) Dialogs.buildAlert(activity, R.string.dialog_title_warning, R.string.dialog_critical_app_warning)
+				.withCancelButton().setPositiveButton(R.string.action_continue) { _,_ -> launchSystemAppSettings(app) }.show()
+		else Dialogs.buildAlert(activity, 0, R.string.prompt_disable_sys_app_as_removal)
+				.withCancelButton().setPositiveButton(R.string.action_continue) { _,_ -> launchSystemAppSettings(app) }.show()
+	}
+
+	/** Records a clone-uninstall attempt with the real classification, emitted only after the
+	 *  profile-side launch outcome is known. */
+	@JvmStatic fun logUninstallLaunchOutcome(packageName: String, system: Boolean, launched: Boolean, failureReason: String?) {
+		analytics().event("action_uninstall")
+			.with(ITEM_ID, packageName)
+			.with(ITEM_CATEGORY, uninstallItemCategory(system))
+			.with(CONTENT, uninstallLaunchContent(launched, failureReason))
+			.send()
 	}
 
 	@JvmStatic fun launch(context: Context, app: PrismAppInfo) {
 		analytics().event("action_launch").with(ITEM_ID, app.packageName).send()
+		// System-app search intentionally includes packages without a launcher activity. Never thaw
+		// one of those packages for an action that cannot succeed: doing so changes the user's freeze
+		// state and then reports only a launch failure.
+		if (!app.isLaunchable) {
+			toastLaunch(context, LaunchResult.AppMissing, app.label.toString(), app.packageName)
+			return
+		}
 		// Suspended counts as frozen too (hybrid freeze): ensureAppFreeToLaunch lifts both hide and
 		// suspend, but we must route here when EITHER is set — a suspended app won't launch otherwise.
 		if (app.isHidden || app.isSuspended) unfreezeAndLaunch(context, app)
@@ -71,9 +94,10 @@ object PrismAppControl {
 			context,
 			TAG,
 			"unfreeze before launch pkg=$pkg",
-			target = app.user,
+			target = BridgeTargets.profile(app.user.toId()),
 			timeoutMs = DEFAULT_SYNC_TIMEOUT_MS,
-		) { PrismManager.ensureAppFreeToLaunch(this, pkg) }) {
+			command = EnsureAppFreeToLaunch(pkg),
+		)) {
 			is ProfileBridgeResult.Value -> result.value
 			else -> return toastBridgeFailure(context, result)
 		}
@@ -113,18 +137,17 @@ object PrismAppControl {
 	}
 
 	@JvmStatic fun freeze(app: PrismAppInfo): Boolean {
-		val frozen = runAppControl(app.context(), app.user, "freeze pkg=${app.packageName}") {
-			ensureAppHiddenState(this, app.packageName, true)
-		} ?: false
+		val pkg = app.packageName
+		val frozen = runAppControl(app.context(), app.user, "freeze pkg=$pkg", SetAppFrozen(pkg, true)) ?: false
 		if (frozen && app.isSystem) stopTreatingHiddenSysAppAsDisabled(app)
 		return frozen
 	}
 
 	@JvmStatic fun unfreeze(app: PrismAppInfo) = unfreeze(app.context(), app.user, app.packageName)
 	private fun unfreeze(context: Context, profile: UserHandle, pkg: String) =
-		runAppControl(context, profile, "unfreeze pkg=$pkg") { ensureAppHiddenState(this, pkg, false) }
+		runAppControl(context, profile, "unfreeze pkg=$pkg", SetAppFrozen(pkg, false))
 
-	@OwnerUser @ProfileUser private fun ensureAppHiddenState(context: Context, pkg: String, hidden: Boolean): Boolean {
+	@OwnerUser @ProfileUser internal fun setAppFrozenLocally(context: Context, pkg: String, hidden: Boolean): Boolean {
 		val policies = DevicePolicies(context)
 		// Same hide+suspend hybrid as the whole-space freeze. Only toast on genuine failure.
 		if (applyFrozenWithFallback(policies, pkg, hidden)) return true
@@ -135,12 +158,13 @@ object PrismAppControl {
 		return false
 	}
 
-	@JvmStatic fun setSuspended(app: PrismAppInfo, suspended: Boolean) =
-		runAppControl(app.context(), app.user, "set suspended pkg=${app.packageName} suspended=$suspended") {
-			setPackageSuspended(this, app.packageName, suspended)
-		} == true
-	private fun setPackageSuspended(context: Context, pkg: String, suspended: Boolean)
-			= setPackagesSuspended(context, arrayOf(pkg), suspended).isEmpty()
+	@JvmStatic fun setSuspended(app: PrismAppInfo, suspended: Boolean): Boolean {
+		val pkg = app.packageName
+		return runAppControl(
+			app.context(), app.user, "set suspended pkg=$pkg suspended=$suspended",
+			SetPackageSuspended(pkg, suspended),
+		) == true
+	}
 	fun setPackagesSuspended(context: Context, pkgs: Array<String>, suspended: Boolean): Array<String>
 			= DevicePolicies(context).invoke(DevicePolicyManager::setPackagesSuspended, pkgs, suspended)
 
@@ -151,9 +175,11 @@ object PrismAppControl {
 	@JvmStatic fun setSpaceSuspended(apps: List<PrismAppInfo>, suspended: Boolean): Array<String>? {
 		if (apps.isEmpty()) return emptyArray()
 		val pkgs = apps.map { it.packageName }.toTypedArray()
-		return runAppControl(apps.first().context(), apps.first().user, "set space suspended count=${pkgs.size} suspended=$suspended") {
-			setPackagesSuspended(this, pkgs, suspended)
-		}
+		return runAppControl(
+			apps.first().context(), apps.first().user,
+			"set space suspended count=${pkgs.size} suspended=$suspended",
+			SetPackagesSuspended(pkgs.toList(), suspended),
+		)
 	}
 
 	/** Whole-space freeze: hide every user clone of one dual space, routed through
@@ -164,10 +190,11 @@ object PrismAppControl {
 	@JvmStatic fun setSpaceFrozen(apps: List<PrismAppInfo>, frozen: Boolean): Array<String>? {
 		if (apps.isEmpty()) return emptyArray()
 		val pkgs = apps.map { it.packageName }.toTypedArray()
-		return runAppControl(apps.first().context(), apps.first().user, "set space frozen count=${pkgs.size} frozen=$frozen") {
-			val policies = DevicePolicies(this)
-			pkgs.filter { pkg -> ! applyFrozenWithFallback(policies, pkg, frozen) }.toTypedArray()
-		}
+		return runAppControl(
+			apps.first().context(), apps.first().user,
+			"set space frozen count=${pkgs.size} frozen=$frozen",
+			SetPackagesFrozen(pkgs.toList(), frozen),
+		)
 	}
 
 	/** Freeze/unfreeze [pkg] resiliently across OEM quirks.
@@ -189,19 +216,44 @@ object PrismAppControl {
 		}
 	}
 
-	@JvmStatic fun unfreezeInitiallyFrozenSystemApp(app: PrismAppInfo) =
-		runAppControl(app.context(), app.user, "unfreeze initial system pkg=${app.packageName}") {
-			PrismManager.ensureAppHiddenState(this, app.packageName, false)
-		}
+	@OwnerUser @ProfileUser internal fun setPackagesFrozenLocally(
+		context: Context,
+		packageNames: List<String>,
+		frozen: Boolean,
+	): Array<String> {
+		val policies = DevicePolicies(context)
+		return packageNames.filter { pkg -> !applyFrozenWithFallback(policies, pkg, frozen) }.toTypedArray()
+	}
+
+	@JvmStatic fun unfreezeInitiallyFrozenSystemApp(app: PrismAppInfo): Boolean? {
+		val pkg = app.packageName
+		return runAppControl(
+			app.context(), app.user, "unfreeze initial system pkg=$pkg",
+			EnsureAppHiddenState(pkg, false),
+		)
 			?.also { if (it) stopTreatingHiddenSysAppAsDisabled(app) }
+	}
 
-	private fun stopTreatingHiddenSysAppAsDisabled(app: PrismAppInfo) =
-		runAppControl(app.context(), app.user, "mark hidden system cloned pkg=${app.packageName}") {
-			ClonedHiddenSystemApps.setCloned(this, app.packageName)
-		}
+	private fun stopTreatingHiddenSysAppAsDisabled(app: PrismAppInfo): Boolean? {
+		val pkg = app.packageName
+		return runAppControl(
+			app.context(), app.user, "mark hidden system cloned pkg=$pkg",
+			MarkClonedSystemApp(pkg),
+		)
+	}
 
-	private fun <T> runAppControl(context: Context, profile: UserHandle, operation: String, block: Context.() -> T): T? =
-		when (val result = runProfileBridgeOperation(context, TAG, operation, target = profile, block = block)) {
+	private fun <T> runAppControl(
+		context: Context,
+		profile: UserHandle,
+		operation: String,
+		command: ProfileCommand<T>,
+	): T? = when (val result = runProfileBridgeOperation(
+		context,
+		TAG,
+		operation,
+		target = BridgeTargets.profile(profile.toId()),
+		command = command,
+	)) {
 			is ProfileBridgeResult.Value -> result.value
 			else -> null.also { toastBridgeFailure(context, result) }
 		}
@@ -215,3 +267,10 @@ object PrismAppControl {
 
 	private const val TAG = "Prism.AppControl"
 }
+
+/** Real app classification for uninstall diagnostics — never a hardcoded constant. */
+internal fun uninstallItemCategory(system: Boolean) = if (system) "system" else "user"
+
+/** Launch outcome carried by the uninstall event, recorded after the launch result is known. */
+internal fun uninstallLaunchContent(launched: Boolean, failureReason: String?) =
+	if (launched) "submitted" else "failed:${failureReason?.takeIf { it.isNotBlank() } ?: "unknown"}"

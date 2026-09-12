@@ -85,12 +85,12 @@ public class SetupViewModel {
 			CharSequence owner_label = null;
 			try {
 				owner_label = pm.getApplicationInfo(device_owner, PackageManager.MATCH_UNINSTALLED_PACKAGES).loadLabel(pm);
-			} catch (final PackageManager.NameNotFoundException ignored) {}		// Should never happen.
+			} catch (final PackageManager.NameNotFoundException | RuntimeException ignored) {
+				// Package visibility, stale DPC metadata, or vendor resources may make the label unreadable.
+			}
 
-			final SetupViewModel error = buildErrorVM(R.string.setup_error_managed_device, reason("managed_device").with(ITEM_ID, device_owner));
-			error.message_params = new String[] { owner_label != null ? owner_label.toString() : device_owner };
-			error.action_extra = 0;		// Disable the manual-setup prompt, because device owner cannot be removed by 3rd-party.
-			return error;
+			reason("managed_device").with(ITEM_ID, device_owner).send();
+			return buildManagedDeviceError(owner_label, context.getString(R.string.setup_unknown_device_owner));
 		}
 
 		reason("disallowed").send();		// Disallowed by DPC for unknown reason, just log this but let user have a try.
@@ -107,6 +107,15 @@ public class SetupViewModel {
 		next.message = message;
 		next.action_extra = R.string.button_setup_help;	// Default extra action, can be overridden by withExtraAction().
 		return next;
+	}
+
+	/** Builds the honest, OK-only Device Owner boundary state. Package-visible for JVM tests. */
+	static SetupViewModel buildManagedDeviceError(final @Nullable CharSequence owner_label, final String unknown_label) {
+		final String resolved_label = owner_label == null ? "" : owner_label.toString().trim();
+		final SetupViewModel error = buildErrorVM(R.string.setup_error_managed_device, null);
+		error.message_params = new String[] { resolved_label.isEmpty() ? unknown_label : resolved_label };
+		error.action_extra = 0;		// No reliable removal page exists, and Root cannot bypass this platform rule.
+		return error;
 	}
 
 	private SetupViewModel withExtraAction(final @StringRes int text) { action_extra = text; return this; }

@@ -8,6 +8,7 @@ import com.yzddmr6.prismspace.shuttle.ShuttleHealth
 import com.yzddmr6.prismspace.shuttle.ShuttleProvider
 import com.yzddmr6.prismspace.util.Users.Companion.toId
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArraySet
 
 internal class SpaceBridgeHealthStore(
     private val ttlMs: Long = DEFAULT_TTL_MS,
@@ -15,9 +16,13 @@ internal class SpaceBridgeHealthStore(
     private data class Entry(val health: ShuttleHealth, val updatedAtMs: Long)
 
     private val entries = ConcurrentHashMap<Int, Entry>()
+    private val availabilityListeners = CopyOnWriteArraySet<(Int, Boolean) -> Unit>()
 
     fun update(health: ShuttleHealth, nowMs: Long) {
-        entries[health.profileId] = Entry(health, nowMs)
+        val previous = entries.put(health.profileId, Entry(health, nowMs))
+        if (previous == null || nowMs - previous.updatedAtMs > ttlMs || previous.health.available != health.available) {
+            availabilityListeners.forEach { it(health.profileId, health.available) }
+        }
     }
 
     fun cached(profileId: Int, nowMs: Long): ShuttleHealth? {
@@ -31,6 +36,10 @@ internal class SpaceBridgeHealthStore(
 
     fun clear() {
         entries.clear()
+    }
+
+    fun addAvailabilityListener(listener: (Int, Boolean) -> Unit) {
+        availabilityListeners += listener
     }
 
     companion object {

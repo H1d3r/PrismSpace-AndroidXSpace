@@ -40,7 +40,7 @@ fun PrismBottomBar(currentRoute: String?, onNavigate: (String) -> Unit) {
             color = MaterialTheme.colorScheme.outline,
         )
         NavigationBar(
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
             tonalElevation = 0.dp,
         ) {
         navItems.forEach { item ->
@@ -57,7 +57,7 @@ fun PrismBottomBar(currentRoute: String?, onNavigate: (String) -> Unit) {
                     )
                 },
                 // Text labels (was icon-only) — discoverability: a 4-tab bar should name its tabs.
-                label          = { Text(stringResource(item.labelRes), style = MaterialTheme.typography.labelSmall) },
+                label          = { Text(stringResource(item.labelRes), style = MaterialTheme.typography.labelMedium) },
                 alwaysShowLabel = true,
                 colors = NavigationBarItemDefaults.colors(
                     selectedIconColor   = MaterialTheme.colorScheme.primary,

@@ -1,5 +1,7 @@
 package com.yzddmr6.prismspace.prism.compose.space
 
+import com.yzddmr6.prismspace.space.SpaceState
+
 /** Single source of truth for whether the dual space is usable RIGHT NOW
  *  (CE-unlock-aware — not just profile-owner/running). */
 enum class SpaceUsability { NotProvisioned, Suspended, LockedNeedsUnlock, BridgeNotReady, Unknown, Usable }
@@ -21,3 +23,18 @@ fun spaceUsability(
         !bridgeReady -> SpaceUsability.BridgeNotReady
         else         -> SpaceUsability.Usable
     }
+
+/** Maps the process-wide classified snapshot to action availability without sampling a second,
+ * independently expiring set of Android/bridge facts. */
+fun spaceUsabilityFromState(state: SpaceState?, userId: Int): SpaceUsability {
+    if (state == null) return SpaceUsability.Unknown
+    if (state.userId != null && state.userId != userId) return SpaceUsability.Unknown
+    return when (state) {
+        SpaceState.NoProfile, is SpaceState.OrphanProfile -> SpaceUsability.NotProvisioned
+        is SpaceState.Provisioning -> SpaceUsability.Unknown
+        is SpaceState.HalfProvisioned, is SpaceState.BridgeDown -> SpaceUsability.BridgeNotReady
+        is SpaceState.Locked -> SpaceUsability.LockedNeedsUnlock
+        is SpaceState.Inactive -> SpaceUsability.Suspended
+        is SpaceState.Healthy -> SpaceUsability.Usable
+    }
+}

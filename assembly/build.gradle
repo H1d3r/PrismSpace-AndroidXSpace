@@ -101,4 +101,7 @@ dependencies {
     engineImplementation project(':engine')
     // Mobile only
     mobileImplementation project(':mobile')
+
+    androidTestImplementation 'androidx.test:runner:1.5.2'
+    androidTestImplementation project(':shared')
 }

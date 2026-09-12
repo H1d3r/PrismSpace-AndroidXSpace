@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="fb_space_internal_operation_failed">雙開空間內部操作出錯（%1$s）。回報問題時請匯出診斷記錄。</string>
+</resources>

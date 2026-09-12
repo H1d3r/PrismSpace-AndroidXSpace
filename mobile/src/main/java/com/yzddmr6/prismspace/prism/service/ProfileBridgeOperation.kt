@@ -1,16 +1,64 @@
 package com.yzddmr6.prismspace.prism.service
 
 import android.content.Context
-import android.os.UserHandle
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
+import com.yzddmr6.prismspace.bridge.Bridge
+import com.yzddmr6.prismspace.bridge.BridgeTargets
+import com.yzddmr6.prismspace.bridge.BridgeTarget
+import com.yzddmr6.prismspace.bridge.DestinationCommand
+import com.yzddmr6.prismspace.bridge.ProfileCommand
+import com.yzddmr6.prismspace.bridge.ProfileTarget
 import com.yzddmr6.prismspace.mobile.R
-import com.yzddmr6.prismspace.shuttle.Shuttle
 import com.yzddmr6.prismspace.shuttle.ShuttleNotReadyCause
 import com.yzddmr6.prismspace.shuttle.ShuttleOutcome
 import com.yzddmr6.prismspace.shuttle.ShuttleProvider
 import com.yzddmr6.prismspace.util.PrismLocale
 import com.yzddmr6.prismspace.util.Users
-import com.yzddmr6.prismspace.util.Users.Companion.toId
+
+internal fun <R> runProfileBridgeOperation(
+    context: Context,
+    tag: String,
+    operation: String,
+    target: ProfileTarget? = BridgeTargets.profile(),
+    timeoutMs: Long? = null,
+    command: ProfileCommand<R>,
+): ProfileBridgeResult<R> {
+    val profileTarget = target ?: return ProfileBridgeResult.SpaceMissing
+    val profile = com.yzddmr6.prismspace.util.UserHandles.of(profileTarget.userId)
+    if (profile == Users.current()) {
+        DiagnosticLog.i(tag, "$operation local profile=${profileTarget.userId}")
+        return ProfileBridgeResult.from(Bridge.inProfile(context, profileTarget).execute(command, timeoutMs))
+    }
+    val health = ShuttleProvider.health(context, profile)
+    DiagnosticLog.i(
+        tag,
+        "$operation preflight profile=${profileTarget.userId} ${health.diagnosticLine()}",
+    )
+    if (!health.available) return ProfileBridgeResult.from(health.ping).asFailureResult()
+    return ProfileBridgeResult.from(Bridge.inProfile(context, profileTarget).execute(command, timeoutMs))
+}
+
+internal fun <R> runDestinationBridgeOperation(
+    context: Context,
+    tag: String,
+    operation: String,
+    target: BridgeTarget?,
+    timeoutMs: Long? = null,
+    command: DestinationCommand<R>,
+): ProfileBridgeResult<R> {
+    val destination = target ?: return ProfileBridgeResult.SpaceMissing
+    val user = com.yzddmr6.prismspace.util.UserHandles.of(destination.userId)
+    if (user == Users.current()) {
+        DiagnosticLog.i(tag, "$operation local target=${destination.userId}")
+        return ProfileBridgeResult.from(Bridge.at(context, destination).execute(command, timeoutMs))
+    }
+    if (destination is ProfileTarget) {
+        val health = ShuttleProvider.health(context, user)
+        DiagnosticLog.i(tag, "$operation preflight target=${destination.userId} ${health.diagnosticLine()}")
+        if (!health.available) return ProfileBridgeResult.from(health.ping).asFailureResult()
+    }
+    return ProfileBridgeResult.from(Bridge.at(context, destination).execute(command, timeoutMs))
+}
 
 internal sealed class ProfileBridgeResult<out R> {
     data class Value<out R>(val value: R?) : ProfileBridgeResult<R>()
@@ -32,36 +80,6 @@ internal sealed class ProfileBridgeResult<out R> {
     }
 }
 
-internal fun <R> runProfileBridgeOperation(
-    context: Context,
-    tag: String,
-    operation: String,
-    target: UserHandle? = Users.profile,
-    timeoutMs: Long? = null,
-    block: Context.() -> R,
-): ProfileBridgeResult<R> {
-    val profile = target ?: return ProfileBridgeResult.SpaceMissing
-    if (profile == Users.current()) {
-        DiagnosticLog.i(tag, "$operation local profile=${profile.toId()}")
-        val outcome = Shuttle(context, to = profile).invokeOutcome(block)
-        return ProfileBridgeResult.from(outcome)
-    }
-    val health = ShuttleProvider.health(context, profile)
-    DiagnosticLog.i(
-        tag,
-        "$operation preflight profile=${profile.toId()} ${health.diagnosticLine()}",
-    )
-	if (!health.available) {
-		return ProfileBridgeResult.from(health.ping).asFailureResult()
-	}
-    val outcome = if (timeoutMs != null) {
-        Shuttle(context, to = profile).invokeOutcomeWithin(timeoutMs, block)
-    } else {
-        Shuttle(context, to = profile).invokeOutcome(block)
-    }
-    return ProfileBridgeResult.from(outcome)
-}
-
 internal fun ProfileBridgeResult<*>.failureReason(): FileTransferFailureReason? =
     when (this) {
         ProfileBridgeResult.SpaceMissing -> FileTransferFailureReason.SpaceMissing
@@ -71,6 +89,15 @@ internal fun ProfileBridgeResult<*>.failureReason(): FileTransferFailureReason? 
         is ProfileBridgeResult.Failed -> FileTransferFailureReason.IOError
         is ProfileBridgeResult.Value -> null
     }
+
+internal fun crossSpaceFailureReason(result: ProfileBridgeResult<*>): FileTransferFailureReason = when (result) {
+    ProfileBridgeResult.SpaceMissing,
+    is ProfileBridgeResult.SpaceInactive -> FileTransferFailureReason.SpaceUnavailable
+    is ProfileBridgeResult.BridgeNotReady,
+    ProfileBridgeResult.TimedOut -> FileTransferFailureReason.BridgeNotReady
+    is ProfileBridgeResult.Failed,
+    is ProfileBridgeResult.Value -> FileTransferFailureReason.TargetWriteFailed
+}
 
 internal fun <R> ProfileBridgeResult<*>.asFailureResult(): ProfileBridgeResult<R> =
     when (this) {
@@ -88,12 +115,22 @@ internal fun profileBridgeFailureMessage(
     fallbackMessage: String,
 ): String {
     val strings = PrismLocale.wrap(context)
-    return when (result) {
-        ProfileBridgeResult.SpaceMissing -> strings.getString(R.string.fb_need_create_space)
-        is ProfileBridgeResult.SpaceInactive -> strings.getString(R.string.fb_space_inactive)
-        is ProfileBridgeResult.BridgeNotReady -> strings.getString(R.string.fb_space_bridge_repair_needed)
-        ProfileBridgeResult.TimedOut -> strings.getString(R.string.fb_space_not_ready)
-        is ProfileBridgeResult.Failed -> result.error.message ?: fallbackMessage
-        is ProfileBridgeResult.Value -> fallbackMessage
-    }
+    val spec = profileBridgeFailureMessageSpec(result) ?: return fallbackMessage
+    return if (spec.argument == null) strings.getString(spec.resourceId)
+    else strings.getString(spec.resourceId, spec.argument)
 }
+
+internal data class ProfileBridgeFailureMessageSpec(val resourceId: Int, val argument: String? = null)
+
+internal fun profileBridgeFailureMessageSpec(result: ProfileBridgeResult<*>): ProfileBridgeFailureMessageSpec? =
+    when (result) {
+        ProfileBridgeResult.SpaceMissing -> ProfileBridgeFailureMessageSpec(R.string.fb_need_create_space)
+        is ProfileBridgeResult.SpaceInactive -> ProfileBridgeFailureMessageSpec(R.string.fb_space_inactive)
+        is ProfileBridgeResult.BridgeNotReady -> ProfileBridgeFailureMessageSpec(R.string.fb_space_bridge_repair_needed)
+        ProfileBridgeResult.TimedOut -> ProfileBridgeFailureMessageSpec(R.string.fb_space_not_ready)
+        is ProfileBridgeResult.Failed -> ProfileBridgeFailureMessageSpec(
+            R.string.fb_space_internal_operation_failed,
+            result.error.javaClass.simpleName.ifBlank { result.error.javaClass.name },
+        )
+        is ProfileBridgeResult.Value -> null
+    }

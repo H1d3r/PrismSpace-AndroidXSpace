@@ -8,23 +8,45 @@
     <string name="lz_set_update_title">发现新版本 %1$s</string>
     <string name="lz_set_update_download">前往下载</string>
     <string name="lz_set_update_later">稍后</string>
-    <string name="lz_set_suspend_title">冻结整个空间</string>
-    <string name="lz_set_suspend_summary">一次冻结你的所有分身并停止其后台进程；关闭开关即可解冻，数据不丢失</string>
+    <string name="lz_set_suspend_title">暂停所有分身</string>
+    <string name="lz_set_suspend_summary">分身将无法打开，应用和数据仍会保留</string>
+    <string name="lz_set_suspend_state_frozen">所有分身均已暂停，关闭开关即可恢复。</string>
+    <string name="lz_set_suspend_state_mixed">部分分身已暂停，打开开关可暂停其余分身。</string>
+    <string name="lz_set_suspend_state_unknown">暂时无法确认分身状态，请刷新后重试。</string>
     <string name="lz_set_repair_title">修复双开空间</string>
     <string name="lz_set_repair_summary">重建工作资料连接，期间分身将关闭</string>
     <string name="lz_set_create_title">创建双开空间</string>
     <string name="lz_set_create_summary">创建新的 Android 工作资料，用于运行分身应用</string>
+    <string name="lz_set_state_unavailable_title">无法确认空间状态</string>
+    <string name="lz_set_state_unavailable_summary">PrismSpace 未能读取当前工作资料事实；刷新成功前不会执行任何更改。</string>
+    <string name="lz_set_orphan_title">打开 Android 工作资料设置</string>
+    <string name="lz_set_orphan_summary">此工作资料不归 PrismSpace 管理，本应用不会修改或删除它。</string>
+    <string name="lz_set_provisioning_title">配置进行中</string>
+    <string name="lz_set_provisioning_summary">请先完成 Android 当前显示的工作资料配置流程。</string>
+    <string name="lz_set_resume_title">恢复双开空间</string>
+    <string name="lz_set_resume_summary">请求 Android 关闭此工作资料的安静模式。</string>
+    <string name="lz_set_unlock_title">解锁双开空间</string>
+    <string name="lz_set_unlock_summary">打开双开空间入口，由 Android 显示工作资料密码验证。</string>
+    <string name="lz_set_reconnect_title">重新连接双开空间</string>
+    <string name="lz_set_reconnect_permission_denied">跨资料权限被拒绝；请打开双开空间入口恢复连接。</string>
+    <string name="lz_set_reconnect_profile_unavailable">工作资料当前不可达；请先恢复或解锁，再重新连接。</string>
+    <string name="lz_set_reconnect_provider_unavailable">双开空间内的桥接组件不可用；请打开空间入口重新建立连接。</string>
+    <string name="lz_set_reconnect_timed_out">双开空间连接超时；请打开空间入口后重试。</string>
+    <string name="lz_set_reconnect_failed">双开空间连接失败；请打开空间入口诊断并重新连接。</string>
+    <string name="lz_set_reconnect_not_checked">尚未完成一次成功的连接检查；请打开空间入口后重试。</string>
+    <string name="lz_set_ready_title">双开空间已就绪</string>
+    <string name="lz_set_ready_summary">点击查看分身数量与空间信息。</string>
     <string name="lz_set_delete_space_title">删除双开空间</string>
     <string name="lz_set_delete_space_summary">永久删除双开空间及其中所有分身数据</string>
-    <string name="lz_set_export_logs_title">导出诊断日志</string>
-    <string name="lz_set_export_logs_summary">导出 2MB 滚动详细日志和当前系统快照</string>
+    <string name="lz_set_export_logs_title">导出诊断信息</string>
+    <string name="lz_set_export_logs_summary">包含运行日志和设备状态，不包含文件内容</string>
     <string name="lz_set_feedback_title">反馈与交流</string>
     <string name="lz_set_feedback_summary">有问题反馈或交流讨论，微信搜索「%1$s」。</string>
     <string name="lz_set_feedback_account">熵减矩阵</string>
     <string name="lz_set_feedback_copy">复制</string>
     <string name="lz_set_feedback_copied">已复制公众号名称</string>
-    <string name="lz_set_about_title">关于棱镜空间 (PrismSpace)</string>
-    <string name="lz_set_about_summary">项目介绍</string>
+    <string name="lz_set_about_title">关于 PrismSpace</string>
+    <string name="lz_set_about_summary">项目介绍、版本与开源信息</string>
     <string name="lz_set_cancel">取消</string>
 
     <!-- ModeGuideSheet.kt -->
@@ -32,12 +54,24 @@
     <string name="lz_set_mode_normal_summary">无需额外授权，核心双开、启动、冻结、文件传输均可用</string>
     <string name="lz_set_mode_shizuku_summary">增强克隆与跨用户操作，需连接 Shizuku 服务</string>
     <string name="lz_set_mode_root_summary">高级修复与诊断，需授予 Root 权限</string>
-    <string name="lz_set_shizuku_intro">Shizuku 让 PrismSpace 以 ADB 权限增强克隆与跨用户操作。</string>
-    <string name="lz_set_shizuku_step1">第 1 步  安装并打开 Shizuku 应用。</string>
-    <string name="lz_set_shizuku_step2">第 2 步  用「无线调试」配对，或连接电脑执行 ADB 启动 Shizuku；有 Root 时可在 Shizuku 内一键启动。</string>
-    <string name="lz_set_shizuku_step3">第 3 步  回到本页，点下方按钮检查并授权连接。</string>
-    <string name="lz_set_shizuku_check_button">检查 Shizuku 连接</string>
+    <string name="lz_set_shizuku_intro">Shizuku 或 Sui 让 PrismSpace 使用特权系统 API 增强克隆与跨用户操作。</string>
+    <string name="lz_set_shizuku_step1">第 1 步  启动 Shizuku；或在受支持的 Root 环境安装并启用 Sui。</string>
+    <string name="lz_set_shizuku_step2">第 2 步  Shizuku 可用「无线调试」、ADB 或 Root 启动；Sui 启用后会被自动识别。</string>
+    <string name="lz_set_shizuku_step3">第 3 步  回到本页，点下方按钮检查通道，并在系统提示时授权。</string>
+    <string name="lz_set_shizuku_check_button">检查 Shizuku / Sui</string>
 
     <!-- AboutSheet.kt -->
     <string name="lz_set_about_intro">面向 Android 的双开空间管理器。在系统工作资料之上提供独立运行环境，让同一应用以多个账号并行存在，彼此数据互不干扰。</string>
+    <!-- 设置分组 -->
+    <string name="lz_set_group_space">双开空间</string>
+    <string name="lz_set_group_clone_method">添加分身方式</string>
+    <string name="lz_set_group_general">通用</string>
+    <string name="lz_set_group_support">支持</string>
+    <string name="lz_set_group_experimental">实验性功能</string>
+    <string name="lz_set_group_danger">危险区</string>
+    <string name="lz_set_system_apps_summary">查看或添加双开空间中的系统应用</string>
+    <string name="lz_set_multi_space_title">多个双开空间</string>
+    <string name="lz_set_multi_space_summary">实验功能 · 仅部分定制系统可用；若设备已存在第二个双开空间，PrismSpace 会自动识别</string>
+    <string name="lz_set_suspend_disabled_locked">解锁后才能操作</string>
+    <string name="lz_set_suspend_disabled_bridge">重新连接后才能操作</string>
 </resources>

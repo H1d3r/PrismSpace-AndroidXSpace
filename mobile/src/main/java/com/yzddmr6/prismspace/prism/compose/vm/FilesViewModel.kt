@@ -2,10 +2,14 @@ package com.yzddmr6.prismspace.prism.compose.vm
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import com.yzddmr6.prismspace.prism.compose.space.SpaceRepositoryProvider
+import com.yzddmr6.prismspace.prism.compose.space.SpaceUsability
 import com.yzddmr6.prismspace.prism.service.TransferHistoryStore
 import com.yzddmr6.prismspace.prism.service.TransferRecord
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.withContext
 
 // Pure helpers
 
@@ -34,5 +38,11 @@ class FilesViewModel(app: Application) : AndroidViewModel(app) {
     fun clearHistory() {
         TransferHistoryStore.clear(getApplication())
         refresh()
+    }
+
+    /** Fresh dual-space usability for the send-card gate — the same source as clone launch. */
+    suspend fun dualUsability(): SpaceUsability = withContext(Dispatchers.IO) {
+        val repo = SpaceRepositoryProvider.get(getApplication())
+        repo.dualSpace()?.let { repo.usabilityOf(it) } ?: SpaceUsability.NotProvisioned
     }
 }

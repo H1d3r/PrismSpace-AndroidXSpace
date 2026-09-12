@@ -5,29 +5,67 @@ import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
+import com.yzddmr6.prismspace.controller.ClonePreparationStore
 import com.yzddmr6.prismspace.controller.UserCloneRegistry
 import com.yzddmr6.prismspace.prism.compose.component.PrismLevel
-import com.yzddmr6.prismspace.prism.compose.space.BridgeHealthRepository
 import com.yzddmr6.prismspace.prism.compose.space.SpaceRepository
 import com.yzddmr6.prismspace.prism.compose.space.SpaceRepositoryProvider
+import com.yzddmr6.prismspace.prism.compose.space.SpaceSnapshot
+import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository
+import com.yzddmr6.prismspace.prism.compose.space.SpacePresentationKind
+import com.yzddmr6.prismspace.prism.compose.space.presentSpace
 import com.yzddmr6.prismspace.prism.compose.space.SpaceUsability
 import com.yzddmr6.prismspace.prism.compose.nav.PrismRoutes
 import com.yzddmr6.prismspace.mobile.R
+import com.yzddmr6.prismspace.prism.service.TransferHistoryStore
+import com.yzddmr6.prismspace.prism.service.displayTitle
+import com.yzddmr6.prismspace.util.Apps
 import com.yzddmr6.prismspace.util.PrismLocale
 import com.yzddmr6.prismspace.util.Users
 import com.yzddmr6.prismspace.util.Users.Companion.toId
+import com.yzddmr6.prismspace.space.SpaceState
+import com.yzddmr6.prismspace.util.UserHandles
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 // ---------------------------------------------------------------------------
 // Health enum used by the home overview card.
 // ---------------------------------------------------------------------------
 
-enum class SpaceHealth { Normal, NotCreated, Suspended, Locked, Checking, NeedsRepair }
+enum class SpaceHealth { Normal, NotCreated, Provisioning, Suspended, Locked, Checking, NeedsRepair }
 
-enum class HomePrimaryAction { OpenSpace, StartSetup, OpenSettings }
+internal fun spaceHealth(state: SpaceState): SpaceHealth = when (presentSpace(state).kind) {
+    SpacePresentationKind.Missing -> SpaceHealth.NotCreated
+    SpacePresentationKind.Provisioning -> SpaceHealth.Provisioning
+    SpacePresentationKind.Locked -> SpaceHealth.Locked
+    SpacePresentationKind.Inactive -> SpaceHealth.Suspended
+    SpacePresentationKind.Ready -> SpaceHealth.Normal
+    SpacePresentationKind.Checking,
+    SpacePresentationKind.Unavailable -> SpaceHealth.Checking
+    SpacePresentationKind.Orphan,
+    SpacePresentationKind.Incomplete,
+    SpacePresentationKind.BridgeUnavailable -> SpaceHealth.NeedsRepair
+}
+
+internal fun profileStatusLabelRes(state: SpaceState): Int = when (state) {
+    SpaceState.NoProfile -> R.string.lz_home_profile_not_created
+    is SpaceState.Provisioning -> R.string.lz_home_tag_provisioning
+    is SpaceState.Inactive -> R.string.lz_home_profile_suspended
+    is SpaceState.Locked -> R.string.lz_home_tag_locked
+    is SpaceState.Healthy -> R.string.lz_home_profile_ready
+    is SpaceState.OrphanProfile,
+    is SpaceState.HalfProvisioned,
+    is SpaceState.BridgeDown -> R.string.lz_home_tag_needsrepair
+}
+
+enum class HomePrimaryAction { OpenSpace, StartSetup, OpenSettings, ActivateSpace }
+
+/** 概览卡标签行：与头像组同一截断口径（同取前 N 个），仅当总数超出展示数时才追加省略号。 */
+internal fun overviewLabelsLine(labels: List<String>, cloneCount: Int): String =
+    labels.joinToString("、") + if (cloneCount > labels.size) " …" else ""
 
 // ---------------------------------------------------------------------------
 // Pure UI model
@@ -50,7 +88,19 @@ data class HomeUiModel(
     val deviceText: String = "",
     val showRepair: Boolean = false,
     val profileOwnerLabel: String = "",
-)
+    // Pending installs (clone-preparation store): labels of apps awaiting in-space confirmation.
+    val pendingInstallLabels: List<String> = emptyList(),
+    // 前往安装 gate — same usability source as clone launch/uninstall.
+    val installEntryEnabled: Boolean = true,
+    val installEntryGuidance: String? = null,
+    // 空间概览: first few clone packages (icons) + labels, and the latest transfer line.
+    val overviewClonePkgs: List<String> = emptyList(),
+    val overviewCloneLabels: List<String> = emptyList(),
+    val recentTransferText: String? = null,
+) {
+    /** 状态安静原则: verified-healthy and no-valence states render as one quiet line, not a card. */
+    val calm: Boolean get() = level == PrismLevel.Ok || level == PrismLevel.Neutral
+}
 
 // ---------------------------------------------------------------------------
 // Pure mapper — Android-free, unit-testable.
@@ -85,6 +135,18 @@ internal fun mapHome(
         primaryRoute = null,
         primaryAction = HomePrimaryAction.StartSetup,
     )
+    SpaceHealth.Provisioning -> HomeUiModel(
+        // 进行中（配置中）是无偏向的瞬时状态——Neutral，不渲染为「需要注意」。
+        level = PrismLevel.Neutral,
+        statusTitle = resolve(R.string.lz_home_status_provisioning_title),
+        statusBody = resolve(R.string.lz_home_status_provisioning_body),
+        tag = resolve(R.string.lz_home_tag_provisioning),
+        mainCount = mainCount,
+        cloneCount = cloneCount,
+        primaryLabel = resolve(R.string.lz_home_label_provisioning),
+        primaryRoute = null,
+        primaryAction = HomePrimaryAction.OpenSettings,
+    )
     SpaceHealth.Suspended -> HomeUiModel(
         level = PrismLevel.Warn,
         statusTitle = resolve(R.string.lz_home_status_suspended_title),
@@ -94,7 +156,7 @@ internal fun mapHome(
         cloneCount = cloneCount,
         primaryLabel = resolve(R.string.lz_home_label_restore),
         primaryRoute = null,
-        primaryAction = HomePrimaryAction.OpenSettings,
+        primaryAction = HomePrimaryAction.ActivateSpace,
     )
     SpaceHealth.Locked -> HomeUiModel(
         level = PrismLevel.Warn,
@@ -105,10 +167,11 @@ internal fun mapHome(
         cloneCount = cloneCount,
         primaryLabel = resolve(R.string.lz_home_label_unlock),
         primaryRoute = null,
-        primaryAction = HomePrimaryAction.OpenSettings,
+        primaryAction = HomePrimaryAction.ActivateSpace,
     )
     SpaceHealth.Checking -> HomeUiModel(
-        level = PrismLevel.Warn,
+        // 检查中/未知统一归 Neutral：「不知道」不得染绿也不染黄。
+        level = PrismLevel.Neutral,
         statusTitle = resolve(R.string.lz_home_status_checking_title),
         statusBody = resolve(R.string.lz_home_status_checking_body),
         tag = resolve(R.string.lz_home_tag_checking),
@@ -154,7 +217,7 @@ internal fun mapHomeState(
         versionName       = versionName,
         androidText       = androidText,
         deviceText        = deviceText,
-        showRepair        = health != SpaceHealth.Normal,
+        showRepair        = health != SpaceHealth.Normal && health != SpaceHealth.Checking,
         profileOwnerLabel = profileOwnerLabel,
     )
 }
@@ -166,25 +229,44 @@ internal fun mapHomeState(
 class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     private val spaceRepo: SpaceRepository by lazy { SpaceRepositoryProvider.get(getApplication()) }
-    private val bridgeHealthRepo: BridgeHealthRepository by lazy { BridgeHealthRepository(getApplication()) }
+    private val stateRepo: SpaceStateRepository by lazy { SpaceStateRepository(getApplication()) }
     private val capRepo: CapabilityRepository by lazy { CapabilityRepositoryProvider.get(getApplication()) }
 
     private val _uiState = MutableStateFlow<HomeUiModel?>(null)
     val uiState: StateFlow<HomeUiModel?> = _uiState
 
-    fun refresh() {
+    init {
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { loadState() }
-            _uiState.value = result
-            val bridgeChanged = withContext(Dispatchers.IO) { refreshBridgeHealthIfPossible() }
-            if (bridgeChanged) {
-                _uiState.value = withContext(Dispatchers.IO) { loadState() }
+            stateRepo.state.collectLatest { snapshot ->
+                when (snapshot) {
+                    SpaceSnapshot.Loading -> renderChecking()
+                    is SpaceSnapshot.Failed -> renderChecking()
+                    is SpaceSnapshot.Loaded -> render(snapshot.state)
+                }
             }
         }
     }
 
+    fun refresh() {
+        viewModelScope.launch {
+            if (stateRepo.refresh("home_explicit")) {
+                (stateRepo.state.value as? SpaceSnapshot.Loaded)?.state?.let { render(it) }
+            } else renderChecking()
+        }
+    }
+
+    private suspend fun render(state: SpaceState) {
+        _uiState.value = withContext(Dispatchers.IO) { loadState(state) }
+    }
+
+    private suspend fun renderChecking() {
+        _uiState.value = withContext(Dispatchers.IO) { loadCheckingState() }
+    }
+
     // Create/repair actions navigate to Settings, where provisioning and recovery live.
     fun repair(onNavigate: (String) -> Unit) {
+        if (_uiState.value?.primaryAction == HomePrimaryAction.ActivateSpace)
+            com.yzddmr6.prismspace.prism.compose.nav.AppLaunchSignals.signalActivateSpace()
         onNavigate(PrismRoutes.SETTINGS)
     }
 
@@ -197,17 +279,15 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     // Private helpers
     // -----------------------------------------------------------------------
 
-    private fun loadState(): HomeUiModel {
+    private fun loadState(state: SpaceState): HomeUiModel {
         val context: Context = getApplication()
-        runCatching { Users.refreshUsers(context) }
-            .onFailure { DiagnosticLog.w(TAG, "refresh users before home state failed", it) }
 
         // Locale-aware string resolver — respects the user's chosen language (中/英),
         // even though these strings are built outside any @Composable.
         val resolve: (Int) -> String = { id -> PrismLocale.wrap(getApplication()).getString(id) }
 
         // Work-profile status flags used to derive the overview state.
-        val profile = Users.profile
+        val profile = state.userId?.let(UserHandles::of)
         val profileOwner = runCatching {
             profile?.let { Users.isProfileManagedByPrism(context, it) } == true
         }.getOrDefault(false)
@@ -218,18 +298,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 			profile?.let { Users.isProfileQuietModeEnabled(context, it) } == true
 		}.getOrDefault(false)
 
-		val health = when (spaceRepo.dualSpace()?.let { spaceRepo.usabilityOf(it) } ?: SpaceUsability.NotProvisioned) {
-            SpaceUsability.NotProvisioned    -> SpaceHealth.NotCreated
-            SpaceUsability.Suspended         -> SpaceHealth.Suspended
-            SpaceUsability.LockedNeedsUnlock -> SpaceHealth.Locked
-            SpaceUsability.BridgeNotReady    -> SpaceHealth.NeedsRepair
-            SpaceUsability.Unknown           -> SpaceHealth.Checking
-            SpaceUsability.Usable            -> SpaceHealth.Normal
-        }
+		val health = spaceHealth(state)
         DiagnosticLog.d(
 			TAG,
 			"home state profile=${profile?.toId() ?: Users.NULL_ID} " +
-				"profileOwner=$profileOwner running=$running quietMode=$quietMode health=$health",
+				"profileOwner=$profileOwner running=$running quietMode=$quietMode state=$state health=$health",
 		)
 
         // Counts — sourced via SpaceRepository (single source of truth; was: direct provider/Users)
@@ -238,29 +311,46 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 .count { app -> app.packageName != context.packageName && app.isInstalled && app.enabled }
         }.getOrElse { 0 }
 
-        val cloneCount = if (profileOwner) {
+        // Dual apps loaded once: the clone count, the overview avatar group and the pending-install
+        // reconciliation all derive from this single query.
+        val dualApps = if (profileOwner) {
             runCatching {
-                spaceRepo.dualSpaces().sumOf { d ->
-                    runCatching {
-                        // Exclude PrismSpace itself so the home count matches the space tab.
-                        // 分身 count mirrors the Space tab: user clones only — third-party apps (always
-                        // user-cloned in a profile) or system apps the user explicitly cloned. Hides the
-                        // provisioning system apps so "X 分身" matches what the user actually created.
-                        spaceRepo.installedApps(d).count { app ->
-                            app.isInstalled && app.shouldShowAsEnabled() && app.packageName != context.packageName &&
-                                // Count mirrors the dual list: user clones plus launchable system apps.
-                                (!app.isSystem || UserCloneRegistry.contains(context, app.packageName) || app.isLaunchable) }
-                    }.getOrElse { 0 }
+                spaceRepo.dualSpaces().flatMap { d ->
+                    runCatching { spaceRepo.installedApps(d) }.getOrElse { emptyList() }
                 }
-            }.getOrElse { 0 }
-        } else 0
+            }.getOrElse { emptyList() }
+        } else emptyList()
+        val userClones = dualApps.filter { app ->
+            app.isInstalled && app.shouldShowAsEnabled() && app.packageName != context.packageName &&
+                // Count user apps and explicitly added system clones, not provisioned system tools.
+                (!app.isSystem || UserCloneRegistry.contains(context, app.packageName))
+        }
+        val cloneCount = userClones.size
+        val overviewClones = userClones.sortedBy { it.label.toString().lowercase() }.take(5)
 
-        // Profile Owner status label.
-		val profileOwnerLabel = when {
-			!profileOwner -> resolve(R.string.lz_home_profile_not_created)
-			!running || quietMode -> resolve(R.string.lz_home_profile_suspended)
-			else -> resolve(R.string.lz_home_profile_ready)
-		}
+        // Pending installs from the clone-preparation store (reconciled against real dual state).
+        val pendingPkgs = runCatching {
+            ClonePreparationStore.reconcileInstalled(context, dualApps.map { it.packageName }.toSet())
+        }.getOrElse { emptySet() }
+        val pendingLabels = pendingPkgs.map { pkg ->
+            runCatching { Apps.of(context).getAppName(pkg).toString() }.getOrDefault(pkg)
+        }.sorted()
+
+        // 前往安装 gate — the same usability source as clone launch/uninstall/continue-install.
+        val dual = spaceRepo.dualSpace()
+        val usability = dual?.let { spaceRepo.usabilityOf(it) } ?: SpaceUsability.NotProvisioned
+        val installGate = continueInstallGate(usability) { id, args -> PrismLocale.wrap(context).getString(id, *args) }
+
+        val recentTransfer = runCatching { TransferHistoryStore.load(context).firstOrNull() }.getOrNull()
+        val recentTransferText = recentTransfer?.let { record ->
+            listOf(record.name, record.location.takeIf { it.isNotBlank() })
+                .filterNotNull().joinToString(" · ")
+        }
+
+        // This row must describe the same canonical state as the hero card. In particular, a
+        // half-provisioned profile exists even when its launcher marker is missing; the legacy
+        // ownership lookup must not turn that into the contradictory label "Not created".
+		val profileOwnerLabel = resolve(profileStatusLabelRes(state))
 
         // Configured mode comes from the same source as Settings.
         val capabilityText = resolve(prismModeLabelRes(capRepo.selectedMode.value))
@@ -286,17 +376,31 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             deviceText         = deviceText,
             profileOwnerLabel  = profileOwnerLabel,
             resolve            = resolve,
+        ).copy(
+            pendingInstallLabels = pendingLabels,
+            installEntryEnabled = installGate.enabled,
+            installEntryGuidance = installGate.guidance,
+            overviewClonePkgs = overviewClones.map { it.packageName },
+            overviewCloneLabels = overviewClones.map { it.label.toString() },
+            recentTransferText = recentTransferText,
         )
     }
 
-    private fun refreshBridgeHealthIfPossible(): Boolean {
-        val profile = Users.profile ?: return false
-        val before = bridgeHealthRepo.cachedHealth(profile)?.diagnosticLine()
-        val after = runCatching { bridgeHealthRepo.refreshHealth(profile).diagnosticLine() }
-            .onFailure { DiagnosticLog.w(TAG, "refresh home bridge health failed", it) }
-            .getOrNull()
-            ?: return false
-        return before != after
+    private fun loadCheckingState(): HomeUiModel {
+        val context: Context = getApplication()
+        val resolve: (Int) -> String = { id -> PrismLocale.wrap(context).getString(id) }
+        return mapHomeState(
+            health = SpaceHealth.Checking,
+            mainCount = 0,
+            cloneCount = 0,
+            capabilityText = resolve(prismModeLabelRes(capRepo.selectedMode.value)),
+            versionName = runCatching {
+                "v${com.yzddmr6.prismspace.util.Versions.name(context) ?: "?"} (${com.yzddmr6.prismspace.util.Versions.code(context)})"
+            }.getOrDefault("v?"),
+            androidText = "${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})",
+            deviceText = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}",
+            resolve = resolve,
+        )
     }
 
 }
