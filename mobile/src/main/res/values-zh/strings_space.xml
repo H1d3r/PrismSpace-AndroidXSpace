@@ -3,9 +3,17 @@
     <!-- SpaceScreen: top bar -->
     <string name="lz_space_title">空间</string>
     <string name="lz_space_selected_count">已选 %1$d 项</string>
+    <string name="lz_space_row_selected">已选中</string>
+    <string name="lz_space_row_not_selected">未选中</string>
     <string name="lz_space_select_all">全选</string>
     <string name="lz_space_deselect_all">取消全选</string>
     <string name="lz_space_exit_multiselect">退出多选</string>
+    <string name="lz_space_batch_manage">批量管理</string>
+    <string name="lz_space_view_controls">列表视图</string>
+    <string name="lz_space_row_open">打开</string>
+    <string name="lz_space_row_resume">恢复</string>
+    <string name="lz_space_row_add_clone">添加分身</string>
+    <string name="lz_space_row_install">去安装</string>
 
     <!-- SpaceScreen: batch action bar -->
     <string name="lz_space_batch_copy_to_dual">复制到双开</string>
@@ -15,7 +23,7 @@
 
     <!-- SpaceScreen: batch confirm dialogs -->
     <string name="lz_space_batch_uninstall_title">卸载 %1$d 个应用？</string>
-    <string name="lz_space_batch_uninstall_body">将从双开空间卸载选中的 %1$d 个应用，应用数据会一并删除且不可恢复。系统会逐个弹出卸载确认。</string>
+    <string name="lz_space_batch_uninstall_body">将在双开空间内卸载选中的 %1$d 个应用，其账号与应用数据会一并删除且不可恢复；主空间中的同名应用不受影响。系统会逐个弹出卸载确认。</string>
     <string name="lz_space_batch_uninstall_confirm">卸载</string>
     <string name="lz_space_batch_clone_title">克隆 %1$d 个应用到双开空间？</string>
     <string name="lz_space_batch_clone_body">将按当前运行模式依次把选中的 %1$d 个应用克隆到双开空间。普通模式会逐个传输安装包，需在双开空间手动安装。</string>
@@ -28,19 +36,16 @@
     <!-- SpaceScreen: search -->
     <string name="lz_space_search_dual">在双开空间内搜索</string>
     <string name="lz_space_search_main">在主空间内搜索</string>
-    <string name="lz_space_more_options">更多选项</string>
 
     <!-- SpaceScreen: overflow menu -->
     <string name="lz_space_menu_sort">排序方式</string>
     <string name="lz_space_menu_sort_name">名称（A→Z）</string>
-    <string name="lz_space_menu_sort_time">安装时间（最近优先）</string>
-    <string name="lz_space_menu_sort_cloned">双开状态（已双开优先）</string>
+    <string name="lz_space_menu_sort_cloned">已添加优先</string>
     <string name="lz_space_menu_filter">筛选</string>
     <string name="lz_space_menu_filter_all">全部应用</string>
     <string name="lz_space_menu_filter_cloned_only">仅已双开</string>
     <string name="lz_space_menu_filter_not_cloned_only">仅未双开</string>
     <string name="lz_space_menu_show_system">显示系统应用</string>
-    <string name="lz_space_menu_actions">操作</string>
     <string name="lz_space_menu_refresh">刷新</string>
 
     <!-- SpaceScreen: empty states -->
@@ -61,9 +66,22 @@
     <string name="lz_space_main_copy_lost_title">主空间应用已不存在</string>
     <string name="lz_space_main_copy_lost_body">完成 %1$s 的系统卸载流程后，检测到它在主空间中的副本已不存在。这是 Android 当前返回的真实状态；如有需要，请从备份恢复应用及其数据。</string>
 
+    <!-- 分身卸载门禁：双开空间无法呈现系统卸载确认时展示的引导。 -->
+    <string name="lz_uninstall_gate_suspended">请先在设置中恢复双开空间，然后再卸载分身</string>
+    <string name="lz_uninstall_gate_locked">请先解锁双开空间（锁屏密码），然后再卸载分身</string>
+    <string name="lz_uninstall_gate_bridge">请先在设置中修复双开空间连接，然后再卸载分身</string>
+    <string name="lz_uninstall_gate_missing">请先创建双开空间，然后再卸载分身</string>
+    <string name="lz_uninstall_gate_unknown">请先在设置中修复双开空间，然后再卸载分身</string>
+
+    <!-- 待安装续装门禁：双开空间无法呈现系统安装器时展示的引导。 -->
+    <string name="lz_install_gate_suspended">请先在设置中恢复双开空间，然后再继续安装</string>
+    <string name="lz_install_gate_locked">请先解锁双开空间（锁屏密码），然后再继续安装</string>
+    <string name="lz_install_gate_bridge">请先在设置中修复双开空间连接，然后再继续安装</string>
+    <string name="lz_install_gate_missing">请先创建双开空间，然后再继续安装</string>
+    <string name="lz_install_gate_unknown">请先在设置中修复双开空间，然后再继续安装</string>
+
     <!-- 双开空间系统应用：搜索优先，避免直接暴露可批量误操作的长列表。 -->
     <string name="lz_system_apps_title">系统应用</string>
-    <string name="lz_system_apps_entry">管理系统应用</string>
     <string name="lz_system_apps_back">返回</string>
     <string name="lz_system_apps_search">搜索系统应用名称或包名</string>
     <string name="lz_system_apps_empty_search_title">查找系统应用</string>

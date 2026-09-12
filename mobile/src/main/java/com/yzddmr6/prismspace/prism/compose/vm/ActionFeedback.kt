@@ -41,6 +41,8 @@ fun filesImportFeedbackDetailed(ok: Int, oversize: Int, otherFail: Int, res: Str
 /**
  * Pure: batch-action feedback shared by SpaceViewModel and tests.
  * failed == failures.size; isError == failures.isNotEmpty().
+ * CopyToDual is intentionally absent: batch clone reports through [batchCloneFeedback], which
+ * counts real per-package results instead of "request started".
  */
 fun batchActionFeedback(action: BatchAction, succeeded: Int, failed: Int, res: StringResolver): ActionFeedback {
     val msg = when (action) {
@@ -50,9 +52,7 @@ fun batchActionFeedback(action: BatchAction, succeeded: Int, failed: Int, res: S
         BatchAction.Uninstall ->
             if (failed == 0) res(R.string.lz_vm_batch_uninstall_ok, arrayOf(succeeded))
             else res(R.string.lz_vm_batch_uninstall_partial, arrayOf(succeeded, failed))
-        BatchAction.CopyToDual ->
-            if (failed == 0) res(R.string.lz_vm_batch_clone_ok, arrayOf(succeeded))
-            else res(R.string.lz_vm_batch_clone_partial, arrayOf(succeeded, failed))
+        BatchAction.CopyToDual -> error("Batch clone uses batchCloneFeedback (real per-package results)")
     }
     return ActionFeedback(msg, isError = failed > 0)
 }
@@ -69,3 +69,36 @@ internal fun uninstallQueueFeedback(
     ),
     isError = summary.cancelled > 0 || summary.timedOut > 0 || skipped > 0,
 )
+
+/** Pure: the queue stopped on a mid-run usability gate trip; unlaunched heads are counted as
+ *  not attempted (never fired), followed by the state-specific guidance. */
+internal fun uninstallAbortFeedback(
+    completed: Int,
+    notAttempted: Int,
+    guidance: String,
+    res: StringResolver,
+): ActionFeedback = ActionFeedback(
+    res(R.string.lz_vm_uninstall_queue_aborted, arrayOf(completed, notAttempted, guidance)),
+    isError = true,
+)
+
+/** Pure: batch-clone summary from real per-package results. Staged packages are "prepared" and the
+ *  copy always states that installation still needs confirmation inside the dual space — nothing
+ *  may read as cloned until an enhanced route reports a verified install. Single emission. */
+internal fun batchCloneFeedback(counts: BatchCloneCounts, res: StringResolver): ActionFeedback {
+    val message = when {
+        counts.prepared == 0 && counts.installed == 0 ->
+            res(R.string.lz_vm_batch_clone_failed, arrayOf(counts.failed))
+        counts.installed == 0 && counts.failed == 0 ->
+            res(R.string.lz_vm_batch_clone_prepared, arrayOf(counts.prepared))
+        counts.installed == 0 ->
+            res(R.string.lz_vm_batch_clone_prepared_partial, arrayOf(counts.prepared, counts.failed))
+        counts.prepared == 0 && counts.failed == 0 ->
+            res(R.string.lz_vm_batch_clone_installed, arrayOf(counts.installed))
+        counts.prepared == 0 ->
+            res(R.string.lz_vm_batch_clone_installed_partial, arrayOf(counts.installed, counts.failed))
+        else ->
+            res(R.string.lz_vm_batch_clone_mixed, arrayOf(counts.installed, counts.prepared, counts.failed))
+    }
+    return ActionFeedback(message, isError = counts.failed > 0)
+}

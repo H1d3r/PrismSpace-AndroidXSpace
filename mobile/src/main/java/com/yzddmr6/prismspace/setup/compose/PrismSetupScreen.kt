@@ -19,6 +19,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.yzddmr6.prismspace.mobile.R
+import com.yzddmr6.prismspace.prism.compose.component.PrismTextButton
 import com.yzddmr6.prismspace.prism.compose.theme.PrismTheme
 
 /**
@@ -75,6 +76,7 @@ private fun SetupContent(
         Spacer(Modifier.height(8.dp))
         HeroSection()
         FeaturesSection()
+        HowToSection()
         PrivacySection()
         CtaSection(checking = checking, onPrimary = onPrimaryCta, onHelp = onShowHelp)
         Spacer(Modifier.height(24.dp))
@@ -156,6 +158,28 @@ private fun FeatureCard(icon: ImageVector, title: String, body: String) {
     }
 }
 
+/** 创建方式说明（系统引导 + 随时可删除）—— 对齐原型：欢迎、特性、创建方式、CTA、帮助。 */
+@Composable
+private fun HowToSection() {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = stringResource(R.string.prism_setup_howto_title),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        FeatureCard(
+            icon = Icons.Outlined.Lock,
+            title = stringResource(R.string.prism_setup_howto_system_title),
+            body = stringResource(R.string.prism_setup_howto_system_body),
+        )
+        FeatureCard(
+            icon = Icons.Outlined.Folder,
+            title = stringResource(R.string.prism_setup_howto_delete_title),
+            body = stringResource(R.string.prism_setup_howto_delete_body),
+        )
+    }
+}
+
 @Composable
 private fun PrivacySection() {
     Column(
@@ -195,7 +219,7 @@ private fun CtaSection(checking: Boolean, onPrimary: () -> Unit, onHelp: () -> U
                     style = MaterialTheme.typography.titleMedium,
                 )
         }
-        TextButton(
+        PrismTextButton(
             onClick = onHelp,
             modifier = Modifier
                 .fillMaxWidth(),
@@ -225,20 +249,20 @@ private fun SetupErrorDialog(
         confirmButton = {
             val extra = state.extraActionRes
             if (extra != null) {
-                TextButton(onClick = {
+                PrismTextButton(onClick = {
                     onExtraAction(extra)
                     onDismiss()
                 }) {
                     Text(stringResource(extra))
                 }
             } else {
-                TextButton(onClick = onDismiss) {
+                PrismTextButton(onClick = onDismiss) {
                     Text(stringResource(android.R.string.ok))
                 }
             }
         },
         dismissButton = if (state.extraActionRes != null) {
-            { TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) } }
+            { PrismTextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) } }
         } else null,
     )
 }

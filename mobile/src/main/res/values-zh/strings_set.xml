@@ -62,4 +62,16 @@
 
     <!-- AboutSheet.kt -->
     <string name="lz_set_about_intro">面向 Android 的双开空间管理器。在系统工作资料之上提供独立运行环境，让同一应用以多个账号并行存在，彼此数据互不干扰。</string>
+    <!-- 设置分组 -->
+    <string name="lz_set_group_space">双开空间</string>
+    <string name="lz_set_group_clone_method">添加分身方式</string>
+    <string name="lz_set_group_general">通用</string>
+    <string name="lz_set_group_support">支持</string>
+    <string name="lz_set_group_experimental">实验性功能</string>
+    <string name="lz_set_group_danger">危险区</string>
+    <string name="lz_set_system_apps_summary">查看或添加双开空间中的系统应用</string>
+    <string name="lz_set_multi_space_title">多个双开空间</string>
+    <string name="lz_set_multi_space_summary">实验功能 · 仅部分定制系统可用；若设备已存在第二个双开空间，PrismSpace 会自动识别</string>
+    <string name="lz_set_suspend_disabled_locked">解锁后才能操作</string>
+    <string name="lz_set_suspend_disabled_bridge">重新连接后才能操作</string>
 </resources>

@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
 import com.yzddmr6.prismspace.analytics.DiagnosticSection
 import com.yzddmr6.prismspace.bridge.BridgeTargets
+import com.yzddmr6.prismspace.controller.ClonePreparationStore
 import com.yzddmr6.prismspace.controller.PrismAppControl
 import com.yzddmr6.prismspace.controller.UserCloneRegistry
 import com.yzddmr6.prismspace.mobile.R
@@ -82,6 +83,10 @@ data class SettingsUiModel(
     val feedbackMessage: String? = null,
     val feedbackIsError: Boolean = false,
     val spaceFreezeState: SpaceFreezeState = SpaceFreezeState.Unknown,
+    // Real aggregated dual-space usability (locked / bridge-down drive the 暂停所有分身 switch's
+    // disabled reason) and the clone count used by the danger-zone delete confirmation.
+    val spaceUsability: SpaceUsability = SpaceUsability.Unknown,
+    val cloneCount: Int = 0,
     // Single source of truth for which mode the user has selected
     val selectedMode: PrismMode = PrismMode.Normal,
     // Non-null when an update check found a newer release.
@@ -597,6 +602,9 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             val fb = provisioningFeedback(result, res)
             if (result == DeleteSpaceResult.Success) {
                 UserCloneRegistry.clear(getApplication())
+                // Pending-install markers target a space that no longer exists — clear them so the
+                // home todo card and the main-space rows stop offering 待安装 for a deleted space.
+                ClonePreparationStore.clear(getApplication())
             }
             setFeedback(fb.message, isError = fb.isError)
             if (fb.routeToSystemRemoval) PrismSetup.promptManualRemoval(activity)
@@ -728,10 +736,26 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         )
         val freezeState = observeSpaceFreezeState(context, presentation.kind)
         val spaceAction = settingsSpaceAction(presentation.kind, presentation.bridgeCause, prismResolver(context))
+        val dual = spaceRepo.dualSpace()
+        val usability = dual?.let { spaceRepo.usabilityOf(it) } ?: SpaceUsability.NotProvisioned
+        val cloneCount = runCatching {
+            val self = context.packageName
+            spaceRepo.dualSpaces().sumOf { d ->
+                runCatching {
+                    // Same counting rule as Home: user clones plus launchable system apps.
+                    spaceRepo.installedApps(d).count { app ->
+                        app.isInstalled && app.shouldShowAsEnabled() && app.packageName != self &&
+                            (!app.isSystem || UserCloneRegistry.contains(context, app.packageName) || app.isLaunchable)
+                    }
+                }.getOrElse { 0 }
+            }
+        }.getOrElse { 0 }
         return result.copy(
             feedbackMessage = current?.feedbackMessage,
             feedbackIsError = current?.feedbackIsError ?: false,
             spaceFreezeState = freezeState,
+            spaceUsability = usability,
+            cloneCount = cloneCount,
             spaceActionTitle = spaceAction.title,
             spaceActionSummary = spaceAction.summary,
             spaceActionNeedsConfirmation = spaceAction.needsConfirmation,
@@ -761,7 +785,8 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         val base = buildUiModel(snapshot.lastKnown ?: SpaceState.NoProfile)
         return base.copy(
             modeBody = str(R.string.lz_setvm_state_refresh_failed),
-            level = PrismLevel.Warn,
+            // 读取失败且无可用快照：无法判定好坏，呈现为 Neutral（不阻断、不渲染为正常）。
+            level = PrismLevel.Neutral,
             profileOwnerReady = false,
             spaceFreezeState = SpaceFreezeState.Unknown,
             spaceActionTitle = str(R.string.lz_set_state_unavailable_title),
@@ -872,9 +897,10 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         if (current != null) {
             _uiState.value = current.copy(feedbackMessage = message, feedbackIsError = isError)
         } else {
-            // state not yet loaded; create a minimal placeholder
+            // state not yet loaded; create a minimal placeholder — level Neutral, never green
+            // for an unknown state.
             _uiState.value = SettingsUiModel(
-                modeTitle = "", modeBody = "", level = PrismLevel.Ok,
+                modeTitle = "", modeBody = "", level = PrismLevel.Neutral,
                 profileOwnerReady = false,
                 normalMode = SettingsModeRow("", "", "", false),
                 shizukuAdbMode = SettingsModeRow("", "", "", false),

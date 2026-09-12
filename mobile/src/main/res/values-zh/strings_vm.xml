@@ -1,11 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- SpaceViewModel: status chip text -->
-    <string name="lz_vm_chip_frozen">已冻结</string>
-    <string name="lz_vm_chip_running">运行中</string>
-    <string name="lz_vm_chip_cloned">已双开</string>
+    <!-- 行标签：健康行不贴标签；仅异常状态呈现。 -->
+    <string name="lz_vm_chip_paused">已暂停</string>
+    <string name="lz_vm_chip_system">系统应用</string>
     <string name="lz_vm_chip_pending_install">待安装</string>
-    <string name="lz_vm_chip_not_cloned">未双开</string>
 
     <!-- SpaceViewModel: batch progress -->
     <string name="lz_vm_batch_progress">正在处理 %1$d/%2$d…</string>
@@ -27,8 +26,15 @@
     <string name="lz_vm_batch_uninstall_ok">正在卸载 %1$d 个应用</string>
     <string name="lz_vm_batch_uninstall_partial">卸载发起: 成功 %1$d, 失败 %2$d</string>
     <string name="lz_vm_uninstall_queue_summary">卸载完成：已卸载 %1$d 个，未卸载 %2$d 个，未能确认 %3$d 个。</string>
-    <string name="lz_vm_batch_clone_ok">正在克隆 %1$d 个应用到双开空间</string>
-    <string name="lz_vm_batch_clone_partial">克隆发起: 成功 %1$d, 失败 %2$d</string>
+    <string name="lz_vm_uninstall_queue_aborted">卸载已停止：已卸载 %1$d 个，%2$d 个未执行。%3$s</string>
+
+    <!-- 批量克隆结果：暂存只计「已准备」（不得称已克隆）；已克隆 = 增强通路验证后的真实安装。 -->
+    <string name="lz_vm_batch_clone_prepared">已为 %1$d 个应用准备安装包，还需在双开空间确认安装</string>
+    <string name="lz_vm_batch_clone_prepared_partial">已为 %1$d 个应用准备安装包，%2$d 个失败；还需在双开空间确认安装</string>
+    <string name="lz_vm_batch_clone_installed">已克隆 %1$d 个应用到双开空间</string>
+    <string name="lz_vm_batch_clone_installed_partial">已克隆 %1$d 个应用，%2$d 个失败</string>
+    <string name="lz_vm_batch_clone_mixed">已克隆 %1$d 个，已准备 %2$d 个（需在双开空间确认安装），失败 %3$d 个</string>
+    <string name="lz_vm_batch_clone_failed">未能克隆 %1$d 个应用</string>
 
     <!-- ProvisioningFeedback: create -->
     <string name="lz_vm_create_success">已创建新的双开空间</string>

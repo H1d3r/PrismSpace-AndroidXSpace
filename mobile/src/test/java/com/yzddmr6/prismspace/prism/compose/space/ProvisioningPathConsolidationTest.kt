@@ -127,16 +127,26 @@ class ProvisioningPathConsolidationTest {
         assertEquals(SpaceDeletionRoute.Refuse, deletionRetryRoute(DeleteSpaceResult.Failed("ambiguous"), facts()))
 
         listOf(
-            File("src/main/java/com/yzddmr6/prismspace/prism/compose/vm/SpaceViewModel.kt"),
             File("src/main/java/com/yzddmr6/prismspace/prism/compose/vm/SettingsViewModel.kt"),
         ).forEach { source ->
             val text = source.readText()
             assertTrue("${source.name} must use the coordinator", text.contains("SpaceDeletionCoordinator.delete("))
             assertFalse("${source.name} must not branch to legacy destruction", text.contains("destroyProfileDirect"))
         }
+        // 删除双开空间的唯一归属是设置危险区：空间页不再承载删除入口。
         val spaceScreen = File("src/main/java/com/yzddmr6/prismspace/prism/compose/screen/SpaceScreen.kt").readText()
-        assertTrue("Space screen must wire its delete entry to the shared coordinator path", spaceScreen.contains("vm.deleteSpace("))
-        assertTrue("Space delete must only be offered for the dual segment", spaceScreen.contains("segment == SpaceSegment.Dual && canDeleteSpace"))
+        assertFalse("Space screen must not offer space deletion (settings danger zone owns it)",
+            spaceScreen.contains("deleteSpace"))
+        val settingsScreen = File("src/main/java/com/yzddmr6/prismspace/prism/compose/screen/SettingsScreen.kt").readText()
+        assertTrue("Settings danger zone must wire deletion through the ViewModel",
+            settingsScreen.contains("vm.deleteDualSpace("))
+        assertTrue("Settings deletion must pass the real clone count into the warning",
+            settingsScreen.contains("cloneCount ="))
+        // 删除成功后：克隆注册表与待安装标记都必须清除（待安装任务指向已删除的空间）。
+        val settingsVm = File("src/main/java/com/yzddmr6/prismspace/prism/compose/vm/SettingsViewModel.kt").readText()
+        val successBlock = settingsVm.substringAfter("DeleteSpaceResult.Success").substringBefore("setFeedback(fb.message")
+        assertTrue(successBlock.contains("UserCloneRegistry.clear"))
+        assertTrue(successBlock.contains("ClonePreparationStore.clear"))
     }
 
     @Test fun `profile wipe has exactly one implementation`() {

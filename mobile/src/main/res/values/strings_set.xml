@@ -62,4 +62,16 @@
 
     <!-- AboutSheet.kt -->
     <string name="lz_set_about_intro">A dual-space manager for Android. Built on top of the system work profile, it provides isolated runtime environments so the same app can run with multiple accounts in parallel, with data fully separated.</string>
+    <!-- Settings groups -->
+    <string name="lz_set_group_space">Dual space</string>
+    <string name="lz_set_group_clone_method">How clones are added</string>
+    <string name="lz_set_group_general">General</string>
+    <string name="lz_set_group_support">Support</string>
+    <string name="lz_set_group_experimental">Experimental</string>
+    <string name="lz_set_group_danger">Danger zone</string>
+    <string name="lz_set_system_apps_summary">View or add system apps in the dual space</string>
+    <string name="lz_set_multi_space_title">Multiple dual spaces</string>
+    <string name="lz_set_multi_space_summary">Experimental · depends on the system. If the device already has another dual space, PrismSpace recognizes it automatically.</string>
+    <string name="lz_set_suspend_disabled_locked">Unlock the dual space before changing this</string>
+    <string name="lz_set_suspend_disabled_bridge">Reconnect the dual space before changing this</string>
 </resources>

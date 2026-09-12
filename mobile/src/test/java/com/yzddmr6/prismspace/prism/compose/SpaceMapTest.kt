@@ -1,6 +1,7 @@
 package com.yzddmr6.prismspace.prism.compose
 
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceAppInput
+import com.yzddmr6.prismspace.prism.compose.vm.SpaceRowAction
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceSegment
 import com.yzddmr6.prismspace.prism.compose.vm.mapRows
 import org.junit.Assert.assertEquals
@@ -48,19 +49,42 @@ class SpaceMapTest {
     // --- Dual segment ---
 
     @Test
-    fun `dual frozen app gets chipText 已冻结 and chipOk false`() {
+    fun `dual frozen app gets chipText 已暂停 and Resume action`() {
         val rows = mapRows(listOf(dualInput(frozen = true)))
         assertEquals(1, rows.size)
-        assertEquals("已冻结", rows[0].chipText)
+        assertEquals("已暂停", rows[0].chipText)
         assertFalse(rows[0].chipOk)
+        assertEquals(SpaceRowAction.Resume, rows[0].primaryAction)
     }
 
     @Test
-    fun `dual running app gets chipText 运行中 and chipOk true`() {
+    fun `dual suspended app reads paused and offers Resume`() {
+        val row = mapRows(listOf(dualInput(suspended = true))).single()
+        assertEquals("已暂停", row.chipText)
+        assertEquals(SpaceRowAction.Resume, row.primaryAction)
+    }
+
+    @Test
+    fun `dual healthy app carries no tag and offers Open`() {
+        // 健康行不贴「运行中」类标签；行内主动作 = 打开。
         val rows = mapRows(listOf(dualInput(frozen = false)))
         assertEquals(1, rows.size)
-        assertEquals("运行中", rows[0].chipText)
-        assertTrue(rows[0].chipOk)
+        assertEquals(null, rows[0].chipText)
+        assertEquals(SpaceRowAction.Open, rows[0].primaryAction)
+    }
+
+    @Test
+    fun `dual system app gets 系统应用 tag and no row action`() {
+        val row = mapRows(listOf(dualInput(system = true))).single()
+        assertEquals("系统应用", row.chipText)
+        assertEquals(null, row.primaryAction)
+    }
+
+    @Test
+    fun `dual healthy but not launchable has neither tag nor action`() {
+        val row = mapRows(listOf(dualInput(launchable = false))).single()
+        assertEquals(null, row.chipText)
+        assertEquals(null, row.primaryAction)
     }
 
     @Test
@@ -71,8 +95,8 @@ class SpaceMapTest {
     @Test
     fun `dual frozen takes priority regardless of launchable`() {
         val rows = mapRows(listOf(dualInput(frozen = true, launchable = false)))
-        assertEquals("已冻结", rows[0].chipText)
-        assertFalse(rows[0].chipOk)
+        assertEquals("已暂停", rows[0].chipText)
+        assertEquals(SpaceRowAction.Resume, rows[0].primaryAction)
     }
 
     @Test
@@ -84,25 +108,27 @@ class SpaceMapTest {
     // --- Main segment ---
 
     @Test
-    fun `main cloned app gets chipText 已双开 and chipOk true`() {
+    fun `main cloned app carries no tag and no action`() {
+        // 已双开是健康态，不贴标签；行内无下一步动作。
         val rows = mapRows(listOf(mainInput(cloned = true)))
-        assertEquals("已双开", rows[0].chipText)
-        assertTrue(rows[0].chipOk)
+        assertEquals(null, rows[0].chipText)
+        assertEquals(null, rows[0].primaryAction)
     }
 
     @Test
-    fun `main non-cloned app gets chipText 未双开 and chipOk false`() {
+    fun `main non-cloned app offers 添加分身 without a tag`() {
         val rows = mapRows(listOf(mainInput(cloned = false)))
-        assertEquals("未双开", rows[0].chipText)
-        assertFalse(rows[0].chipOk)
+        assertEquals(null, rows[0].chipText)
+        assertEquals(SpaceRowAction.AddClone, rows[0].primaryAction)
     }
 
     @Test
-    fun `main prepared app is pending rather than cloned`() {
+    fun `main prepared app is pending with 去安装 action`() {
         val row = mapRows(listOf(mainInput(cloned = false, prepared = true))).single()
         assertEquals("待安装", row.chipText)
         assertFalse(row.chipOk)
         assertTrue(row.prepared)
+        assertEquals(SpaceRowAction.ContinueInstall, row.primaryAction)
     }
 
     @Test
@@ -147,8 +173,11 @@ class SpaceMapTest {
         )
         val rows = mapRows(inputs)
         assertEquals(3, rows.size)
-        assertEquals("已冻结", rows[0].chipText)
-        assertEquals("运行中", rows[1].chipText)
-        assertEquals("已双开", rows[2].chipText)
+        assertEquals("已暂停", rows[0].chipText)
+        assertEquals(null, rows[1].chipText)   // healthy dual row carries no tag
+        assertEquals(null, rows[2].chipText)   // cloned main row carries no tag
+        assertEquals(SpaceRowAction.Resume, rows[0].primaryAction)
+        assertEquals(SpaceRowAction.Open, rows[1].primaryAction)
+        assertEquals(null, rows[2].primaryAction)
     }
 }

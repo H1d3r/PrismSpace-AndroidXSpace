@@ -94,6 +94,8 @@ class BridgeCommandParcelTest {
             )
             assertRoundTrip(CancelProfileShortcutLaunch, Unit)
             assertRoundTrip(OpenAppDetailsInProfile("pkg"), Unit)
+            assertRoundTrip(RequestAppUninstall("pkg"), UninstallLaunchDto(UninstallLaunchKind.Failed, "reason"))
+            assertRoundTrip(RequestAppUninstall("pkg"), UninstallLaunchDto(UninstallLaunchKind.Launched))
             val diagnosticToken = "00000000-0000-0000-0000-000000000000"
             assertRoundTrip(
                 OpenDiagnosticsSnapshot,

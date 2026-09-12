@@ -17,11 +17,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yzddmr6.prismspace.prism.compose.space.SpaceChip
 import com.yzddmr6.prismspace.prism.compose.theme.LocalPrismExtraColors
+import com.yzddmr6.prismspace.prism.compose.theme.PrismMinTouchTarget
 import com.yzddmr6.prismspace.prism.compose.theme.PrismRadius
 import com.yzddmr6.prismspace.prism.compose.theme.PrismSpacing
 
@@ -52,7 +57,11 @@ fun SpaceSegmentChips(
                     color = if (selected) MaterialTheme.colorScheme.surface else Color.Transparent,
                     shadowElevation = if (selected) 3.dp else 0.dp,
                     modifier = Modifier
-                        .heightIn(min = 44.dp)
+                        .heightIn(min = PrismMinTouchTarget)
+                        .semantics(mergeDescendants = true) {
+                            role = Role.Tab
+                            this.selected = selected
+                        }
                         .clickable {
                             if (chip.id == "main") onSelectMain() else onSelectDual(chip.id)
                         },

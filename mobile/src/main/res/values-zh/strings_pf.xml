@@ -12,7 +12,6 @@
 
     <!-- FilesScreen -->
     <string name="lz_pf_files_title">文件</string>
-    <string name="lz_pf_files_transfer_heading">在空间之间传文件</string>
     <string name="lz_pf_files_send_other">发送文件到另一空间</string>
     <string name="lz_pf_files_send_other_summary">可一次选择多个文件，PrismSpace 将通过空间桥依次传输。</string>
     <string name="lz_pf_direction_to_main">传到主空间</string>
@@ -22,6 +21,9 @@
     <string name="lz_pf_files_step3">在 PrismSpace 内选择「保存到本空间」或「发送到另一空间」。</string>
     <string name="lz_pf_files_step4">等待明确的成功或分类失败结果。</string>
     <string name="lz_pf_files_tab_hint">最终保存空间以 PrismSpace 内的选择为准。部分系统打开接收入口时不会保留分享面板的「个人 / 工作」标签。</string>
+    <string name="lz_pf_files_return_title">如何从双开空间传回文件</string>
+    <string name="lz_pf_open_folder">打开文件夹</string>
+    <string name="lz_pf_choose_files">选择文件</string>
     <string name="lz_pf_files_history_title">传输记录</string>
     <string name="lz_pf_files_clear">清空</string>
     <string name="lz_pf_files_clear_confirm_title">清空传输记录？</string>
@@ -31,6 +33,14 @@
     <string name="lz_pf_open_fail">无法直接打开，请在系统文件管理器的 下载/PrismSpace 里查看。</string>
     <!-- 普通模式前台安装 -->
     <string name="lz_pf_install">安装</string>
+    <string name="lz_pf_entry_pending_installs">待安装</string>
+    <string name="lz_pf_entry_pending_ready">安装包已就绪 · 由 Android 询问你</string>
+    <string name="lz_pf_entry_send_to_main">发送文件到主空间</string>
+    <string name="lz_files_gate_suspended">请先在设置中恢复双开空间，然后再发送文件</string>
+    <string name="lz_files_gate_locked">请先解锁双开空间（锁屏密码），然后再发送文件</string>
+    <string name="lz_files_gate_bridge">请先在设置中修复双开空间连接，然后再发送文件</string>
+    <string name="lz_files_gate_missing">请先创建双开空间，然后再发送文件</string>
+    <string name="lz_files_gate_unknown">请先在设置中修复双开空间，然后再发送文件</string>
     <string name="lz_pf_install_no_apk">在本空间找不到已复制的应用安装包，请到主空间重新克隆。</string>
     <string name="lz_pf_install_started">正在准备安装…</string>
     <string name="lz_pf_install_success">已安装到双开空间。</string>

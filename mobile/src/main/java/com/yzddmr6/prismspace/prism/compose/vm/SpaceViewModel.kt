@@ -17,17 +17,15 @@ import com.yzddmr6.prismspace.controller.ClonePreparationStore
 import com.yzddmr6.prismspace.controller.UserCloneRegistry
 import com.yzddmr6.prismspace.data.PrismAppListProvider
 import com.yzddmr6.prismspace.engine.LaunchResult
-import com.yzddmr6.prismspace.prism.compose.space.DeleteSpaceResult
 import com.yzddmr6.prismspace.prism.compose.space.PrismSpace
 import com.yzddmr6.prismspace.prism.compose.space.PrismSpaceKind
 import com.yzddmr6.prismspace.prism.compose.space.resolveSpaceSelection
-import com.yzddmr6.prismspace.prism.compose.space.SpaceDeletionCoordinator
 import com.yzddmr6.prismspace.prism.compose.space.SpaceRepository
 import com.yzddmr6.prismspace.prism.compose.space.SpaceRepositoryProvider
 import com.yzddmr6.prismspace.prism.compose.space.SpaceSnapshot
 import com.yzddmr6.prismspace.prism.compose.space.SpaceStateRepository
 import com.yzddmr6.prismspace.prism.compose.space.SpaceUsability
-import com.yzddmr6.prismspace.setup.PrismSetup
+import com.yzddmr6.prismspace.prism.service.ProfileUninstallLauncher
 import com.yzddmr6.prismspace.util.Users
 import com.yzddmr6.prismspace.util.Users.Companion.toId
 import com.yzddmr6.prismspace.data.PrismAppInfo
@@ -67,6 +65,9 @@ internal data class SpaceAppInput(
     val critical: Boolean = false,
 )
 
+/** The row's single next-step action rendered as its inline button; null = no action row button. */
+enum class SpaceRowAction { Open, Resume, AddClone, ContinueInstall }
+
 // ---------------------------------------------------------------------------
 // Pure row model surfaced to the Compose UI
 // ---------------------------------------------------------------------------
@@ -81,32 +82,46 @@ data class SpaceRow(
     val cloned: Boolean,
     val prepared: Boolean,
     val segment: SpaceSegment,
-    val chipText: String,      // status label for the chip
+    val chipText: String?,     // status tag text; null = healthy rows carry no tag
     val chipOk: Boolean,       // true → ok-green, false → muted/warn
+    val primaryAction: SpaceRowAction? = null,   // the row's only inline next-step action
     val critical: Boolean = false,
 )
 
 // ---------------------------------------------------------------------------
 // Pure mapper — the only business logic owned by this layer
-// Dual segment chip rules:
-//   frozen     → "已冻结"  (warn)
-//   else       → "运行中"  (ok)
-// Main segment chip rules:
-//   cloned     → "已双开" (info/ok)
-//   else       → "未双开" (muted)
+// Tag honesty: healthy rows carry NO tag; only exceptional states are labelled.
+//   Dual: system → "系统应用"; frozen/suspended → "已暂停"; healthy → no tag.
+//   Main: prepared → "待安装"; cloned / not-cloned → no tag (the row action carries state).
+// Inline action: dual → 打开/恢复; main → 添加分身/去安装; added or system rows → none.
 // ---------------------------------------------------------------------------
 
 internal fun mapRows(inputs: List<SpaceAppInput>, res: StringResolver): List<SpaceRow> = inputs.map { app ->
     val (chipText, chipOk) = when (app.segment) {
-        SpaceSegment.Dual ->
-            // Truthful badge: 已冻结 covers both freeze mechanisms and any lingering
+        SpaceSegment.Dual -> when {
+            app.system -> res(R.string.lz_vm_chip_system, emptyArray()) to false
+            // Truthful badge: 已暂停 covers both freeze mechanisms and any lingering
             // suspended state, so a paused clone never reads as running.
-            if (app.frozen || app.suspended) res(R.string.lz_vm_chip_frozen, emptyArray()) to false
-            else res(R.string.lz_vm_chip_running, emptyArray()) to true
-        SpaceSegment.Main ->
-            if (app.cloned) res(R.string.lz_vm_chip_cloned, emptyArray()) to true
-            else if (app.prepared) res(R.string.lz_vm_chip_pending_install, emptyArray()) to false
-            else res(R.string.lz_vm_chip_not_cloned, emptyArray()) to false
+            app.frozen || app.suspended -> res(R.string.lz_vm_chip_paused, emptyArray()) to false
+            else -> null to true
+        }
+        SpaceSegment.Main -> when {
+            app.prepared -> res(R.string.lz_vm_chip_pending_install, emptyArray()) to false
+            else -> null to true
+        }
+    }
+    val primaryAction = when (app.segment) {
+        SpaceSegment.Dual -> when {
+            app.system -> null
+            app.frozen || app.suspended -> SpaceRowAction.Resume
+            app.launchable -> SpaceRowAction.Open
+            else -> null
+        }
+        SpaceSegment.Main -> when {
+            app.prepared -> SpaceRowAction.ContinueInstall
+            app.cloned -> null
+            else -> SpaceRowAction.AddClone
+        }
     }
     SpaceRow(
         pkg       = app.pkg,
@@ -120,6 +135,7 @@ internal fun mapRows(inputs: List<SpaceAppInput>, res: StringResolver): List<Spa
         segment   = app.segment,
         chipText  = chipText,
         chipOk    = chipOk,
+        primaryAction = primaryAction,
         critical  = app.critical,
     )
 }
@@ -146,7 +162,7 @@ internal fun filterSystemAppRows(rows: List<SpaceRow>, query: String): List<Spac
 // Filter, sort, and search model.
 // ---------------------------------------------------------------------------
 
-enum class SortOrder { Name, Time, Cloned }
+enum class SortOrder { Name, Cloned }
 
 enum class CloneFilter { All, Yes, No }
 
@@ -157,12 +173,11 @@ enum class CloneFilter { All, Yes, No }
  * - showSystem:  hides system apps (row.system == true) when false.
  * - cloneFilter: All / Yes / No clone filter; MAIN segment only.
  * - sort Name:   localeCompare with zh collation (both segments).
- * - sort Time:   stable provider load order (index in list = install order proxy;
- *                most-recently-loaded = highest index → reversed → first); both segments.
- * - sort Cloned: cloned-first (already-cloned at top), then name; MAIN segment only.
+ * - sort Cloned: 已添加优先 — cloned-first (already-cloned at top), then name; MAIN segment only.
  *                Falls back to Name sort for Dual segment.
  *
  * No backend or provider changes — operates only on the already-loaded in-memory list.
+ * (The pseudo "install time" ordering was removed: load order never equaled install time.)
  */
 internal fun applyListTransform(
     rows: List<SpaceRow>,
@@ -197,7 +212,6 @@ internal fun applyListTransform(
     // 3. Sort
     result = when {
         sort == SortOrder.Name -> result.sortedWith(compareBy { it.label.lowercase() })
-        sort == SortOrder.Time -> result.reversed() // stable load order proxy: last-loaded first
         sort == SortOrder.Cloned && segment == SpaceSegment.Main ->
             result.sortedWith(compareByDescending<SpaceRow> { if (it.cloned) 1 else 0 }
                 .thenBy { it.label.lowercase() })
@@ -225,6 +239,9 @@ data class SpaceUiState(
     val systemApps: SpaceSegmentState = SpaceSegmentState.Loading,
     // Multi-select: null = not in multi-select mode; non-null = set of selected pkgs
     val selectedPkgs: Set<String>? = null,
+    // Snapshot of the entry-time filtered result set (search/filter/sort applied, system rows
+    // removed) — the domain for selection, 全选, and counts while multi-select is active.
+    val multiSelectDomain: List<SpaceRow>? = null,
     // Batch progress message while a batch op is running, null otherwise
     val batchProgress: String? = null,
     // Filter, sort, and search state.
@@ -271,12 +288,18 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
     val uiState: StateFlow<SpaceUiState> = _uiState
     private val spaceRepo: SpaceRepository by lazy { SpaceRepositoryProvider.get(getApplication()) }
     private val stateRepo: SpaceStateRepository by lazy { SpaceStateRepository(getApplication()) }
-    private val capabilityRepo: CapabilityRepository by lazy { CapabilityRepositoryProvider.get(getApplication()) }
-    private val _pendingUninstallRequest = MutableStateFlow<UninstallRequest?>(null)
-    internal val pendingUninstallRequest: StateFlow<UninstallRequest?> = _pendingUninstallRequest
     private var uninstallQueue = UninstallQueueState()
     private var uninstallValidationJob: Job? = null
     private var uninstallSkipped = 0
+    private var uninstallLaunchInFlight: UninstallRequest? = null
+    private val uninstallLaunchPort = UninstallLaunchPort { request ->
+        when (val result = ProfileUninstallLauncher().requestUninstall(
+            getApplication(), request.packageName, request.targetUserId,
+        )) {
+            ProfileUninstallLauncher.Result.Launched -> UninstallLaunchReply.Launched
+            is ProfileUninstallLauncher.Result.Failed -> UninstallLaunchReply.Failed(result.message, result.reason)
+        }
+    }
 
     // Internal cache so callers can look up PrismAppInfo by package.
     // One immutable snapshot is published atomically via a single @Volatile ref,
@@ -342,25 +365,6 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
         _uiState.value = _uiState.value.copy(mainCopyLostPackage = null)
     }
 
-    fun deleteSpace(activity: Activity, space: PrismSpace) {
-        val res: StringResolver = prismResolver(getApplication())
-        viewModelScope.launch {
-            setFeedback(res(R.string.lz_vm_deleting_space, emptyArray()), isError = false)
-            val result = SpaceDeletionCoordinator.delete(
-                getApplication(),
-                space,
-                capabilities = capabilityRepo,
-            )
-            val fb = provisioningFeedback(result, res)
-            if (result == DeleteSpaceResult.Success) {
-                UserCloneRegistry.clear(getApplication())
-            }
-            setFeedback(fb.message, isError = fb.isError)
-            if (fb.routeToSystemRemoval) PrismSetup.promptManualRemoval(activity)
-            refresh()
-        }
-    }
-
     // -----------------------------------------------------------------------
     // Data refresh
     // -----------------------------------------------------------------------
@@ -419,35 +423,47 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
     // Multi-select
     // -----------------------------------------------------------------------
 
-    /** Long-press an app card to enter multi-select mode with that app pre-selected. */
-    fun enterMultiSelect(pkg: String) {
+    /** Long-press an app card to enter multi-select mode with that app pre-selected. The current
+     *  search/filter/sort result set is snapshotted as the selection domain. */
+    fun enterMultiSelect(pkg: String, domain: List<SpaceRow>) {
         // System packages are deliberately single-action only so the critical-package warning
         // cannot be bypassed through a batch operation.
-        if (appFor(pkg, _uiState.value.segment)?.isSystem == true) return
-        _uiState.value = _uiState.value.copy(selectedPkgs = setOf(pkg))
+        val state = MultiSelect.enter(pkg, domain) ?: return
+        _uiState.value = _uiState.value.copy(selectedPkgs = state.selected, multiSelectDomain = state.domain)
+    }
+
+    /** The explicit 批量管理 top-bar entry: enter multi-select with an empty selection over the
+     *  current domain snapshot. */
+    fun enterMultiSelect(domain: List<SpaceRow>) {
+        val state = MultiSelect.enterEmpty(domain) ?: return
+        _uiState.value = _uiState.value.copy(selectedPkgs = state.selected, multiSelectDomain = state.domain)
     }
 
     /** Toggle selection of a pkg while in multi-select mode. */
     fun toggleSelect(pkg: String) {
-        val current = _uiState.value.selectedPkgs ?: return
-        if (appFor(pkg, _uiState.value.segment)?.isSystem == true) return
-        val updated = if (current.contains(pkg)) current - pkg else current + pkg
+        val current = _uiState.value
+        val domain = current.multiSelectDomain ?: return
+        val selected = current.selectedPkgs ?: return
+        val next = MultiSelect.toggle(MultiSelectState(domain, selected), pkg)
         _uiState.value = _uiState.value.copy(
-            selectedPkgs = if (updated.isEmpty()) null else updated
+            selectedPkgs = next?.selected,
+            multiSelectDomain = next?.domain,
         )
     }
 
-    /** Select every app currently shown in the active segment (the "全选" action). */
+    /** Select every app in the selection domain (the "全选" action) — the entry-time filtered
+     *  result set, never the whole segment. */
     fun selectAll() {
-        val rows = (_uiState.value.current as? SpaceSegmentState.Content)?.rows ?: return
-        val selectable = rows.filterNot { it.system }
-        if (selectable.isEmpty()) return
-        _uiState.value = _uiState.value.copy(selectedPkgs = selectable.map { it.pkg }.toSet())
+        val current = _uiState.value
+        val domain = current.multiSelectDomain ?: return
+        val selected = current.selectedPkgs ?: return
+        val next = MultiSelect.selectAll(MultiSelectState(domain, selected))
+        _uiState.value = _uiState.value.copy(selectedPkgs = next.selected)
     }
 
     /** Exit multi-select mode and clear selection. */
     fun exitMultiSelect() {
-        _uiState.value = _uiState.value.copy(selectedPkgs = null, batchProgress = null)
+        _uiState.value = _uiState.value.copy(selectedPkgs = null, multiSelectDomain = null, batchProgress = null)
     }
 
     // -----------------------------------------------------------------------
@@ -496,32 +512,42 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
                         }
                         AppFeedbackBus.emit(batchActionFeedback(action, succeeded, failures.size, res))
                     }
-                    BatchAction.Uninstall -> error("Uninstall is handled by the ActivityResult queue")
+                    BatchAction.Uninstall -> error("Uninstall is handled by the profile-routed uninstall queue")
                     BatchAction.CopyToDual -> {
-                        pkgs.forEachIndexed { i, pkg ->
-                            runCatching {
-                                val app = appFor(pkg, SpaceSegment.Main)
-                                if (app != null) {
-                                    withContext(Dispatchers.Main) {
-                                        _uiState.value = _uiState.value.copy(
-                                            batchProgress = res(R.string.lz_vm_batch_progress, arrayOf(i + 1, total))
-                                        )
-                                        // Headless clone: no per-app selector; mode follows the configured
-                                        // run mode. Batch is confirmed once before this loop.
-                                    if (PrismAppClones(activity, prismAppsVm, app).requestSilently() ==
-                                        com.yzddmr6.prismspace.controller.CloneRequestOutcome.Started
-                                    ) succeeded++ else failures.add(pkg)
-                                    }
-                                    kotlinx.coroutines.delay(200)
-                                }
-                            }.onFailure { failures.add(pkg) }
+                        // Real per-package results: staging (normal mode) counts as prepared, never
+                        // cloned; only a verified enhanced-route install counts as installed. The
+                        // batch is confirmed once up front; no fixed-delay success guessing.
+                        // Quiet-mode activation is asked at most once per run (driver-owned budget):
+                        // a refused/timed-out prompt fails the remaining packages without each of
+                        // them showing the system dialog.
+                        val counts = runBatchClone(
+                            pkgs,
+                            BatchClonePort { pkg ->
+                                val app = appFor(pkg, SpaceSegment.Main) ?: return@BatchClonePort BatchCloneResult.Failed()
+                                PrismAppClones(activity, prismAppsVm, app).requestForBatch()
+                            },
+                            activate = {
+                                val context: Context = getApplication()
+                                val profile = Users.profile
+                                if (profile != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                                    runCatching { Users.requestQuietModeDisabled(context, profile) }
+                                        .onFailure {
+                                            DiagnosticLog.e(TAG, "batch clone activation failed user=${profile.toId()}", it)
+                                        }
+                                        .getOrDefault(false)
+                                } else false
+                            },
+                        ) { done, totalCount ->
+                            _uiState.value = _uiState.value.copy(
+                                batchProgress = res(R.string.lz_vm_batch_progress, arrayOf(done, totalCount)),
+                            )
                         }
-                        AppFeedbackBus.emit(batchActionFeedback(action, succeeded, failures.size, res))
+                        AppFeedbackBus.emit(batchCloneFeedback(counts, res))
                     }
                 }
             } finally {
                 withContext(Dispatchers.Main) {
-                    _uiState.value = _uiState.value.copy(selectedPkgs = null, batchProgress = null)
+                    _uiState.value = _uiState.value.copy(selectedPkgs = null, multiSelectDomain = null, batchProgress = null)
                 }
             }
             refresh()
@@ -536,12 +562,7 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
         val app = appFor(pkg, segment) ?: return
         if (segment == SpaceSegment.Dual) {
             viewModelScope.launch checkSpace@{
-                val usable = withContext(Dispatchers.IO) {
-                    val sel = _uiState.value.selectedDualSpaceId?.let { spaceRepo.space(it) }
-                        ?: spaceRepo.dualSpace()
-                    sel != null && spaceRepo.usabilityOf(sel) == SpaceUsability.Usable
-                }
-                if (!usable) {
+                if (selectedDualUsability() != SpaceUsability.Usable) {
                     val fb = launchFeedback(LaunchResult.SpaceNotReady, app.label.toString(), prismResolver(context))
                     setFeedback(fb.message, isError = fb.isError)
                     return@checkSpace
@@ -551,6 +572,19 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         PrismAppControl.launch(context, app)
+    }
+
+    /** Fresh usability of the selected dual space — the single source both launch and uninstall
+     *  gating read from. A missing space reads as [SpaceUsability.NotProvisioned]. */
+    private suspend fun selectedDualUsability(): SpaceUsability = withContext(Dispatchers.IO) {
+        val sel = _uiState.value.selectedDualSpaceId?.let { spaceRepo.space(it) } ?: spaceRepo.dualSpace()
+        if (sel == null) SpaceUsability.NotProvisioned else spaceRepo.usabilityOf(sel)
+    }
+
+    /** Emits the state-specific uninstall guidance for an unusable space; fires no request. */
+    private fun blockUninstallWithGuidance(usability: SpaceUsability) {
+        uninstallGate(usability, prismResolver(getApplication())).guidance
+            ?.let { setFeedback(it, isError = true) }
     }
 
     fun setFrozen(pkg: String, frozen: Boolean) {
@@ -576,36 +610,32 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
 
     fun remove(activity: Activity, pkg: String, segment: SpaceSegment) {
         val app = appFor(pkg, segment) ?: return
+        if (segment == SpaceSegment.Dual) {
+            // Same space-usability source as launch(): an unusable space must never receive an
+            // uninstall request (fail closed; the gate guidance is shown instead).
+            viewModelScope.launch {
+                val usability = selectedDualUsability()
+                if (usability != SpaceUsability.Usable) return@launch blockUninstallWithGuidance(usability)
+                if (app.isSystem) PrismAppControl.requestRemoval(activity, app)
+                else startUninstallQueue(listOf(pkg), segment)
+            }
+            return
+        }
         if (app.isSystem) PrismAppControl.requestRemoval(activity, app)
         else startUninstallQueue(listOf(pkg), segment)
     }
 
-    fun onUninstallLaunched() {
-        updateUninstallQueue(UninstallQueueReducer.launched(uninstallQueue))
-    }
-
-    fun onUninstallActivityResult(resultCode: Int) {
-        val hint = if (resultCode == Activity.RESULT_CANCELED) UninstallReturnHint.Cancelled
-        else UninstallReturnHint.Completion
-        beginUninstallVerification(hint)
-    }
-
     fun onHostResumed() {
-        beginUninstallVerification(UninstallReturnHint.Foreground)
-    }
-
-    fun onUninstallLaunchFailed() {
-        viewModelScope.launch {
-            val mainExists = withContext(Dispatchers.IO) {
-                uninstallQueue.current?.request?.packageName?.let(::mainCopyExists) ?: false
-            }
-            completeUninstallTransition(UninstallQueueReducer.launchFailed(uninstallQueue, mainExists))
-        }
+        beginUninstallVerification()
     }
 
     private fun startUninstallQueue(pkgs: List<String>, segment: SpaceSegment) {
         if (!uninstallQueue.complete || uninstallQueue.total > 0) return
         viewModelScope.launch {
+            if (segment == SpaceSegment.Dual) {
+                val usability = selectedDualUsability()
+                if (usability != SpaceUsability.Usable) return@launch blockUninstallWithGuidance(usability)
+            }
             val requests = withContext(Dispatchers.IO) {
                 pkgs.mapNotNull { pkg ->
                     val app = appFor(pkg, segment)?.takeUnless { it.isSystem } ?: return@mapNotNull null
@@ -615,15 +645,70 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
             uninstallSkipped = pkgs.size - requests.size
             if (requests.isEmpty()) {
                 AppFeedbackBus.emit(batchActionFeedback(BatchAction.Uninstall, 0, pkgs.size, prismResolver(getApplication())))
-                _uiState.value = _uiState.value.copy(selectedPkgs = null, batchProgress = null)
+                _uiState.value = _uiState.value.copy(selectedPkgs = null, multiSelectDomain = null, batchProgress = null)
                 return@launch
             }
             updateUninstallQueue(UninstallQueueReducer.start(requests))
+            driveUninstallLaunch()
         }
     }
 
-    private fun beginUninstallVerification(hint: UninstallReturnHint) {
-        val next = UninstallQueueReducer.returned(uninstallQueue, hint, SystemClock.elapsedRealtime())
+    /** Fires the profile-routed system-uninstall request for the ready queue head. The launch and
+     *  its result both happen inside the managed profile; verification keeps using the existing
+     *  resume/observation flow. There is deliberately no user-0 fallback (issue #6). */
+    private fun driveUninstallLaunch() {
+        val current = uninstallQueue.current?.takeIf { it.stage == UninstallStage.ReadyToLaunch } ?: return
+        if (uninstallLaunchInFlight == current.request) return
+        uninstallLaunchInFlight = current.request
+        viewModelScope.launch {
+            // Per-head gate: re-check FRESH usability before EVERY request — a space that turned
+            // unusable mid-queue stops the run; the head's request is never fired.
+            val usability = selectedDualUsability()
+            if (usability != SpaceUsability.Usable) {
+                uninstallLaunchInFlight = null
+                abortUninstallQueue(usability)
+                return@launch
+            }
+            val reply = withContext(Dispatchers.IO) { uninstallLaunchPort.requestUninstall(current.request) }
+            uninstallLaunchInFlight = null
+            val request = current.request
+            val system = appFor(request.packageName, SpaceSegment.Dual)?.isSystem == true
+            when (reply) {
+                UninstallLaunchReply.Launched -> {
+                    PrismAppControl.logUninstallLaunchOutcome(request.packageName, system, launched = true, failureReason = null)
+                    updateUninstallQueue(UninstallQueueReducer.launched(uninstallQueue))
+                }
+                is UninstallLaunchReply.Failed -> {
+                    PrismAppControl.logUninstallLaunchOutcome(
+                        request.packageName, system, launched = false,
+                        failureReason = reply.reason ?: reply.message,
+                    )
+                    reply.message?.let { setFeedback(it, isError = true) }
+                    val mainExists = withContext(Dispatchers.IO) { mainCopyExists(request.packageName) }
+                    completeUninstallTransition(UninstallQueueReducer.launchFailed(uninstallQueue, mainExists))
+                }
+            }
+        }
+    }
+
+    /** Mid-queue gate trip: stop without firing the pending head. Already-completed heads keep
+     *  their verified outcomes; unlaunched heads are honestly reported as not attempted. */
+    private fun abortUninstallQueue(usability: SpaceUsability) {
+        val res = prismResolver(getApplication())
+        val completed = uninstallQueue.outcomes.size
+        val notAttempted = uninstallQueue.total - completed
+        val guidance = uninstallGate(usability, res).guidance
+            ?: res(R.string.prompt_space_not_ready, emptyArray())
+        AppFeedbackBus.emit(uninstallAbortFeedback(completed, notAttempted, guidance, res))
+        uninstallValidationJob?.cancel()
+        uninstallQueue = UninstallQueueState()
+        uninstallSkipped = 0
+        _uiState.value = _uiState.value.copy(selectedPkgs = null, multiSelectDomain = null, batchProgress = null)
+        refresh()
+    }
+
+    private fun beginUninstallVerification() {
+        val next = UninstallQueueReducer.returned(uninstallQueue, SystemClock.elapsedRealtime())
         if (next == uninstallQueue) return
         updateUninstallQueue(next)
         if (next.current?.stage == UninstallStage.Verifying) startUninstallVerificationLoop()
@@ -668,18 +753,15 @@ class SpaceViewModel(app: Application) : AndroidViewModel(app) {
         if (next.complete) {
             val summary = next.summary
             AppFeedbackBus.emit(uninstallQueueFeedback(summary, uninstallSkipped, prismResolver(getApplication())))
-            _uiState.value = _uiState.value.copy(selectedPkgs = null, batchProgress = null)
+            _uiState.value = _uiState.value.copy(selectedPkgs = null, multiSelectDomain = null, batchProgress = null)
             uninstallQueue = UninstallQueueState()
             uninstallSkipped = 0
             refresh()
-        }
+        } else driveUninstallLaunch()
     }
 
     private fun updateUninstallQueue(next: UninstallQueueState) {
         uninstallQueue = next
-        _pendingUninstallRequest.value = next.current
-            ?.takeIf { it.stage == UninstallStage.ReadyToLaunch }
-            ?.request
         if (next.total > 0 && !next.complete) {
             _uiState.value = _uiState.value.copy(
                 batchProgress = prismResolver(getApplication())(

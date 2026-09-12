@@ -100,6 +100,28 @@ class BridgeProtocolContractTest {
         assertTrue(users.contains("fun isCurrentProfileManagedByPrism() = sCurrentProfileManagedByPrism"))
     }
 
+    @Test fun requestAppUninstallIsEnumeratedAsProfileSideCommand() {
+        val commands = BridgeCommandCatalog.all.filterIsInstance<RequestAppUninstall>()
+
+        assertEquals(1, commands.size)
+        assertEquals("app.request_uninstall", commands.single().id)
+    }
+
+    @Test fun profileUninstallIntentSpecContainsNoUserTargeting() {
+        val source = File("src/main/java/com/yzddmr6/prismspace/bridge/CoreBridgeOperations.kt").readText()
+        val spec = source.codeLinesOnly().substringAfter("fun uninstallIntentSpec").substringBefore("\nfun ")
+
+        assertTrue(spec.contains("ACTION_UNINSTALL_PACKAGE"))
+        assertFalse("the profile-side uninstall spec must never carry a target-user extra", spec.contains("EXTRA_USER"))
+    }
+
+    @Test fun requestAppUninstallIsDispatched() {
+        val source = File("src/main/java/com/yzddmr6/prismspace/bridge/BridgeDispatcher.kt").readText()
+
+        assertTrue(source.contains("is RequestAppUninstall ->"))
+        assertTrue(source.contains("CoreBridgeOperations.requestAppUninstall(context, command.packageName)"))
+    }
+
     private object FakeAppControlPort : AppControlPort {
         override fun setAppFrozen(context: Context, packageName: String, frozen: Boolean) = true
         override fun ensureAppHiddenState(context: Context, packageName: String, hidden: Boolean) = true
@@ -202,5 +224,11 @@ class BridgeProtocolContractTest {
             "fieldName",
             "shellCommand",
         )
+
+        /** Strips comment lines so assertions target code, not prose mentioning guarded tokens. */
+        fun String.codeLinesOnly(): String = lineSequence()
+            .map { it.trim() }
+            .filterNot { it.startsWith("//") || it.startsWith("*") || it.startsWith("/*") }
+            .joinToString("\n")
     }
 }

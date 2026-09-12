@@ -18,6 +18,9 @@ private val LightColorScheme = lightColorScheme(
     onSurface            = PrismOnSurface,
     onSurfaceVariant     = PrismOnSurfaceVariant,
     outline              = PrismOutline,
+    // outlineVariant rides the same slate hairline family as cardBorder — a screen never shows
+    // the M3 default purple-grey divider/border next to the card border.
+    outlineVariant       = PrismCardBorder,
     error                = PrismError,
     onError              = PrismOnError,
     errorContainer       = PrismErrorContainer,
@@ -34,6 +37,7 @@ private val DarkColorScheme = darkColorScheme(
     onSurface            = PrismOnSurfaceD,
     onSurfaceVariant     = PrismOnSurfaceVariantD,
     outline              = PrismOutlineD,
+    outlineVariant       = PrismCardBorderD,
     error                = PrismErrorD,
     onError              = PrismOnErrorD,
     errorContainer       = PrismErrorContainerD,

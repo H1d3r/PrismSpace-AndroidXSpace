@@ -280,33 +280,7 @@ class SpaceFilterSortTest {
     }
 
     // -----------------------------------------------------------------------
-    // Sort: time (uses stable load order via loadIndex, most-recent-first)
-    // -----------------------------------------------------------------------
-
-    @Test
-    fun `time sort uses load index descending (most-recent-first)`() {
-        // loadIndex is assigned by position in the rows list; higher index = more recently loaded
-        val rows = listOf(
-            makeRow("com.first", "First", loadIndex = 0),
-            makeRow("com.second", "Second", loadIndex = 1),
-            makeRow("com.third", "Third", loadIndex = 2),
-        )
-        val result = applyListTransform(
-            rows = rows,
-            segment = SpaceSegment.Main,
-            query = "",
-            sort = SortOrder.Time,
-            cloneFilter = CloneFilter.All,
-            showSystem = true,
-        )
-        // Most recent (highest load index = last in list) should come first
-        assertEquals("com.third", result[0].pkg)
-        assertEquals("com.second", result[1].pkg)
-        assertEquals("com.first", result[2].pkg)
-    }
-
-    // -----------------------------------------------------------------------
-    // Sort: cloned (已双开 first; main segment only)
+    // Sort: cloned (已添加优先; main segment only)
     // -----------------------------------------------------------------------
 
     @Test

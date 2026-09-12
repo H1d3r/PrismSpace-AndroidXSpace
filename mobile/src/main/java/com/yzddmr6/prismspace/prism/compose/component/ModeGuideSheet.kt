@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -23,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.yzddmr6.prismspace.mobile.R
+import com.yzddmr6.prismspace.prism.compose.theme.PrismMinTouchTarget
 import com.yzddmr6.prismspace.prism.compose.theme.PrismSpacing
 import com.yzddmr6.prismspace.prism.compose.vm.PrismMode
 
@@ -173,7 +175,7 @@ private fun ShizukuGuideInline(
             onClick = {
                 if (onCheckShizuku()) onDismiss()
             },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().heightIn(min = PrismMinTouchTarget),
         ) {
             Text(stringResource(R.string.lz_set_shizuku_check_button))
         }

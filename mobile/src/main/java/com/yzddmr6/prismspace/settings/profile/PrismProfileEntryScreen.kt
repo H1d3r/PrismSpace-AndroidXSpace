@@ -26,10 +26,10 @@ import com.yzddmr6.prismspace.prism.compose.component.ActionRow
 import com.yzddmr6.prismspace.prism.compose.component.GroupCard
 import com.yzddmr6.prismspace.prism.compose.component.PrismIcons
 import com.yzddmr6.prismspace.prism.compose.component.PrismLevel
+import com.yzddmr6.prismspace.prism.compose.component.PrismTextButton
 import com.yzddmr6.prismspace.prism.compose.component.StatusHeroCard
 import com.yzddmr6.prismspace.prism.compose.component.StatusRow
 import com.yzddmr6.prismspace.prism.compose.theme.PrismTheme
-import com.yzddmr6.prismspace.prism.service.TransferRecordActions
 import com.yzddmr6.prismspace.prism.service.TransferHistoryStore
 import com.yzddmr6.prismspace.prism.service.TransferDirection
 import com.yzddmr6.prismspace.prism.service.displayTitle
@@ -108,9 +108,42 @@ fun PrismProfileEntryScreen() {
                         leadingIcon = Icons.Outlined.Shield,
                     )
                 } else {
+                    // 待安装 APK 区：安装动作只在这里（传输记录行不再内嵌安装按钮）。
+                    val pending = transfers.filter { item ->
+                        item.packageName != null &&
+                            ProfileApkInstaller.hasCopiedApkSet(context, item.packageName!!, item.name)
+                    }
+                    if (pending.isNotEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = stringResource(R.string.lz_pf_entry_pending_installs),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            GroupCard {
+                                pending.forEach { item ->
+                                    val pkg = item.packageName!!
+                                    ActionRow(
+                                        title = item.displayTitle(),
+                                        summary = stringResource(R.string.lz_pf_entry_pending_ready),
+                                        leadingIcon = PrismIcons.File,
+                                        trailing = {
+                                            PrismTextButton(onClick = {
+                                                ProfileApkInstaller.install(context, pkg, item.name)
+                                            }) {
+                                                Text(stringResource(R.string.lz_pf_install))
+                                            }
+                                        },
+                                        onClick = { ProfileApkInstaller.install(context, pkg, item.name) },
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     GroupCard {
                         ActionRow(
-                            title = stringResource(R.string.lz_pf_files_send_other),
+                            title = stringResource(R.string.lz_pf_entry_send_to_main),
                             summary = stringResource(R.string.lz_pf_files_send_other_summary),
                             leadingIcon = PrismIcons.File,
                             onClick = {
@@ -142,15 +175,8 @@ fun PrismProfileEntryScreen() {
                         if (transfers.isNotEmpty()) {
                             GroupCard {
                                 transfers.forEach { item ->
-                                    // APK transfers get an explicit install action, but tapping the row remains
-                                    // the common file-manager path for every file type.
-                                    val installPkg = item.packageName?.takeIf {
-                                        ProfileApkInstaller.hasCopiedApkSet(context, it, item.name)
-                                    }
-                                    val actions = TransferRecordActions.forRecord(
-                                        item,
-                                        hasInstallableApkSet = installPkg != null,
-                                    )
+                                    // Plain history rows: tap opens the file manager; install actions
+                                    // live in the 待安装 section above, not in record rows.
                                     ActionRow(
                                         title = item.displayTitle(),
                                         summary = listOf(
@@ -163,22 +189,14 @@ fun PrismProfileEntryScreen() {
                                         ).filterNotNull().joinToString(" · "),
                                         leadingIcon = if (item.isImage) PrismIcons.Img else PrismIcons.File,
                                         trailing = {
-                                            if (actions.canInstall && installPkg != null) {
-                                                TextButton(onClick = { ProfileApkInstaller.install(context, installPkg, item.name) }) {
-                                                    Text(stringResource(R.string.lz_pf_install))
-                                                }
-                                            } else {
-                                                Icon(
-                                                    imageVector = PrismIcons.FileOpen,
-                                                    contentDescription = stringResource(R.string.lz_pf_open_action),
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    modifier = Modifier.size(20.dp),
-                                                )
-                                            }
+                                            Icon(
+                                                imageVector = PrismIcons.FileOpen,
+                                                contentDescription = stringResource(R.string.lz_pf_open_action),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(20.dp),
+                                            )
                                         },
-                                        onClick = {
-                                            if (actions.canOpenWithFileManager) openSystemFileManager(context)
-                                        },
+                                        onClick = { openSystemFileManager(context) },
                                     )
                                 }
                             }

@@ -28,3 +28,14 @@ object PrismRadius {
     val Lg = 16.dp
     val Pill = 26.dp   // setup hero CTA pill
 }
+
+/** Icon-size tiers — the only four sizes allowed; scattered literals converge onto these. */
+object PrismIconSizes {
+    val Sm = 18.dp
+    val Md = 24.dp
+    val Lg = 40.dp
+    val Xl = 48.dp
+}
+
+/** Minimum touch target for any clickable control (WCAG/M3). */
+val PrismMinTouchTarget = 48.dp

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -26,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.yzddmr6.prismspace.mobile.R
+import com.yzddmr6.prismspace.prism.compose.theme.PrismMinTouchTarget
 import com.yzddmr6.prismspace.prism.compose.theme.PrismSpacing
 import kotlinx.coroutines.launch
 
@@ -37,6 +39,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun DeleteWarningSheet(
+    cloneCount: Int,
     onContinue: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -63,14 +66,15 @@ internal fun DeleteWarningSheet(
                 )
             }
             Text(
-                text = stringResource(R.string.lz_app_delete_dual_space_warning),
+                // 两步确认第一步：陈述目标、数量与不可恢复后果。
+                text = stringResource(R.string.lz_app_delete_dual_space_warning_count, cloneCount),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = PrismSpacing.Xl),
             )
             Button(
                 onClick = onContinue,
-                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                modifier = Modifier.fillMaxWidth().heightIn(min = PrismMinTouchTarget).padding(bottom = 10.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.error,
                     contentColor = Color.White,
@@ -80,7 +84,7 @@ internal fun DeleteWarningSheet(
             }
             Button(
                 onClick = onDismiss,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().heightIn(min = PrismMinTouchTarget),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant,
                     contentColor = MaterialTheme.colorScheme.onSurface,
@@ -123,7 +127,7 @@ internal fun DeleteFinalSheet(
             )
             Button(
                 onClick = onConfirm,
-                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                modifier = Modifier.fillMaxWidth().heightIn(min = PrismMinTouchTarget).padding(bottom = 10.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.error,
                     contentColor = Color.White,
@@ -133,7 +137,7 @@ internal fun DeleteFinalSheet(
             }
             Button(
                 onClick = onDismiss,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().heightIn(min = PrismMinTouchTarget),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant,
                     contentColor = MaterialTheme.colorScheme.onSurface,
@@ -165,7 +169,7 @@ internal fun RepairConfirmSheet(onConfirm: () -> Unit, onDismiss: () -> Unit) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(PrismSpacing.Md)) {
                 OutlinedButton(
                     onClick = { scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() } },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).heightIn(min = PrismMinTouchTarget),
                 ) { Text(stringResource(R.string.lz_app_cancel)) }
                 Button(
                     onClick = {
@@ -175,7 +179,7 @@ internal fun RepairConfirmSheet(onConfirm: () -> Unit, onDismiss: () -> Unit) {
                         }
                     },
                     enabled = !confirming,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).heightIn(min = PrismMinTouchTarget),
                 ) { Text(stringResource(R.string.lz_app_start_repair)) }
             }
         }

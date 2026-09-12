@@ -122,7 +122,7 @@ class HomeStateTest {
     }
 
     @Test
-    fun `Checking - non actionable and level Warn`() {
+    fun `Checking - non actionable and level Neutral`() {
         val model = mapHomeState(
             health = SpaceHealth.Checking,
             mainCount = 4,
@@ -134,7 +134,7 @@ class HomeStateTest {
             resolve = resolve,
         )
         assertFalse("Checking must not offer a state-changing action", model.showRepair)
-        assertEquals(PrismLevel.Warn, model.level)
+        assertEquals(PrismLevel.Neutral, model.level)
         assertEquals("检查中", model.tag)
         assertEquals("打开设置", model.primaryLabel)
     }

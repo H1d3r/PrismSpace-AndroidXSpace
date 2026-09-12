@@ -10,6 +10,7 @@
 /docs/internal
 /.agents
 /.codex
+/.claude
 
 # Local configuration file (sdk path, etc)
 /local.properties
@@ -38,3 +39,5 @@ build
 # Crash/heap dumps & runtime logs
 *.hprof
 /logs
+
+/openspec

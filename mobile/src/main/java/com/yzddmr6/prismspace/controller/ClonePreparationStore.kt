@@ -33,6 +33,9 @@ internal class ClonePreparationStateStore(
         if (pending != current) persistence.write(pending)
         pending
     }
+
+    /** Drops every pending marker (space deletion — the tasks target a space that no longer exists). */
+    fun clear() = synchronized(lock) { persistence.write(emptySet()) }
 }
 
 /** Main-space workflow state only; copied APKs are not treated as proof that installation succeeded. */
@@ -58,6 +61,10 @@ object ClonePreparationStore {
 
     fun remove(context: Context, packageName: String) = synchronized(lock) {
         ClonePreparationStateStore(persistence(context)).remove(packageName)
+    }
+
+    fun clear(context: Context) = synchronized(lock) {
+        ClonePreparationStateStore(persistence(context)).clear()
     }
 
     fun contains(context: Context, packageName: String): Boolean = synchronized(lock) {

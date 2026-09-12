@@ -43,11 +43,17 @@ internal val PrismOnErrorD          = Color(0xFF3A0B0B)
 internal val PrismErrorContainerD   = Color(0xFF4A1D1D)
 
 // ── Extra semantic colors exposed via CompositionLocal ───────────────────────
+// Light foregrounds meet WCAG AA (≥ 4.5:1) on their containers; containers stay unchanged.
+// The dark palette already passes and is intentionally untouched.
 data class PrismExtraColors(
     val ok: Color,
     val okContainer: Color,
     val warn: Color,
     val warnContainer: Color,
+    val error: Color,
+    val errorContainer: Color,
+    val neutral: Color,
+    val neutralContainer: Color,
     val info: Color,
     val infoContainer: Color,
     // Non-scheme tokens that must still flip with the theme (used directly by components).
@@ -56,11 +62,15 @@ data class PrismExtraColors(
 )
 
 internal val PrismExtraLight = PrismExtraColors(
-    ok            = Color(0xFF16A34A),
+    ok            = Color(0xFF15723A),
     okContainer   = Color(0xFFDCF7E5),
-    warn          = Color(0xFFB7791F),
+    warn          = Color(0xFF835410),
     warnContainer = Color(0xFFFBEFD6),
-    info          = Color(0xFF2F6FED),
+    error         = Color(0xFFB01818),
+    errorContainer= PrismErrorContainer,
+    neutral       = PrismOnSurfaceVariant,   // #5A6577
+    neutralContainer = PrismSurfaceVariant,  // #EEF2F8
+    info          = Color(0xFF1D4FD7),   // AA on infoContainer (was brand #2F6FED at 3.8:1)
     infoContainer = Color(0xFFE2ECFF),
     cardBorder    = PrismCardBorder,
     track         = PrismTrack,
@@ -71,6 +81,10 @@ internal val PrismExtraDark = PrismExtraColors(
     okContainer   = Color(0xFF143422),
     warn          = Color(0xFFFFB454),
     warnContainer = Color(0xFF3A2E16),
+    error         = PrismErrorD,             // #FF6B6B
+    errorContainer= PrismErrorContainerD,    // #4A1D1D
+    neutral       = PrismOnSurfaceVariantD,  // #9AA3B2
+    neutralContainer = PrismSurfaceVariantD, // #222834
     info          = Color(0xFF5B9DFF),
     infoContainer = Color(0xFF16243A),
     cardBorder    = PrismCardBorderD,

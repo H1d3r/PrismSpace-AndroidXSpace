@@ -20,36 +20,30 @@ class TransferFileOpenerTest {
         )
     }
 
-    @Test fun apkTransferRecordsKeepFileManagerOpenAndAddInstallAction() {
-        val actions = TransferRecordActions.forRecord(
-            TransferRecord(
-                name = "Via",
-                packageName = "mark.via",
-                location = "Download/PrismSpace",
-                isImage = false,
-                timeMillis = 1L,
-            ),
-            hasInstallableApkSet = true,
+    @Test fun apkTransferRecordsArePlainHistoryRows() {
+        // APK 安装条目不再出现在传输记录（文件页/入口页记录行只承诺「打开文件夹」）——
+        // TransferRecordActions 已删除；记录仅承载展示数据。
+        val record = TransferRecord(
+            name = "Via",
+            packageName = "mark.via",
+            location = "Download/PrismSpace",
+            isImage = false,
+            timeMillis = 1L,
         )
 
-        assertTrue(actions.canOpenWithFileManager)
-        assertTrue(actions.canInstall)
+        assertEquals("Via-mark.via", record.displayTitle())
     }
 
-    @Test fun plainTransferRecordsOnlyOpenWithFileManager() {
-        val actions = TransferRecordActions.forRecord(
-            TransferRecord(
-                name = "report.pdf",
-                packageName = null,
-                location = "Download/PrismSpace",
-                isImage = false,
-                timeMillis = 1L,
-            ),
-            hasInstallableApkSet = false,
+    @Test fun plainTransferRecordsDisplayByName() {
+        val record = TransferRecord(
+            name = "report.pdf",
+            packageName = null,
+            location = "Download/PrismSpace",
+            isImage = false,
+            timeMillis = 1L,
         )
 
-        assertTrue(actions.canOpenWithFileManager)
-        assertFalse(actions.canInstall)
+        assertEquals("report.pdf", record.displayTitle())
     }
 
     @Test fun crossProfileForwarderIsNotAFileSurface() {

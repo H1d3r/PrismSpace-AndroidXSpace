@@ -117,4 +117,10 @@
     <string name="toast_clone_file_sync_fallback">%1$s 当前不可用，已改用普通模式准备安装包…</string>
     <string name="dialog_title_clone_file_sync">安装包已复制到双开空间</string>
     <string name="dialog_clone_file_sync_done">完整安装包已复制到双开空间的 Download/PrismSpace。打开双开空间安装入口后，用 Android 系统安装器确认安装。若要从系统文件管理器直接安装单个 APK，请先允许文件管理器安装未知应用。</string>
+    <!-- 首次启动：创建方式说明 -->
+    <string name="prism_setup_howto_title">创建方式</string>
+    <string name="prism_setup_howto_system_title">由 Android 系统引导完成</string>
+    <string name="prism_setup_howto_system_body">创建过程会短暂离开 PrismSpace，进入系统配置界面，通常需要 30–90 秒。</string>
+    <string name="prism_setup_howto_delete_title">随时可删除</string>
+    <string name="prism_setup_howto_delete_body">双开空间只是手机上的一个工作资料，不需要时可以完整删除。</string>
 </resources>

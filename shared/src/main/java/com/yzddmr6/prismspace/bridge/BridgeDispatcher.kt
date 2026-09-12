@@ -122,6 +122,10 @@ internal object BridgeDispatcher {
                 command,
                 CoreBridgeOperations.openAppDetails(context, command.packageName),
             )
+            is RequestAppUninstall -> success(
+                command,
+                CoreBridgeOperations.requestAppUninstall(context, command.packageName),
+            )
             OpenDiagnosticsSnapshot -> success(
                 OpenDiagnosticsSnapshot,
                 CoreBridgeOperations.openDiagnosticsSnapshot(context),

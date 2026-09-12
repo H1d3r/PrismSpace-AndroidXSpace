@@ -70,6 +70,13 @@ fun PrismNavHost(navController: NavHostController) {
             }
         }
     }
+    LaunchedEffect(navController) {
+        // Settings「系统应用」→ switch to the Space tab; the screen itself opens the system-apps
+        // view off the same nonce.
+        AppLaunchSignals.openSpaceSystemApps.collect { nonce ->
+            if (nonce > 0) navController.navigateToTab(PrismRoutes.SPACE)
+        }
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),

@@ -1,12 +1,16 @@
 package com.yzddmr6.prismspace.prism.compose
 
+import com.yzddmr6.prismspace.prism.compose.vm.UNINSTALL_CANCEL_GRACE_MS
 import com.yzddmr6.prismspace.prism.compose.vm.UNINSTALL_VERIFICATION_TIMEOUT_MS
+import com.yzddmr6.prismspace.prism.compose.vm.UninstallLaunchPort
+import com.yzddmr6.prismspace.prism.compose.vm.UninstallLaunchReply
 import com.yzddmr6.prismspace.prism.compose.vm.UninstallOutcomeStatus
 import com.yzddmr6.prismspace.prism.compose.vm.UninstallQueueReducer
+import com.yzddmr6.prismspace.prism.compose.vm.UninstallQueueState
 import com.yzddmr6.prismspace.prism.compose.vm.UninstallRequest
-import com.yzddmr6.prismspace.prism.compose.vm.UninstallReturnHint
 import com.yzddmr6.prismspace.prism.compose.vm.UninstallStage
 import com.yzddmr6.prismspace.prism.compose.vm.shouldClearCloneRegistry
+import com.yzddmr6.prismspace.prism.compose.vm.uninstallAbortFeedback
 import com.yzddmr6.prismspace.prism.compose.vm.uninstallQueueFeedback
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -19,13 +23,13 @@ class UninstallQueueTest {
         var state = UninstallQueueReducer.start(listOf(request("one"), request("two")))
         assertEquals("one", state.current?.request?.packageName)
         state = UninstallQueueReducer.launched(state)
-        state = UninstallQueueReducer.returned(state, UninstallReturnHint.Completion, 100)
+        state = UninstallQueueReducer.returned(state, 100)
         state = UninstallQueueReducer.observed(state, installedInTarget = false, mainCopyExists = true, nowMs = 100)
         assertEquals("two", state.current?.request?.packageName)
         assertEquals(UninstallStage.ReadyToLaunch, state.current?.stage)
 
         state = UninstallQueueReducer.launched(state)
-        state = UninstallQueueReducer.returned(state, UninstallReturnHint.Foreground, 200)
+        state = UninstallQueueReducer.returned(state, 200)
         state = UninstallQueueReducer.observed(state, installedInTarget = false, mainCopyExists = true, nowMs = 200)
 
         assertTrue(state.complete)
@@ -33,21 +37,47 @@ class UninstallQueueTest {
         assertEquals(0, state.summary.failed)
     }
 
+    /** The production cancel path: the profile-side dialog was dismissed (host resumed to
+     *  foreground) and the package is still present once the cancel grace elapses. */
     @Test fun verifiedCancellationDoesNotCountAsSuccess() {
         var state = UninstallQueueReducer.start(listOf(request("one")))
         state = UninstallQueueReducer.launched(state)
-        state = UninstallQueueReducer.returned(state, UninstallReturnHint.Cancelled, 100)
+        state = UninstallQueueReducer.returned(state, 100)
+
+        // Within the grace window a still-present package is not yet judged (confirm may be slow).
         state = UninstallQueueReducer.observed(state, installedInTarget = true, mainCopyExists = true, nowMs = 100)
+        assertEquals(UninstallStage.Verifying, state.current?.stage)
+        assertTrue(state.outcomes.isEmpty())
+
+        state = UninstallQueueReducer.observed(
+            state, installedInTarget = true, mainCopyExists = true, nowMs = 100 + UNINSTALL_CANCEL_GRACE_MS,
+        )
 
         assertEquals(UninstallOutcomeStatus.Cancelled, state.outcomes.single().status)
         assertEquals(0, state.summary.succeeded)
         assertEquals(1, state.summary.cancelled)
     }
 
+    @Test fun confirmLandingInsideTheCancelGraceCountsAsVerifiedSuccess() {
+        var state = UninstallQueueReducer.start(listOf(request("one")))
+        state = UninstallQueueReducer.launched(state)
+        state = UninstallQueueReducer.returned(state, 1_000)
+        state = UninstallQueueReducer.observed(state, installedInTarget = true, mainCopyExists = true, nowMs = 1_000)
+        state = UninstallQueueReducer.observed(
+            state, installedInTarget = false, mainCopyExists = true, nowMs = 1_000 + UNINSTALL_CANCEL_GRACE_MS / 2,
+        )
+
+        assertEquals(UninstallOutcomeStatus.Success, state.outcomes.single().status)
+        assertEquals(1, state.summary.succeeded)
+        assertEquals(0, state.summary.cancelled)
+    }
+
+    /** Genuinely ambiguous case: the profile cannot even be queried after the return — the 15s
+     *  timeout stays the fallback and never claims success. */
     @Test fun unknownPackageStateTimesOutWithoutClaimingSuccess() {
         var state = UninstallQueueReducer.start(listOf(request("one")))
         state = UninstallQueueReducer.launched(state)
-        state = UninstallQueueReducer.returned(state, UninstallReturnHint.Foreground, 1_000)
+        state = UninstallQueueReducer.returned(state, 1_000)
         state = UninstallQueueReducer.observed(
             state,
             installedInTarget = null,
@@ -59,7 +89,7 @@ class UninstallQueueTest {
         assertEquals(1, state.summary.timedOut)
     }
 
-    @Test fun timeInSystemUiDoesNotStartVerificationTimeout() {
+    @Test fun timeInSystemUiStartsNeitherGraceNorTimeout() {
         var state = UninstallQueueReducer.start(listOf(request("one")))
         state = UninstallQueueReducer.launched(state)
         state = UninstallQueueReducer.observed(
@@ -71,7 +101,7 @@ class UninstallQueueTest {
         assertFalse(state.complete)
         assertEquals(UninstallStage.AwaitingSystemUi, state.current?.stage)
 
-        state = UninstallQueueReducer.returned(state, UninstallReturnHint.Foreground, 200_000)
+        state = UninstallQueueReducer.returned(state, 200_000)
         state = UninstallQueueReducer.observed(state, true, true, 200_001)
         assertEquals(UninstallStage.Verifying, state.current?.stage)
     }
@@ -79,13 +109,13 @@ class UninstallQueueTest {
     @Test fun registryCleanupSignalExistsOnlyOnVerifiedSuccess() {
         var success = UninstallQueueReducer.start(listOf(request("ok")))
         success = UninstallQueueReducer.launched(success)
-        success = UninstallQueueReducer.returned(success, UninstallReturnHint.Completion, 0)
+        success = UninstallQueueReducer.returned(success, 0)
         success = UninstallQueueReducer.observed(success, false, true, 0)
 
         var cancelled = UninstallQueueReducer.start(listOf(request("cancel")))
         cancelled = UninstallQueueReducer.launched(cancelled)
-        cancelled = UninstallQueueReducer.returned(cancelled, UninstallReturnHint.Cancelled, 0)
-        cancelled = UninstallQueueReducer.observed(cancelled, true, true, 0)
+        cancelled = UninstallQueueReducer.returned(cancelled, 0)
+        cancelled = UninstallQueueReducer.observed(cancelled, true, true, UNINSTALL_CANCEL_GRACE_MS)
 
         assertEquals(UninstallOutcomeStatus.Success, success.outcomes.single().status)
         assertEquals(UninstallOutcomeStatus.Cancelled, cancelled.outcomes.single().status)
@@ -96,13 +126,94 @@ class UninstallQueueTest {
     @Test fun summarySeparatesNotRemovedFromUnconfirmed() {
         var state = UninstallQueueReducer.start(listOf(request("cancel"), request("timeout")))
         state = UninstallQueueReducer.launched(state)
-        state = UninstallQueueReducer.returned(state, UninstallReturnHint.Cancelled, 0)
-        state = UninstallQueueReducer.observed(state, true, true, 0)
+        state = UninstallQueueReducer.returned(state, 0)
+        state = UninstallQueueReducer.observed(state, true, true, UNINSTALL_CANCEL_GRACE_MS)
         state = UninstallQueueReducer.launched(state)
-        state = UninstallQueueReducer.returned(state, UninstallReturnHint.Foreground, 0)
+        state = UninstallQueueReducer.returned(state, 0)
         state = UninstallQueueReducer.observed(state, null, true, UNINSTALL_VERIFICATION_TIMEOUT_MS)
 
         assertEquals("卸载完成：已卸载 0 个，未卸载 1 个，未能确认 1 个。", uninstallQueueFeedback(state.summary).message)
+    }
+
+    @Test fun launchedReplyFromStubbedPortAwaitsSystemUi() {
+        val port = UninstallLaunchPort { UninstallLaunchReply.Launched }
+        var state = UninstallQueueReducer.start(listOf(request("one")))
+
+        state = driveLaunch(state, port, mainCopyExists = true)
+
+        assertEquals(UninstallStage.AwaitingSystemUi, state.current?.stage)
+        assertTrue(state.outcomes.isEmpty())
+    }
+
+    @Test fun failedReplyFromStubbedPortCountsAsUnconfirmedAndAdvances() {
+        val port = UninstallLaunchPort { UninstallLaunchReply.Failed("bridge_not_ready") }
+        var state = UninstallQueueReducer.start(listOf(request("one"), request("two")))
+
+        state = driveLaunch(state, port, mainCopyExists = true)
+
+        assertEquals(UninstallOutcomeStatus.TimedOut, state.outcomes.single().status)
+        assertEquals(0, state.summary.succeeded)
+        assertEquals(1, state.summary.timedOut)
+        assertEquals("two", state.current?.request?.packageName)
+        assertEquals(UninstallStage.ReadyToLaunch, state.current?.stage)
+    }
+
+    @Test fun failedLaunchWithMainCopyLostRaisesSentinel() {
+        var state = UninstallQueueReducer.start(listOf(request("one")))
+
+        state = driveLaunch(
+            state,
+            UninstallLaunchPort { UninstallLaunchReply.Failed("x") },
+            mainCopyExists = false,
+        )
+
+        assertTrue(state.outcomes.single().mainCopyLost)
+        assertFalse(shouldClearCloneRegistry(state.outcomes.single().status))
+    }
+
+    @Test fun stubbedPortDrivesSerialQueueToCompletion() {
+        val replies = ArrayDeque<UninstallLaunchReply>(
+            listOf(UninstallLaunchReply.Launched, UninstallLaunchReply.Failed("profile_down")),
+        )
+        val port = UninstallLaunchPort { replies.removeFirst() }
+        var state = UninstallQueueReducer.start(listOf(request("one"), request("two")))
+
+        // First head: launched in the profile, then verified gone → real success.
+        state = driveLaunch(state, port, mainCopyExists = true)
+        state = UninstallQueueReducer.returned(state, 100)
+        state = UninstallQueueReducer.observed(state, installedInTarget = false, mainCopyExists = true, nowMs = 100)
+        assertEquals(UninstallOutcomeStatus.Success, state.outcomes[0].status)
+        assertEquals("two", state.current?.request?.packageName)
+
+        // Second head: profile could not present the uninstaller → unconfirmed, never success.
+        state = driveLaunch(state, port, mainCopyExists = true)
+
+        assertTrue(state.complete)
+        assertEquals(UninstallOutcomeStatus.TimedOut, state.outcomes[1].status)
+        assertEquals(1, state.summary.succeeded)
+        assertEquals(1, state.summary.timedOut)
+        assertEquals("卸载完成：已卸载 1 个，未卸载 0 个，未能确认 1 个。", uninstallQueueFeedback(state.summary).message)
+    }
+
+    @Test fun abortFeedbackCountsNotAttemptedHeadsHonestly() {
+        val fb = uninstallAbortFeedback(2, 3, "请先在设置中修复双开空间连接，然后再卸载分身")
+
+        assertEquals("卸载已停止：已卸载 2 个，3 个未执行。请先在设置中修复双开空间连接，然后再卸载分身", fb.message)
+        assertTrue(fb.isError)
+    }
+
+    /** Mirrors the production mapping in SpaceViewModel.driveUninstallLaunch: a launched reply
+     *  awaits the system UI; a failed reply records the real observed main-copy state. */
+    private fun driveLaunch(
+        state: UninstallQueueState,
+        port: UninstallLaunchPort,
+        mainCopyExists: Boolean,
+    ): UninstallQueueState {
+        val current = state.current?.takeIf { it.stage == UninstallStage.ReadyToLaunch } ?: return state
+        return when (port.requestUninstall(current.request)) {
+            UninstallLaunchReply.Launched -> UninstallQueueReducer.launched(state)
+            is UninstallLaunchReply.Failed -> UninstallQueueReducer.launchFailed(state, mainCopyExists)
+        }
     }
 
     private fun request(pkg: String) = UninstallRequest(pkg, targetUserId = 22, mainCopyExisted = true)

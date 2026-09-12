@@ -11,14 +11,23 @@
     <!-- HomeScreen: 统计卡片 -->
     <string name="lz_home_main_space">主空间</string>
     <string name="lz_home_dual_space">双开空间</string>
-    <string name="lz_home_main_count">%1$d 应用</string>
-    <string name="lz_home_clone_count">%1$d 分身</string>
 
     <!-- HomeScreen: 信息行 -->
     <string name="lz_home_work_profile">工作资料</string>
     <string name="lz_home_run_mode">运行模式</string>
     <string name="lz_home_android_version">Android 版本</string>
     <string name="lz_home_device">设备</string>
+    <string name="lz_home_pending_title_one">%1$s 等待安装确认</string>
+    <string name="lz_home_pending_title_more">%1$s 等 %2$d 个应用等待安装确认</string>
+    <string name="lz_home_pending_body">安装包已传到双开空间，下一步在 Android 系统安装器中确认。</string>
+    <string name="lz_home_pending_action">前往安装</string>
+    <string name="lz_home_task_add_clone">添加分身</string>
+    <string name="lz_home_task_send_files">发送文件</string>
+    <string name="lz_home_overview_title">空间概览</string>
+    <string name="lz_home_overview_clones">%1$d 个分身</string>
+    <string name="lz_home_recent_transfer">最近传输</string>
+    <string name="lz_home_no_transfer">暂无记录</string>
+    <string name="lz_home_device_version">设备与版本</string>
 
     <!-- HomeViewModel: 状态标题 / 正文 / 标签 / 主按钮 -->
     <string name="lz_home_status_normal_title">双开空间正常</string>

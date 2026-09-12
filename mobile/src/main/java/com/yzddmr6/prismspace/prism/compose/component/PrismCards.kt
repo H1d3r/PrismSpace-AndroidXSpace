@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.yzddmr6.prismspace.prism.compose.theme.LocalPrismExtraColors
+import com.yzddmr6.prismspace.prism.compose.theme.PrismIconSizes
 import com.yzddmr6.prismspace.prism.compose.theme.PrismRadius
 import com.yzddmr6.prismspace.prism.compose.theme.PrismSpacing
 
@@ -33,14 +34,16 @@ import com.yzddmr6.prismspace.prism.compose.theme.PrismSpacing
 fun StatusTag(text: String, level: PrismLevel) {
     val extra = LocalPrismExtraColors.current
     val background = when (level) {
+        PrismLevel.Neutral -> extra.neutralContainer
         PrismLevel.Ok    -> extra.okContainer
         PrismLevel.Warn  -> extra.warnContainer
-        PrismLevel.Error -> MaterialTheme.colorScheme.errorContainer
+        PrismLevel.Error -> extra.errorContainer
     }
     val contentColor = when (level) {
+        PrismLevel.Neutral -> extra.neutral
         PrismLevel.Ok    -> extra.ok
         PrismLevel.Warn  -> extra.warn
-        PrismLevel.Error -> MaterialTheme.colorScheme.error
+        PrismLevel.Error -> extra.error
     }
     Surface(
         shape = CircleShape,
@@ -49,7 +52,8 @@ fun StatusTag(text: String, level: PrismLevel) {
     ) {
         Text(
             text = text,
-            style = MaterialTheme.typography.labelSmall,
+            // labelMedium (12sp): 辅助文字下限；labelSmall (11sp) 低于契约。
+            style = MaterialTheme.typography.labelMedium,
             modifier = Modifier.padding(horizontal = PrismSpacing.Sm, vertical = PrismSpacing.Xs),
         )
     }
@@ -69,14 +73,16 @@ fun StatusHeroCard(
 ) {
     val extra = LocalPrismExtraColors.current
     val containerColor = when (level) {
+        PrismLevel.Neutral -> extra.neutralContainer
         PrismLevel.Ok    -> extra.okContainer
         PrismLevel.Warn  -> extra.warnContainer
-        PrismLevel.Error -> MaterialTheme.colorScheme.errorContainer
+        PrismLevel.Error -> extra.errorContainer
     }
     val contentColor = when (level) {
+        PrismLevel.Neutral -> extra.neutral
         PrismLevel.Ok    -> extra.ok
         PrismLevel.Warn  -> extra.warn
-        PrismLevel.Error -> MaterialTheme.colorScheme.error
+        PrismLevel.Error -> extra.error
     }
 
     Card(
@@ -97,7 +103,7 @@ fun StatusHeroCard(
                     imageVector = leadingIcon,
                     contentDescription = null,
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(PrismIconSizes.Lg)
                         .padding(end = PrismSpacing.Md),
                     tint = contentColor,
                 )
@@ -141,7 +147,7 @@ fun StatCard(label: String, value: String) {
             containerColor = MaterialTheme.colorScheme.surface,
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = BorderStroke(1.dp, LocalPrismExtraColors.current.cardBorder),
+        border = BorderStroke(PrismSpacing.Hair, LocalPrismExtraColors.current.cardBorder),
     ) {
         Column(
             modifier = Modifier.padding(PrismSpacing.Lg),
@@ -189,7 +195,7 @@ fun GroupCard(
                 containerColor = MaterialTheme.colorScheme.surface,
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-            border = BorderStroke(1.dp, LocalPrismExtraColors.current.cardBorder),
+            border = BorderStroke(PrismSpacing.Hair, LocalPrismExtraColors.current.cardBorder),
         ) {
             Column(
                 // 8/4 rhythm (was a too-tight 4/2 that made grouped rows feel cramped).

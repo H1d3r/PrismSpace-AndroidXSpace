@@ -37,6 +37,22 @@ class PrismLocaleContractTest {
     }
 
     @Test
+    fun `traditional chinese covers chrome home app and space strings`() {
+        // zh-TW completeness: navigation/home/app-action/space strings must not fall back
+        // (simplified-Chinese fallback is a stopgap, not the shipped state). Keys may live in any
+        // values-zh-rTW file — coverage is what matters, not placement.
+        val tw = file("mobile/src/main/res/values-zh-rTW").listFiles().orEmpty()
+            .filter { it.extension == "xml" }
+            .flatMap { stringsIn(it).keys }
+            .toSet()
+        listOf("strings_chrome", "strings_home", "strings_app", "strings_space").forEach { family ->
+            val zhKeys = stringsIn("mobile/src/main/res/values-zh/$family.xml").keys
+            val missing = zhKeys - tw
+            assertEquals("values-zh-rTW missing $family keys: $missing", emptySet<String>(), missing)
+        }
+    }
+
+    @Test
     fun `production mappers cannot restore a hard coded fallback catalog`() {
         val production = file("mobile/src/main/java")
             .walkTopDown()

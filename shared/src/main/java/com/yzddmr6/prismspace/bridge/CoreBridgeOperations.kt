@@ -81,6 +81,25 @@ internal object CoreBridgeOperations {
         context.startActivity(intent)
     }
 
+    /** Presents the system uninstaller from INSIDE the profile: the intent is built from
+     *  [uninstallIntentSpec], which deliberately offers no way to target another user — caller
+     *  user == target user, so no ROM uninstaller behavior can redirect the request at another
+     *  user's copy of the package (issue #6). */
+    fun requestAppUninstall(context: Context, packageName: String): UninstallLaunchDto =
+        when (val spec = uninstallIntentSpec(packageName, context.packageName)) {
+            is UninstallIntentSpec.Refused -> UninstallLaunchDto(UninstallLaunchKind.Failed, spec.reason)
+            is UninstallIntentSpec.Launch -> try {
+                context.startActivity(
+                    Intent(spec.action, Uri.parse(spec.packageUri))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+                UninstallLaunchDto(UninstallLaunchKind.Launched)
+            } catch (error: RuntimeException) {
+                DiagnosticLog.w(TAG, "profile uninstall launch failed pkg=$packageName exception=${error.javaClass.name}")
+                UninstallLaunchDto(UninstallLaunchKind.Failed, error.javaClass.simpleName)
+            }
+        }
+
     fun openDiagnosticsSnapshot(context: Context): DiagnosticsSnapshotSessionDto =
         DiagnosticLog.openChunkedSnapshot(context).let { session ->
             DiagnosticsSnapshotSessionDto(session.token, session.totalLength)
@@ -117,6 +136,23 @@ object ProfileWipe {
     }
 }
 
+/**
+ * Pure, JVM-testable spec for the profile-side system-uninstall intent. [Launch] carries exactly an
+ * action and a package `Uri` — there is structurally no field through which a caller could name a
+ * target user, so the uninstall confirmation can only ever run against the caller's own user.
+ */
+internal sealed interface UninstallIntentSpec {
+    data class Launch(val action: String, val packageUri: String) : UninstallIntentSpec
+    data class Refused(val reason: String) : UninstallIntentSpec
+}
+
+internal fun uninstallIntentSpec(packageName: String, selfPackageName: String): UninstallIntentSpec = when {
+    packageName.isBlank() -> UninstallIntentSpec.Refused("blank_package")
+    packageName == selfPackageName -> UninstallIntentSpec.Refused("self_uninstall")
+    else -> UninstallIntentSpec.Launch(Intent.ACTION_UNINSTALL_PACKAGE, "package:$packageName")
+}
+
 private const val PROVISION_STATE_KEY = "provision.state"
 private const val PROVISION_STATE_STARTED = 1
 private const val PROVISIONING_SERVICE = "com.yzddmr6.prismspace.provisioning.PrismProvisioning"
+private const val TAG = "Prism.CoreOps"

@@ -26,19 +26,6 @@ data class TransferRecord(
 fun TransferRecord.displayTitle(): String =
     if (! packageName.isNullOrBlank()) "$name-$packageName" else name
 
-data class TransferRecordUiActions(
-    val canOpenWithFileManager: Boolean,
-    val canInstall: Boolean,
-)
-
-object TransferRecordActions {
-    fun forRecord(record: TransferRecord, hasInstallableApkSet: Boolean): TransferRecordUiActions =
-        TransferRecordUiActions(
-            canOpenWithFileManager = true,
-            canInstall = !record.packageName.isNullOrBlank() && hasInstallableApkSet,
-        )
-}
-
 /**
  * Persists the file-transfer history per user in credential-protected SharedPreferences. The receiver
  * records here when a share is imported into this space; the

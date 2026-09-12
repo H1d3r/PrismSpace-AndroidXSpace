@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.yzddmr6.prismspace.mobile.R
+import com.yzddmr6.prismspace.prism.compose.theme.PrismIconSizes
 import com.yzddmr6.prismspace.prism.compose.theme.PrismRadius
 import com.yzddmr6.prismspace.prism.compose.theme.PrismSpacing
 
@@ -44,7 +45,7 @@ fun AboutSheet(
             Surface(
                 shape = RoundedCornerShape(PrismRadius.Md),
                 color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.size(48.dp),
+                modifier = Modifier.size(PrismIconSizes.Xl),
             ) {
                 Icon(
                     imageVector = PrismIcons.Shield,

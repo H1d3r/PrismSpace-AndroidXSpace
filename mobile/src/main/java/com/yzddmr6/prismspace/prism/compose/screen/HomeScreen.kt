@@ -1,7 +1,10 @@
 package com.yzddmr6.prismspace.prism.compose.screen
 
 import android.content.Intent
+import android.graphics.drawable.Drawable
 import android.net.Uri
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,9 +14,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -27,11 +35,17 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -40,29 +54,40 @@ import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.notification.NotificationPermissionPrompt
 import com.yzddmr6.prismspace.prism.compose.component.GroupCard
 import com.yzddmr6.prismspace.prism.compose.component.PrismIcons
-import com.yzddmr6.prismspace.prism.compose.component.PrismLevel
-import com.yzddmr6.prismspace.prism.compose.component.StatCard
 import com.yzddmr6.prismspace.prism.compose.component.StatusHeroCard
 import com.yzddmr6.prismspace.prism.compose.component.StatusRow
+import com.yzddmr6.prismspace.prism.compose.nav.AppLaunchSignals
 import com.yzddmr6.prismspace.prism.compose.nav.PrismRoutes
 import com.yzddmr6.prismspace.prism.compose.nav.navigateToTab
+import com.yzddmr6.prismspace.prism.compose.theme.LocalPrismExtraColors
+import com.yzddmr6.prismspace.prism.compose.theme.PrismIconSizes
+import com.yzddmr6.prismspace.prism.compose.theme.PrismRadius
 import com.yzddmr6.prismspace.prism.compose.theme.PrismSpacing
 import com.yzddmr6.prismspace.prism.compose.vm.ActionFeedback
 import com.yzddmr6.prismspace.prism.compose.vm.AppFeedbackBus
 import com.yzddmr6.prismspace.prism.compose.vm.HomePrimaryAction
 import com.yzddmr6.prismspace.prism.compose.vm.HomeViewModel
+import com.yzddmr6.prismspace.prism.compose.vm.overviewLabelsLine
+import com.yzddmr6.prismspace.prism.service.FileBridgeService
 import com.yzddmr6.prismspace.setup.SetupFlow
 import com.yzddmr6.prismspace.util.Activities
 
 /** PrismSpace repository URL. */
 private const val PRISM_GITHUB_URL = "https://github.com/yzddmr6/PrismSpace"
 
+/**
+ * 首页 = 状态 + 任务 + 待办 + 概览:
+ *   状态区（健康=一行安静文字；异常=状态卡带单一主动作）→ 待安装任务卡（仅存在时）→
+ *   主任务「添加分身/发送文件」→ 空间概览 → 页尾「设备与版本」只读参考区。
+ * GitHub 仅为顶栏图标；首屏不呈现诊断信息。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(nav: NavHostController) {
     val vm: HomeViewModel = viewModel()
     val uiState by vm.uiState.collectAsState()
     val context = LocalContext.current
+    val activity = Activities.findActivityFrom(context)
 
     LaunchedEffect(Unit) { vm.refresh() }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -82,7 +107,7 @@ fun HomeScreen(nav: NavHostController) {
                     containerColor = MaterialTheme.colorScheme.surface,
                 ),
                 actions = {
-                    // GitHub icon — normal web Intent (not app launch lifeline)
+                    // GitHub icon — normal web Intent (external browser, no embedded WebView)
                     IconButton(onClick = {
                         runCatching {
                             context.startActivity(
@@ -93,18 +118,6 @@ fun HomeScreen(nav: NavHostController) {
                         Icon(
                             painter = painterResource(R.drawable.ic_github),
                             contentDescription = "GitHub",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    // 关于(Info) icon: show version via the unified Snackbar bus.
-                    IconButton(onClick = {
-                        val state = uiState
-                        val msg = if (state != null) "PrismSpace ${state.versionName}" else "PrismSpace"
-                        AppFeedbackBus.emit(ActionFeedback(msg, isError = false))
-                    }) {
-                        Icon(
-                            imageVector = PrismIcons.Info,
-                            contentDescription = stringResource(R.string.lz_home_about),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -122,103 +135,164 @@ fun HomeScreen(nav: NavHostController) {
         ) {
             val state = uiState
 
-            // ── Status Hero Card ─────────────────────────────────────────────
-            StatusHeroCard(
-                level       = state?.level ?: PrismLevel.Warn,
-                title       = state?.statusTitle ?: stringResource(R.string.lz_home_loading),
-                body        = state?.statusBody ?: "",
-                tag         = state?.tag ?: "",
-                // Status icon is always the space "shield"; severity is conveyed by the card's level
-                // color/tag. (Was the wrench — an action icon — which is semantically wrong as a status.)
-                leadingIcon = PrismIcons.Shield,
-                primary     = when {
-                    state?.showRepair == true -> {
-                        {
-                            Button(
-                                onClick   = {
-                                    when (state.primaryAction) {
-                                        HomePrimaryAction.StartSetup -> SetupFlow.open(context)
-                                        HomePrimaryAction.OpenSettings -> {
-                                            Activities.findActivityFrom(context)?.let(NotificationPermissionPrompt::requestOnce)
-                                            vm.repair { route -> nav.navigateToTab(route) }
-                                        }
-                                        HomePrimaryAction.OpenSpace -> nav.navigateToTab(PrismRoutes.SPACE)
+            // ── 状态区: 健康一行安静文字，异常一张状态卡（单一主动作） ─────────────
+            if (state == null || state.calm) {
+                Text(
+                    text = state?.statusTitle ?: stringResource(R.string.lz_home_loading),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = PrismSpacing.Xs),
+                )
+            } else {
+                StatusHeroCard(
+                    level       = state.level,
+                    title       = state.statusTitle,
+                    body        = state.statusBody,
+                    tag         = state.tag,
+                    // Status icon is always the space "shield"; severity is conveyed by the card's
+                    // level color/tag. (An action icon would be semantically wrong as a status.)
+                    leadingIcon = PrismIcons.Shield,
+                    primary     = {
+                        // The card's ONLY primary action; its label mirrors the real state
+                        // (创建/恢复/修复/查看), never a generic "fix".
+                        Button(
+                            onClick   = {
+                                when (state.primaryAction) {
+                                    HomePrimaryAction.StartSetup -> SetupFlow.open(context)
+                                    HomePrimaryAction.OpenSettings -> {
+                                        activity?.let(NotificationPermissionPrompt::requestOnce)
+                                        vm.repair { route -> nav.navigateToTab(route) }
                                     }
+                                    HomePrimaryAction.OpenSpace -> nav.navigateToTab(PrismRoutes.SPACE)
+                                }
+                            },
+                            modifier  = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(
+                                // 图标按真实动作区分：创建空间=加号，查看应用=网格，
+                                // 修复/解锁等设置类动作=扳手（不再是所有动作都用扳手）。
+                                imageVector = when (state.primaryAction) {
+                                    HomePrimaryAction.StartSetup -> PrismIcons.Add
+                                    HomePrimaryAction.OpenSpace -> PrismIcons.Grid
+                                    HomePrimaryAction.OpenSettings -> PrismIcons.Wrench
                                 },
-                                modifier  = Modifier.fillMaxWidth(),
-                            ) {
-                                Icon(
-                                    imageVector = PrismIcons.Wrench,
-                                    contentDescription = null,
-                                    modifier = Modifier.padding(end = PrismSpacing.Sm),
-                                )
-                                // Label reflects the actual broken state (创建/恢复/修复), not always "修复".
-                                Text(state.primaryLabel.ifBlank { stringResource(R.string.lz_home_repair_fallback) })
-                            }
+                                contentDescription = null,
+                                modifier = Modifier.padding(end = PrismSpacing.Sm),
+                            )
+                            Text(state.primaryLabel.ifBlank { stringResource(R.string.lz_home_repair_fallback) })
                         }
-                    }
-                    // Healthy state: give Home a real primary action instead of being
-                    // a dead-end status screen.
-                    state != null -> {
-                        {
-                            Button(
-                                onClick  = { nav.navigateToTab(PrismRoutes.SPACE) },
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Icon(
-                                    imageVector = PrismIcons.Add,
-                                    contentDescription = null,
-                                    modifier = Modifier.padding(end = PrismSpacing.Sm),
-                                )
-                                Text(stringResource(R.string.lz_home_label_add_app))
-                            }
-                        }
-                    }
-                    else -> null
-                },
-            )
+                    },
+                )
+            }
 
-            // ── Stat Cards row: 主空间 / 双开空间 ────────────────────────────
+            // ── 待安装任务卡（仅存在时）: clone-preparation 存储的投影 ────────────
+            if (state != null && state.pendingInstallLabels.isNotEmpty()) {
+                PendingInstallCard(
+                    labels = state.pendingInstallLabels,
+                    gateEnabled = state.installEntryEnabled,
+                    guidance = state.installEntryGuidance,
+                    onGoInstall = {
+                        if (activity != null) {
+                            val result = FileBridgeService().openProfileInstallEntry(activity)
+                            if (!result.success) {
+                                AppFeedbackBus.emit(ActionFeedback(result.message, isError = true))
+                            }
+                        }
+                    },
+                    onBlocked = { guidance ->
+                        guidance?.let { AppFeedbackBus.emit(ActionFeedback(it, isError = true)) }
+                    },
+                )
+            }
+
+            // ── 主任务：添加分身直达空间页主空间分段；发送文件直达文件页 ────────────
             Row(
-                modifier              = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(PrismSpacing.Md),
             ) {
-                Box(modifier = Modifier.weight(1f)) {
-                    val mainValue = state?.mainCount?.let {
-                        stringResource(R.string.lz_home_main_count, it)
-                    } ?: "--"
-                    StatCard(label = stringResource(R.string.lz_home_main_space), value = mainValue)
+                Button(
+                    onClick = {
+                        AppLaunchSignals.signalOpenSpaceMainSegment()
+                        nav.navigateToTab(PrismRoutes.SPACE)
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(
+                        imageVector = PrismIcons.Add,
+                        contentDescription = null,
+                        modifier = Modifier.padding(end = PrismSpacing.Sm),
+                    )
+                    Text(stringResource(R.string.lz_home_task_add_clone))
                 }
-                Box(modifier = Modifier.weight(1f)) {
-                    val cloneValue = state?.cloneCount?.let {
-                        stringResource(R.string.lz_home_clone_count, it)
-                    } ?: "--"
-                    StatCard(label = stringResource(R.string.lz_home_dual_space), value = cloneValue)
+                Button(
+                    onClick = { nav.navigateToTab(PrismRoutes.FILES) },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(
+                        imageVector = PrismIcons.File,
+                        contentDescription = null,
+                        modifier = Modifier.padding(end = PrismSpacing.Sm),
+                    )
+                    Text(stringResource(R.string.lz_home_task_send_files))
                 }
             }
 
-            // ── Info GroupCard — no section title ─────────────────────────────
-            // (PrismSpace 版本 row removed — version lives in 设置 → 关于; it was shown in 4 places.)
-            GroupCard(title = null) {
-                // Row: 工作资料 (Profile Owner)
-                StatusRow(
-                    title = stringResource(R.string.lz_home_work_profile),
-                    value = state?.profileOwnerLabel ?: "…",
-                    leadingIcon = PrismIcons.Shield,
-                )
-                // Row: 运行模式 (same label as Settings — single name for one concept)
+            // ── 空间概览：分身头像组 + 最近传输一行（点卡进入空间板块） ──────────────
+            if (state != null && state.cloneCount > 0) {
+                GroupCard(title = stringResource(R.string.lz_home_overview_title)) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { nav.navigateToTab(PrismRoutes.SPACE) }
+                            .padding(horizontal = PrismSpacing.Lg, vertical = PrismSpacing.Sm),
+                        verticalArrangement = Arrangement.spacedBy(PrismSpacing.Sm),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(PrismSpacing.Sm),
+                        ) {
+                            state.overviewClonePkgs.forEach { pkg ->
+                                HomeCloneIcon(pkg)
+                            }
+                            Text(
+                                text = stringResource(R.string.lz_home_overview_clones, state.cloneCount),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                        if (state.overviewCloneLabels.isNotEmpty()) {
+                            // 标签行与头像组同一截断口径（同取前 5 个），超出才追加省略号——
+                            // 不再出现 4–5 个分身时头像全显而标签行提前省略的不一致。
+                            Text(
+                                text = overviewLabelsLine(state.overviewCloneLabels, state.cloneCount),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        Text(
+                            text = stringResource(R.string.lz_home_recent_transfer) + "  " +
+                                (state.recentTransferText ?: stringResource(R.string.lz_home_no_transfer)),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            // ── 页尾只读参考区：设备与版本（诊断时有上下文，日常使用零打扰） ──────────
+            GroupCard(title = stringResource(R.string.lz_home_device_version)) {
                 StatusRow(
                     title = stringResource(R.string.lz_home_run_mode),
                     value = state?.capabilityText ?: "…",
                     leadingIcon = PrismIcons.Key,
                 )
-                // Row: Android 版本
                 StatusRow(
                     title = stringResource(R.string.lz_home_android_version),
                     value = state?.androidText ?: "…",
                     leadingIcon = PrismIcons.Droid,
                 )
-                // Row 5: 设备
                 StatusRow(
                     title = stringResource(R.string.lz_home_device),
                     value = state?.deviceText ?: "…",
@@ -228,5 +302,72 @@ fun HomeScreen(nav: NavHostController) {
 
             Spacer(Modifier.height(PrismSpacing.Sm))
         }
+    }
+}
+
+/** 待安装任务卡：等待系统安装器确认的克隆；点击「前往安装」进入双开空间安装入口（带空间门禁）。 */
+@Composable
+private fun PendingInstallCard(
+    labels: List<String>,
+    gateEnabled: Boolean,
+    guidance: String?,
+    onGoInstall: () -> Unit,
+    onBlocked: (String?) -> Unit,
+) {
+    val extra = LocalPrismExtraColors.current
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(PrismRadius.Lg),
+        colors = CardDefaults.cardColors(
+            containerColor = extra.warnContainer,
+            contentColor = extra.warn,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = PrismSpacing.None),
+    ) {
+        Column(modifier = Modifier.padding(PrismSpacing.Lg)) {
+            Text(
+                text = if (labels.size == 1) stringResource(R.string.lz_home_pending_title_one, labels.first())
+                else stringResource(R.string.lz_home_pending_title_more, labels.first(), labels.size),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                text = guidance?.takeIf { !gateEnabled } ?: stringResource(R.string.lz_home_pending_body),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = PrismSpacing.Xs),
+            )
+            Button(
+                onClick = { if (gateEnabled) onGoInstall() else onBlocked(guidance) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = PrismSpacing.Md),
+            ) {
+                Text(stringResource(R.string.lz_home_pending_action))
+            }
+        }
+    }
+}
+
+/** Small clone icon for the overview avatar group (resolved like the Space list icons). */
+@Composable
+private fun HomeCloneIcon(pkg: String) {
+    val context = LocalContext.current
+    val icon: Drawable? = remember(pkg) {
+        runCatching { context.packageManager.getApplicationIcon(pkg) }.getOrNull()
+    }
+    if (icon != null) {
+        val bmp = remember(icon) { icon.toBitmap(48, 48).asImageBitmap() }
+        Image(
+            bitmap = bmp,
+            contentDescription = null,
+            modifier = Modifier
+                .size(PrismIconSizes.Lg)
+                .clip(CircleShape),
+        )
+    } else {
+        Box(
+            modifier = Modifier
+                .size(PrismIconSizes.Lg)
+                .clip(CircleShape),
+        )
     }
 }

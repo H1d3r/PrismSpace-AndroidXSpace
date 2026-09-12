@@ -6,12 +6,12 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.LauncherApps
-import android.net.Uri
 import android.os.UserHandle
 import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import com.yzddmr6.prismspace.util.Dialogs
 import com.yzddmr6.prismspace.util.Apps
+import com.yzddmr6.prismspace.analytics.Analytics.Param.CONTENT
 import com.yzddmr6.prismspace.analytics.Analytics.Param.ITEM_CATEGORY
 import com.yzddmr6.prismspace.analytics.Analytics.Param.ITEM_ID
 import com.yzddmr6.prismspace.analytics.analytics
@@ -25,7 +25,6 @@ import com.yzddmr6.prismspace.bridge.SetPackageSuspended
 import com.yzddmr6.prismspace.bridge.SetPackagesFrozen
 import com.yzddmr6.prismspace.bridge.SetPackagesSuspended
 import com.yzddmr6.prismspace.data.PrismAppInfo
-import com.yzddmr6.prismspace.data.helper.AppStateTrackingHelper
 import com.yzddmr6.prismspace.engine.ClonedHiddenSystemApps
 import com.yzddmr6.prismspace.engine.PrismManager
 import com.yzddmr6.prismspace.engine.LaunchResult
@@ -43,28 +42,35 @@ import com.yzddmr6.prismspace.util.IntentCompat
 import com.yzddmr6.prismspace.util.OwnerUser
 import com.yzddmr6.prismspace.util.ProfileUser
 import com.yzddmr6.prismspace.util.Toasts
-import com.yzddmr6.prismspace.util.Users
 import com.yzddmr6.prismspace.util.Users.Companion.toId
 import org.jetbrains.annotations.NotNull
 
 object PrismAppControl {
 
 	@JvmStatic fun requestRemoval(activity: Activity, app: PrismAppInfo) {
-		analytics().event("action_uninstall").with(ITEM_ID, app.packageName).with(ITEM_CATEGORY, "system").send()
-
+		// Non-system clones are uninstalled only through the profile-routed queue (issue #6): the
+		// old user-0 ACTION_UNINSTALL_PACKAGE + EXTRA_USER path is gone with no fallback. What
+		// remains here is the system-app path, where "removal" means the disable dialog.
+		if (! app.isSystem) return
 		if (! unfreezeIfNeeded(app)) return
 
-		if (app.isSystem) {
-			analytics().event("action_disable_sys_app").with(ITEM_ID, app.packageName).send()
-			if (app.isCritical) Dialogs.buildAlert(activity, R.string.dialog_title_warning, R.string.dialog_critical_app_warning)
-					.withCancelButton().setPositiveButton(R.string.action_continue) { _,_ -> launchSystemAppSettings(app) }.show()
-			else Dialogs.buildAlert(activity, 0, R.string.prompt_disable_sys_app_as_removal)
-					.withCancelButton().setPositiveButton(R.string.action_continue) { _,_ -> launchSystemAppSettings(app) }.show() }
-		else {
-			Activities.startActivity(activity, Intent(Intent.ACTION_UNINSTALL_PACKAGE)
-					.setData(Uri.fromParts("package", app.packageName, null)).putExtra(Intent.EXTRA_USER, app.user))
-			if (! Users.isProfileAvailable(activity, app.user))   // App clone can actually be removed in quiet mode, without callback triggered.
-				if (! activity.isDestroyed) AppStateTrackingHelper.requestSyncWhenResumed(activity, app.packageName, app.user) }
+		analytics().event("action_uninstall").with(ITEM_ID, app.packageName).with(ITEM_CATEGORY, uninstallItemCategory(app.isSystem)).send()
+
+		analytics().event("action_disable_sys_app").with(ITEM_ID, app.packageName).send()
+		if (app.isCritical) Dialogs.buildAlert(activity, R.string.dialog_title_warning, R.string.dialog_critical_app_warning)
+				.withCancelButton().setPositiveButton(R.string.action_continue) { _,_ -> launchSystemAppSettings(app) }.show()
+		else Dialogs.buildAlert(activity, 0, R.string.prompt_disable_sys_app_as_removal)
+				.withCancelButton().setPositiveButton(R.string.action_continue) { _,_ -> launchSystemAppSettings(app) }.show()
+	}
+
+	/** Records a clone-uninstall attempt with the real classification, emitted only after the
+	 *  profile-side launch outcome is known. */
+	@JvmStatic fun logUninstallLaunchOutcome(packageName: String, system: Boolean, launched: Boolean, failureReason: String?) {
+		analytics().event("action_uninstall")
+			.with(ITEM_ID, packageName)
+			.with(ITEM_CATEGORY, uninstallItemCategory(system))
+			.with(CONTENT, uninstallLaunchContent(launched, failureReason))
+			.send()
 	}
 
 	@JvmStatic fun launch(context: Context, app: PrismAppInfo) {
@@ -261,3 +267,10 @@ object PrismAppControl {
 
 	private const val TAG = "Prism.AppControl"
 }
+
+/** Real app classification for uninstall diagnostics — never a hardcoded constant. */
+internal fun uninstallItemCategory(system: Boolean) = if (system) "system" else "user"
+
+/** Launch outcome carried by the uninstall event, recorded after the launch result is known. */
+internal fun uninstallLaunchContent(launched: Boolean, failureReason: String?) =
+	if (launched) "launched" else "failed:${failureReason?.takeIf { it.isNotBlank() } ?: "unknown"}"

@@ -117,4 +117,10 @@
     <!-- Tip cards -->
 
 
+    <!-- Setup: how the space is created -->
+    <string name="prism_setup_howto_title">How it is created</string>
+    <string name="prism_setup_howto_system_title">Guided by the Android system</string>
+    <string name="prism_setup_howto_system_body">Creation briefly leaves PrismSpace for the system provisioning screens and usually takes 30–90 seconds.</string>
+    <string name="prism_setup_howto_delete_title">Removable anytime</string>
+    <string name="prism_setup_howto_delete_body">The dual space is just a work profile on the phone — delete it completely whenever you no longer need it.</string>
 </resources>

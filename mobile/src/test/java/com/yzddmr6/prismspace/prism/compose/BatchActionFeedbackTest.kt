@@ -4,6 +4,7 @@ import com.yzddmr6.prismspace.prism.compose.vm.ActionFeedback
 import com.yzddmr6.prismspace.prism.compose.vm.BatchAction
 import com.yzddmr6.prismspace.prism.compose.vm.batchActionFeedback
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BatchActionFeedbackTest {
@@ -32,16 +33,12 @@ class BatchActionFeedbackTest {
         assertEquals(ActionFeedback("卸载发起: 成功 0, 失败 1", true),
             batchActionFeedback(BatchAction.Uninstall, 0, 1))
     }
-    @Test fun copyAllSuccess() {
-        assertEquals(ActionFeedback("正在克隆 5 个应用到双开空间", false),
-            batchActionFeedback(BatchAction.CopyToDual, 5, 0))
-    }
-    @Test fun copyPartial() {
-        assertEquals(ActionFeedback("克隆发起: 成功 4, 失败 1", true),
-            batchActionFeedback(BatchAction.CopyToDual, 4, 1))
-    }
-    @Test fun copyAllFail() {
-        assertEquals(ActionFeedback("克隆发起: 成功 0, 失败 2", true),
-            batchActionFeedback(BatchAction.CopyToDual, 0, 2))
+    @Test fun copyToDualIsNotCountableHere() {
+        // Batch clone reports real per-package results through batchCloneFeedback; the generic
+        // "request started" copy is unreachable by construction.
+        assertTrue(
+            runCatching { batchActionFeedback(BatchAction.CopyToDual, 5, 0) }
+                .exceptionOrNull() is IllegalStateException,
+        )
     }
 }

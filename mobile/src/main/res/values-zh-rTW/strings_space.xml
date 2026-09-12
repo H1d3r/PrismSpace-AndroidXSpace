@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="lz_system_apps_title">系統應用程式</string>
-    <string name="lz_system_apps_entry">管理系統應用程式</string>
     <string name="lz_system_apps_back">返回</string>
     <string name="lz_system_apps_search">搜尋系統應用程式名稱或套件名稱</string>
     <string name="lz_system_apps_empty_search_title">尋找系統應用程式</string>
@@ -11,4 +10,68 @@
     <string name="lz_system_app_freeze_critical_title">凍結關鍵系統應用程式？</string>
     <string name="lz_system_app_freeze_critical_body">%1$s（%2$s）是 Android 或其他應用程式所依賴的關鍵套件。凍結它可能導致雙開空間的設定、輸入、安裝或連線功能異常。只有在你明確知道如何復原此操作時才繼續。</string>
     <string name="lz_system_app_freeze_critical_confirm">仍要凍結</string>
+
+    <!-- Space screen -->
+    <string name="lz_space_title">空間</string>
+    <string name="lz_space_selected_count">已選 %1$d 項</string>
+    <string name="lz_space_row_selected">已選取</string>
+    <string name="lz_space_row_not_selected">未選取</string>
+    <string name="lz_space_select_all">全選</string>
+    <string name="lz_space_deselect_all">取消全選</string>
+    <string name="lz_space_exit_multiselect">退出多選</string>
+    <string name="lz_space_batch_manage">批次管理</string>
+    <string name="lz_space_view_controls">列表檢視</string>
+    <string name="lz_space_row_open">開啟</string>
+    <string name="lz_space_row_resume">恢復</string>
+    <string name="lz_space_row_add_clone">新增分身</string>
+    <string name="lz_space_row_install">去安裝</string>
+    <string name="lz_vm_chip_paused">已暫停</string>
+    <string name="lz_vm_chip_system">系統應用程式</string>
+    <string name="lz_space_batch_copy_to_dual">克隆到雙開</string>
+    <string name="lz_space_batch_freeze">凍結</string>
+    <string name="lz_space_batch_uninstall">解除安裝</string>
+    <string name="lz_space_batch_cancel">取消</string>
+    <string name="lz_space_batch_uninstall_title">解除安裝 %1$d 個應用程式？</string>
+    <string name="lz_space_batch_uninstall_body">將在雙開空間內解除安裝選取的 %1$d 個應用程式，其帳號與應用程式資料會一併刪除且無法復原；主空間中的同名應用程式不受影響。系統會逐個彈出解除安裝確認。</string>
+    <string name="lz_space_batch_uninstall_confirm">解除安裝</string>
+    <string name="lz_space_batch_clone_title">克隆 %1$d 個應用程式到雙開空間？</string>
+    <string name="lz_space_batch_clone_body">將按目前執行模式依次把選取的 %1$d 個應用程式克隆到雙開空間。一般模式會逐個傳輸安裝包，需在雙開空間手動安裝。</string>
+    <string name="lz_space_batch_clone_confirm">開始克隆</string>
+    <string name="lz_space_dialog_cancel">取消</string>
+    <string name="lz_space_delete_target_missing">空間不存在或已被移除</string>
+    <string name="lz_space_search_dual">在雙開空間內搜尋</string>
+    <string name="lz_space_search_main">在主空間內搜尋</string>
+    <string name="lz_space_menu_sort">排序方式</string>
+    <string name="lz_space_menu_sort_name">名稱（A→Z）</string>
+    <string name="lz_space_menu_sort_cloned">已新增優先</string>
+    <string name="lz_space_menu_filter">篩選</string>
+    <string name="lz_space_menu_filter_all">全部應用程式</string>
+    <string name="lz_space_menu_filter_cloned_only">僅已雙開</string>
+    <string name="lz_space_menu_filter_not_cloned_only">僅未雙開</string>
+    <string name="lz_space_menu_show_system">顯示系統應用程式</string>
+    <string name="lz_space_menu_refresh">重新整理</string>
+    <string name="lz_space_empty_no_match">沒有相符的應用程式</string>
+    <string name="lz_space_empty_dual_locked">雙開空間已鎖定</string>
+    <string name="lz_space_empty_dual_suspended">雙開空間已暫停</string>
+    <string name="lz_space_empty_dual_bridge">雙開空間需要重新連線</string>
+    <string name="lz_space_empty_dual_unknown">雙開空間需要修復</string>
+    <string name="lz_space_empty_dual_none">還沒有雙開應用程式</string>
+    <string name="lz_space_empty_none">沒有可顯示的應用程式</string>
+    <string name="lz_space_empty_no_match_hint">嘗試其他搜尋字詞</string>
+    <string name="lz_space_empty_dual_locked_hint">請先解鎖雙開空間（螢幕鎖定密碼）後再檢視分身</string>
+    <string name="lz_space_empty_dual_suspended_hint">在設定中恢復雙開空間</string>
+    <string name="lz_space_empty_dual_bridge_hint">請到設定中修復雙開空間連線</string>
+    <string name="lz_space_empty_dual_unknown_hint">請到設定中修復雙開空間</string>
+    <string name="lz_space_empty_dual_none_hint">到「主空間」點按應用程式，克隆到雙開空間</string>
+    <string name="lz_space_empty_none_hint">調整篩選或搜尋條件</string>
+    <string name="lz_uninstall_gate_suspended">請先在設定中恢復雙開空間，然後再解除安裝分身</string>
+    <string name="lz_uninstall_gate_locked">請先解鎖雙開空間（螢幕鎖定密碼），然後再解除安裝分身</string>
+    <string name="lz_uninstall_gate_bridge">請先在設定中修復雙開空間連線，然後再解除安裝分身</string>
+    <string name="lz_uninstall_gate_missing">請先建立雙開空間，然後再解除安裝分身</string>
+    <string name="lz_uninstall_gate_unknown">請先在設定中修復雙開空間，然後再解除安裝分身</string>
+    <string name="lz_install_gate_suspended">請先在設定中恢復雙開空間，然後再繼續安裝</string>
+    <string name="lz_install_gate_locked">請先解鎖雙開空間（螢幕鎖定密碼），然後再繼續安裝</string>
+    <string name="lz_install_gate_bridge">請先在設定中修復雙開空間連線，然後再繼續安裝</string>
+    <string name="lz_install_gate_missing">請先建立雙開空間，然後再繼續安裝</string>
+    <string name="lz_install_gate_unknown">請先在設定中修復雙開空間，然後再繼續安裝</string>
 </resources>

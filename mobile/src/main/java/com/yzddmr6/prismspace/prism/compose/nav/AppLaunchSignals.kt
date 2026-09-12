@@ -19,4 +19,17 @@ object AppLaunchSignals {
     private val _multiSelectActive = MutableStateFlow(false)
     val multiSelectActive: StateFlow<Boolean> = _multiSelectActive
     fun setMultiSelectActive(active: Boolean) { _multiSelectActive.value = active }
+
+    // Home「添加分身」→ Space tab with the MAIN segment selected (the clone source list).
+    // Nonce StateFlow (not a Channel): the Space screen may be recreated after the signal and must
+    // still see it once — collectors acknowledge via a remembered last-handled nonce.
+    private val _openSpaceMainSegment = MutableStateFlow(0)
+    val openSpaceMainSegment: StateFlow<Int> = _openSpaceMainSegment
+    fun signalOpenSpaceMainSegment() { _openSpaceMainSegment.value += 1 }
+
+    // Settings「系统应用」→ Space tab (PrismNavHost switches tabs), dual segment + system-apps
+    // view open (SpaceScreen consumes the same nonce).
+    private val _openSpaceSystemApps = MutableStateFlow(0)
+    val openSpaceSystemApps: StateFlow<Int> = _openSpaceSystemApps
+    fun signalOpenSpaceSystemApps() { _openSpaceSystemApps.value += 1 }
 }

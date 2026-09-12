@@ -18,7 +18,9 @@ class SuiInitializationGuardTest {
 
     @Test fun cloneReadinessUsesCentralizedDetection() {
         val source = File("src/main/java/com/yzddmr6/prismspace/controller/PrismAppClones.kt").readText()
-        assertTrue(source.contains("ShizukuUtil.isAvailable()"))
+        // Readiness flows from the centralized capability snapshot (run-mode source of truth);
+        // authorization checks go through ShizukuUtil — never raw Shizuku version probes.
+        assertTrue(source.contains("runtimeSnapshot()"))
         assertTrue(source.contains("ShizukuUtil.isAuthorized()"))
         assertFalse(source.contains("Shizuku.getVersion() >= 11"))
     }

@@ -19,14 +19,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.yzddmr6.prismspace.prism.compose.theme.PrismIconSizes
 import com.yzddmr6.prismspace.prism.compose.theme.PrismSpacing
 
 // 禁用态统一弱化透明度（M3 onSurface disabled 约定）。
 // Internal so SpaceScreen AppCard and other Compose files in this module can share the same value.
 internal const val DisabledAlpha = 0.38f
-
-/** Single explicit leading-icon size token shared by row components. */
-internal val PrismIconSize = PrismSpacing.Xl
 
 // ────────────────────────────────────────────────────────────────
 //  Shared private layout shell — exposes RowScope
@@ -87,7 +85,7 @@ private fun RowLeadingIcon(icon: ImageVector, enabled: Boolean = true, danger: B
         Icon(
             imageVector = icon,
             contentDescription = null,
-            modifier = Modifier.size(PrismIconSize),
+            modifier = Modifier.size(PrismIconSizes.Md),
             tint = when {
                 !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = DisabledAlpha)
                 danger -> MaterialTheme.colorScheme.error
@@ -217,7 +215,7 @@ fun StatusRow(
             Icon(
                 imageVector = leadingIcon,
                 contentDescription = null,
-                modifier = Modifier.size(PrismIconSize),
+                modifier = Modifier.size(PrismIconSizes.Md),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(modifier = Modifier.width(PrismSpacing.Lg))

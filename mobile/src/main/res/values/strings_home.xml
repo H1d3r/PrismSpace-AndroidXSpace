@@ -11,14 +11,23 @@
     <!-- HomeScreen: stat cards -->
     <string name="lz_home_main_space">Main space</string>
     <string name="lz_home_dual_space">Dual space</string>
-    <string name="lz_home_main_count">%1$d apps</string>
-    <string name="lz_home_clone_count">%1$d clones</string>
 
     <!-- HomeScreen: info rows -->
     <string name="lz_home_work_profile">Work profile</string>
     <string name="lz_home_run_mode">Run mode</string>
     <string name="lz_home_android_version">Android version</string>
     <string name="lz_home_device">Device</string>
+    <string name="lz_home_pending_title_one">%1$s is waiting for install confirmation</string>
+    <string name="lz_home_pending_title_more">%1$s and %2$d more apps are waiting for install confirmation</string>
+    <string name="lz_home_pending_body">The install package is already in the dual space. The last step is confirming in the Android system installer.</string>
+    <string name="lz_home_pending_action">Go to install</string>
+    <string name="lz_home_task_add_clone">Add clone</string>
+    <string name="lz_home_task_send_files">Send files</string>
+    <string name="lz_home_overview_title">Space overview</string>
+    <string name="lz_home_overview_clones">%1$d clones</string>
+    <string name="lz_home_recent_transfer">Latest transfer</string>
+    <string name="lz_home_no_transfer">No transfers yet</string>
+    <string name="lz_home_device_version">Device &amp; version</string>
 
     <!-- HomeViewModel: status titles / bodies / tags / primary labels -->
     <string name="lz_home_status_normal_title">Dual space is healthy</string>

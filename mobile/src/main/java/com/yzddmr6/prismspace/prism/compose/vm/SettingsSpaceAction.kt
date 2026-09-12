@@ -2,6 +2,7 @@ package com.yzddmr6.prismspace.prism.compose.vm
 
 import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.prism.compose.space.SpacePresentationKind
+import com.yzddmr6.prismspace.prism.compose.space.SpaceUsability
 import com.yzddmr6.prismspace.space.SpaceBridgeCause
 
 internal data class SettingsSpaceAction(
@@ -57,4 +58,36 @@ private fun bridgeCauseSummary(cause: SpaceBridgeCause?): Int = when (cause) {
     SpaceBridgeCause.Failed -> R.string.lz_set_reconnect_failed
     SpaceBridgeCause.NotChecked,
     null -> R.string.lz_set_reconnect_not_checked
+}
+
+/** Presentation of the 暂停所有分身 switch: driven by the real aggregated freeze state; when the
+ *  space is locked or the bridge is down the switch is disabled with the state-specific reason. */
+internal data class SuspendSwitchPresentation(
+    val enabled: Boolean,
+    val summaryRes: Int,
+)
+
+internal fun suspendSwitchPresentation(
+    freezeState: SpaceFreezeState,
+    usability: SpaceUsability,
+): SuspendSwitchPresentation {
+    if (usability != SpaceUsability.Usable) {
+        return SuspendSwitchPresentation(
+            enabled = false,
+            summaryRes = when (usability) {
+                SpaceUsability.LockedNeedsUnlock -> R.string.lz_set_suspend_disabled_locked
+                SpaceUsability.BridgeNotReady -> R.string.lz_set_suspend_disabled_bridge
+                else -> R.string.lz_set_suspend_state_unknown
+            },
+        )
+    }
+    return SuspendSwitchPresentation(
+        enabled = freezeState != SpaceFreezeState.Unknown,
+        summaryRes = when (freezeState) {
+            SpaceFreezeState.Active -> R.string.lz_set_suspend_summary
+            SpaceFreezeState.Frozen -> R.string.lz_set_suspend_state_frozen
+            SpaceFreezeState.Mixed -> R.string.lz_set_suspend_state_mixed
+            SpaceFreezeState.Unknown -> R.string.lz_set_suspend_state_unknown
+        },
+    )
 }

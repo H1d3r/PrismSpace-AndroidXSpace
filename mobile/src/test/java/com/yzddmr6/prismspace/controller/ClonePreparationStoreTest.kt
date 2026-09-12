@@ -37,6 +37,18 @@ class ClonePreparationStoreTest {
         assertEquals(setOf("pending.pkg"), persistence.value)
     }
 
+    @Test fun clearDropsEveryPendingMarker() {
+        // 删除双开空间后：待安装标记全部清除（首页待办卡与主空间行不再呈现悬空任务）。
+        val persistence = MemoryPersistence(setOf("one.pkg", "two.pkg"))
+        val store = ClonePreparationStateStore(persistence)
+
+        store.clear()
+
+        assertEquals(emptySet<String>(), persistence.value)
+        assertFalse(store.contains("one.pkg"))
+        assertEquals(emptySet<String>(), store.reconcileInstalled(emptySet()))
+    }
+
     private class MemoryPersistence(initial: Set<String> = emptySet()) : ClonePreparationPersistence {
         var value = initial
         override fun read(): Set<String> = value

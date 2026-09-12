@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
+import com.yzddmr6.prismspace.controller.ClonePreparationStore
 import com.yzddmr6.prismspace.controller.UserCloneRegistry
 import com.yzddmr6.prismspace.prism.compose.component.PrismLevel
 import com.yzddmr6.prismspace.prism.compose.space.SpaceRepository
@@ -16,6 +17,9 @@ import com.yzddmr6.prismspace.prism.compose.space.presentSpace
 import com.yzddmr6.prismspace.prism.compose.space.SpaceUsability
 import com.yzddmr6.prismspace.prism.compose.nav.PrismRoutes
 import com.yzddmr6.prismspace.mobile.R
+import com.yzddmr6.prismspace.prism.service.TransferHistoryStore
+import com.yzddmr6.prismspace.prism.service.displayTitle
+import com.yzddmr6.prismspace.util.Apps
 import com.yzddmr6.prismspace.util.PrismLocale
 import com.yzddmr6.prismspace.util.Users
 import com.yzddmr6.prismspace.util.Users.Companion.toId
@@ -59,6 +63,10 @@ internal fun profileStatusLabelRes(state: SpaceState): Int = when (state) {
 
 enum class HomePrimaryAction { OpenSpace, StartSetup, OpenSettings }
 
+/** 概览卡标签行：与头像组同一截断口径（同取前 N 个），仅当总数超出展示数时才追加省略号。 */
+internal fun overviewLabelsLine(labels: List<String>, cloneCount: Int): String =
+    labels.joinToString("、") + if (cloneCount > labels.size) " …" else ""
+
 // ---------------------------------------------------------------------------
 // Pure UI model
 // ---------------------------------------------------------------------------
@@ -80,7 +88,19 @@ data class HomeUiModel(
     val deviceText: String = "",
     val showRepair: Boolean = false,
     val profileOwnerLabel: String = "",
-)
+    // Pending installs (clone-preparation store): labels of apps awaiting in-space confirmation.
+    val pendingInstallLabels: List<String> = emptyList(),
+    // 前往安装 gate — same usability source as clone launch/uninstall.
+    val installEntryEnabled: Boolean = true,
+    val installEntryGuidance: String? = null,
+    // 空间概览: first few clone packages (icons) + labels, and the latest transfer line.
+    val overviewClonePkgs: List<String> = emptyList(),
+    val overviewCloneLabels: List<String> = emptyList(),
+    val recentTransferText: String? = null,
+) {
+    /** 状态安静原则: verified-healthy and no-valence states render as one quiet line, not a card. */
+    val calm: Boolean get() = level == PrismLevel.Ok || level == PrismLevel.Neutral
+}
 
 // ---------------------------------------------------------------------------
 // Pure mapper — Android-free, unit-testable.
@@ -116,7 +136,8 @@ internal fun mapHome(
         primaryAction = HomePrimaryAction.StartSetup,
     )
     SpaceHealth.Provisioning -> HomeUiModel(
-        level = PrismLevel.Warn,
+        // 进行中（配置中）是无偏向的瞬时状态——Neutral，不渲染为「需要注意」。
+        level = PrismLevel.Neutral,
         statusTitle = resolve(R.string.lz_home_status_provisioning_title),
         statusBody = resolve(R.string.lz_home_status_provisioning_body),
         tag = resolve(R.string.lz_home_tag_provisioning),
@@ -149,7 +170,8 @@ internal fun mapHome(
         primaryAction = HomePrimaryAction.OpenSettings,
     )
     SpaceHealth.Checking -> HomeUiModel(
-        level = PrismLevel.Warn,
+        // 检查中/未知统一归 Neutral：「不知道」不得染绿也不染黄。
+        level = PrismLevel.Neutral,
         statusTitle = resolve(R.string.lz_home_status_checking_title),
         statusBody = resolve(R.string.lz_home_status_checking_body),
         tag = resolve(R.string.lz_home_tag_checking),
@@ -287,22 +309,41 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 .count { app -> app.packageName != context.packageName && app.isInstalled && app.enabled }
         }.getOrElse { 0 }
 
-        val cloneCount = if (profileOwner) {
+        // Dual apps loaded once: the clone count, the overview avatar group and the pending-install
+        // reconciliation all derive from this single query.
+        val dualApps = if (profileOwner) {
             runCatching {
-                spaceRepo.dualSpaces().sumOf { d ->
-                    runCatching {
-                        // Exclude PrismSpace itself so the home count matches the space tab.
-                        // 分身 count mirrors the Space tab: user clones only — third-party apps (always
-                        // user-cloned in a profile) or system apps the user explicitly cloned. Hides the
-                        // provisioning system apps so "X 分身" matches what the user actually created.
-                        spaceRepo.installedApps(d).count { app ->
-                            app.isInstalled && app.shouldShowAsEnabled() && app.packageName != context.packageName &&
-                                // Count mirrors the dual list: user clones plus launchable system apps.
-                                (!app.isSystem || UserCloneRegistry.contains(context, app.packageName) || app.isLaunchable) }
-                    }.getOrElse { 0 }
+                spaceRepo.dualSpaces().flatMap { d ->
+                    runCatching { spaceRepo.installedApps(d) }.getOrElse { emptyList() }
                 }
-            }.getOrElse { 0 }
-        } else 0
+            }.getOrElse { emptyList() }
+        } else emptyList()
+        val userClones = dualApps.filter { app ->
+            app.isInstalled && app.shouldShowAsEnabled() && app.packageName != context.packageName &&
+                // Mirrors the dual list: user clones plus launchable system apps.
+                (!app.isSystem || UserCloneRegistry.contains(context, app.packageName) || app.isLaunchable)
+        }
+        val cloneCount = userClones.size
+        val overviewClones = userClones.sortedBy { it.label.toString().lowercase() }.take(5)
+
+        // Pending installs from the clone-preparation store (reconciled against real dual state).
+        val pendingPkgs = runCatching {
+            ClonePreparationStore.reconcileInstalled(context, dualApps.map { it.packageName }.toSet())
+        }.getOrElse { emptySet() }
+        val pendingLabels = pendingPkgs.map { pkg ->
+            runCatching { Apps.of(context).getAppName(pkg).toString() }.getOrDefault(pkg)
+        }.sorted()
+
+        // 前往安装 gate — the same usability source as clone launch/uninstall/continue-install.
+        val dual = spaceRepo.dualSpace()
+        val usability = dual?.let { spaceRepo.usabilityOf(it) } ?: SpaceUsability.NotProvisioned
+        val installGate = continueInstallGate(usability) { id, args -> PrismLocale.wrap(context).getString(id, *args) }
+
+        val recentTransfer = runCatching { TransferHistoryStore.load(context).firstOrNull() }.getOrNull()
+        val recentTransferText = recentTransfer?.let { record ->
+            listOf(record.displayTitle(), record.location.takeIf { it.isNotBlank() })
+                .filterNotNull().joinToString(" · ")
+        }
 
         // This row must describe the same canonical state as the hero card. In particular, a
         // half-provisioned profile exists even when its launcher marker is missing; the legacy
@@ -333,6 +374,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             deviceText         = deviceText,
             profileOwnerLabel  = profileOwnerLabel,
             resolve            = resolve,
+        ).copy(
+            pendingInstallLabels = pendingLabels,
+            installEntryEnabled = installGate.enabled,
+            installEntryGuidance = installGate.guidance,
+            overviewClonePkgs = overviewClones.map { it.packageName },
+            overviewCloneLabels = overviewClones.map { it.label.toString() },
+            recentTransferText = recentTransferText,
         )
     }
 

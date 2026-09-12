@@ -157,6 +157,21 @@ data class OpenAppDetailsInProfile(val packageName: String) : ProfileCommand<Uni
     override fun decodeResult(src: Bundle) = Unit
 }
 
+enum class UninstallLaunchKind { Launched, Failed }
+
+@Parcelize
+data class UninstallLaunchDto(
+    val kind: UninstallLaunchKind,
+    val reason: String? = null,
+) : Parcelable
+
+@Parcelize
+data class RequestAppUninstall(val packageName: String) : ProfileCommand<UninstallLaunchDto> {
+    override val id get() = "app.request_uninstall"
+    override fun encodeResult(result: UninstallLaunchDto, out: Bundle) = out.putParcelable(RESULT, result)
+    override fun decodeResult(src: Bundle): UninstallLaunchDto = src.requireParcelableBridgeResult()
+}
+
 internal val SPACE_AND_SHORTCUT_COMMAND_SAMPLES: List<BridgeCommand<*>> = listOf(
     UpdateAllShortcutsInProfile(true),
     RemoveShortcutsInParent("pkg", 10),
@@ -175,6 +190,7 @@ internal val SPACE_AND_SHORTCUT_COMMAND_SAMPLES: List<BridgeCommand<*>> = listOf
     PrepareProfileShortcutLaunch("pkg", "android.intent.action.VIEW", "https://example.test/path", listOf("cat")),
     CancelProfileShortcutLaunch,
     OpenAppDetailsInProfile("pkg"),
+    RequestAppUninstall("pkg"),
 )
 
 @Suppress("DEPRECATION")
