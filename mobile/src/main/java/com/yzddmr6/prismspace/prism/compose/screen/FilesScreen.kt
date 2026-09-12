@@ -58,7 +58,6 @@ import com.yzddmr6.prismspace.prism.compose.vm.FilesViewModel
 import com.yzddmr6.prismspace.prism.service.FileBridgeService
 import com.yzddmr6.prismspace.prism.service.TransferDirection
 import com.yzddmr6.prismspace.prism.service.TransferRecord
-import com.yzddmr6.prismspace.prism.service.displayTitle
 import com.yzddmr6.prismspace.prism.service.openSystemFileManager
 import com.yzddmr6.prismspace.prism.service.prepareSystemFilePickerUsable
 import com.yzddmr6.prismspace.prism.ui.CrossSpaceTransferEntry
@@ -114,7 +113,7 @@ fun FilesScreen() {
             TopAppBar(
                 title = { Text(stringResource(R.string.lz_pf_files_title)) },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
+                    containerColor = MaterialTheme.colorScheme.background,
                 ),
             )
         },
@@ -125,7 +124,7 @@ fun FilesScreen() {
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = PrismSpacing.Lg, vertical = PrismSpacing.Sm),
-            verticalArrangement = Arrangement.spacedBy(PrismSpacing.None),
+            verticalArrangement = Arrangement.spacedBy(PrismSpacing.Md),
         ) {
             // ── 发送主卡（含空间门禁预检：空间不可用时不弹选择器，给状态引导） ──
             GroupCard(title = null) {
@@ -202,7 +201,7 @@ fun FilesScreen() {
                         GuideStep(1, stringResource(R.string.lz_pf_files_step1))
                         GuideStep(2, stringResource(R.string.lz_pf_files_step2))
                         GuideStep(3, stringResource(R.string.lz_pf_files_step3))
-                        GuideStep(4, stringResource(R.string.lz_pf_files_step4))
+
                         Text(
                             text = stringResource(R.string.lz_pf_files_tab_hint),
                             style = MaterialTheme.typography.bodySmall,
@@ -235,7 +234,7 @@ fun FilesScreen() {
                         // 记录动作只承诺「打开文件夹」；APK 安装任务不属于文件页（归属分身链路：
                         // 首页待办卡、主空间行、双开空间入口页）。
                         ActionRow(
-                            title = item.displayTitle(),
+                            title = item.name,
                             summary = listOf(
                                 item.direction?.let { direction -> stringResource(
                                     if (direction == TransferDirection.ToMain) R.string.lz_pf_direction_to_main

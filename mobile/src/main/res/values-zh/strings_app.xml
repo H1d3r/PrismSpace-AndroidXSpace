@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- AppActionSheet -->
-    <string name="lz_app_launch">启动应用</string>
+    <string name="lz_app_launch">打开应用</string>
     <string name="lz_app_launch_frozen_subtitle">已冻结，将先解冻再启动</string>
-    <string name="lz_app_freeze">冻结</string>
-    <string name="lz_app_unfreeze">解冻</string>
+    <string name="lz_app_freeze">暂停分身</string>
+    <string name="lz_app_unfreeze">恢复分身</string>
     <string name="lz_app_create_shortcut">添加桌面快捷方式</string>
     <string name="lz_app_app_info">应用信息</string>
     <string name="lz_app_uninstall_clone">卸载分身</string>
@@ -16,8 +16,8 @@
     <string name="lz_app_target_already_in_space">%1$s · 已在此空间</string>
 
     <!-- 克隆安装方式标签 -->
-    <string name="lz_app_method_filesync_title">文件同步安装</string>
-    <string name="lz_app_method_filesync_summary">把完整应用和 split 一起复制到双开空间，用户随后在双开空间用系统安装器完成安装。</string>
+    <string name="lz_app_method_filesync_title">系统确认安装</string>
+    <string name="lz_app_method_filesync_summary">推荐 · 每次安装都需要你在 Android 界面中确认</string>
     <string name="lz_app_method_shizuku_title">Shizuku 自动安装</string>
     <string name="lz_app_method_shizuku_summary_ready">经 Shizuku 静默安装到双开空间</string>
     <string name="lz_app_method_root_title">Root 自动安装</string>

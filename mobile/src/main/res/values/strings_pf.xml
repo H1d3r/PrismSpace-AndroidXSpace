@@ -12,13 +12,13 @@
 
     <!-- FilesScreen -->
     <string name="lz_pf_files_title">Files</string>
-    <string name="lz_pf_files_send_other">Send files to the other space</string>
-    <string name="lz_pf_files_send_other_summary">Choose multiple files. PrismSpace transfers them serially through the profile bridge.</string>
+    <string name="lz_pf_files_send_other">Send to dual space</string>
+    <string name="lz_pf_files_send_other_summary">Choose files from main space and copy them to Downloads in dual space.</string>
     <string name="lz_pf_direction_to_main">To main space</string>
     <string name="lz_pf_direction_to_profile">To dual space</string>
-    <string name="lz_pf_files_step1">In any app, select the file and tap the system “Share”.</string>
+    <string name="lz_pf_files_step1">In dual space, select a file and tap Share.</string>
     <string name="lz_pf_files_step2">Choose “Import into this space PrismSpace” in the share panel. Switch Personal / Work only if needed to find it.</string>
-    <string name="lz_pf_files_step3">In PrismSpace, choose “Save in this space” or “Send to the other space”.</string>
+    <string name="lz_pf_files_step3">Choose Send to other space in PrismSpace and wait for the transfer result.</string>
     <string name="lz_pf_files_step4">Wait for the success or classified failure result.</string>
     <string name="lz_pf_files_tab_hint">The final destination is determined by the choice inside PrismSpace. Some systems do not preserve the share panel’s Personal / Work tab when opening the receiver.</string>
     <string name="lz_pf_files_return_title">How to send files back from the dual space</string>

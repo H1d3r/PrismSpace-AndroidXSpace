@@ -7,6 +7,13 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import android.content.Context;
+import android.app.PendingIntent;
+import android.os.Bundle;
+import android.os.Parcel;
+import com.yzddmr6.prismspace.bridge.RequestAppUninstall;
+import com.yzddmr6.prismspace.bridge.UninstallLaunchDto;
+import com.yzddmr6.prismspace.bridge.UninstallLaunchKind;
+import com.yzddmr6.prismspace.util.UserHandles;
 
 import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.runner.AndroidJUnit4;
@@ -44,6 +51,38 @@ public final class CoreDeviceRegressionTest {
     private static final String PRISM_PACKAGE = "com.yzddmr6.prismspace";
     private static final String PROBE_PACKAGE = "com.yzddmr6.prismprobe";
     private static final int MAX_APP_PAGES = 100;
+
+    @Test
+    public void uninstallConfirmationIsOwnedByTargetProfileAndSurvivesParcel() {
+        ProfileTarget target = requireProfileTarget();
+        RequestAppUninstall command = new RequestAppUninstall(PROBE_PACKAGE);
+        UninstallLaunchDto result = requireValue(
+                Bridge.INSTANCE.inProfile(targetContext(), target).execute(command), "prepare uninstall");
+        assertEquals(UninstallLaunchKind.Prepared, result.getKind());
+        PendingIntent confirmation = result.getConfirmation();
+        assertNotNull(confirmation);
+        try {
+            assertEquals(PRISM_PACKAGE, confirmation.getCreatorPackage());
+            assertEquals(UserHandles.of(target.getUserId()), confirmation.getCreatorUserHandle());
+            Bundle encoded = new Bundle();
+            command.encodeResult(result, encoded);
+            Parcel parcel = Parcel.obtain();
+            try {
+                parcel.writeBundle(encoded);
+                parcel.setDataPosition(0);
+                UninstallLaunchDto decoded = command.decodeResult(parcel.readBundle(command.getClass().getClassLoader()));
+                assertEquals(confirmation, decoded.getConfirmation());
+            } finally {
+                parcel.recycle();
+            }
+        } finally {
+            // This test never sends the token; user-confirmed removal is tested through the app UI.
+            confirmation.cancel();
+        }
+        UninstallLaunchDto self = requireValue(Bridge.INSTANCE.inProfile(targetContext(), target)
+                .execute(new RequestAppUninstall(PRISM_PACKAGE)), "refuse self uninstall");
+        assertEquals(UninstallLaunchKind.Failed, self.getKind());
+    }
 
     @Test
     public void productionStateIsHealthyForBridgeTarget() {

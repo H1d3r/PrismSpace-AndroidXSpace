@@ -63,13 +63,13 @@ private fun TitleAndSummary(
     Column(modifier = modifier) {
         Text(
             text = title,
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyMedium,
             color = titleColor,
         )
         if (summary != null) {
             Text(
                 text = summary,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = summaryColor,
             )
         }

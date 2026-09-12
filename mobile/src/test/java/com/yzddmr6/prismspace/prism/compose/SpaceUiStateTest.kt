@@ -7,7 +7,7 @@ import com.yzddmr6.prismspace.prism.compose.space.PrismSpace
 import com.yzddmr6.prismspace.prism.compose.space.PrismSpaceKind
 import com.yzddmr6.prismspace.prism.compose.space.resolveSpaceSelection
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class SpaceUiStateTest {
@@ -16,11 +16,11 @@ class SpaceUiStateTest {
     private val dual = PrismSpace("space_22", 22, PrismSpaceKind.Dual, "双开空间")
 
     @Test
-    fun `main and dual spaces show system apps by default`() {
+    fun `main and dual spaces default to user apps like the approved demo`() {
         val state = SpaceUiState()
 
-        assertTrue(state.showSystem)
-        assertTrue(state.showSystemDual)
+        assertFalse(state.showSystem)
+        assertFalse(state.showSystemDual)
     }
 
     @Test

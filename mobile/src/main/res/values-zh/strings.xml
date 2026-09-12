@@ -21,13 +21,13 @@
 
     <!-- Compose setup wizard strings -->
     <string name="prism_setup_hero_title">欢迎使用 PrismSpace</string>
-    <string name="prism_setup_hero_body">在同一台设备上安全运行另一份独立的应用副本。</string>
+    <string name="prism_setup_hero_body">在手机上创建一个与主空间系统级隔离的双开空间：独立的应用、独立的账号、独立的数据。</string>
     <string name="prism_setup_features_title">主要功能</string>
-    <string name="prism_setup_feature_clone_title">应用克隆</string>
+    <string name="prism_setup_feature_clone_title">应用分身</string>
     <string name="prism_setup_feature_clone_body">把已安装的应用复制到独立的双开空间，数据互不干扰。</string>
-    <string name="prism_setup_feature_isolation_title">数据隔离</string>
+    <string name="prism_setup_feature_isolation_title">系统级隔离</string>
     <string name="prism_setup_feature_isolation_body">双开空间使用独立的账号和存储，与主空间应用相互隔离。</string>
-    <string name="prism_setup_feature_files_title">跨空间文件</string>
+    <string name="prism_setup_feature_files_title">跨空间传文件</string>
     <string name="prism_setup_feature_files_body">在主空间与双开空间之间，按需安全地传输文件。</string>
     <string name="prism_setup_privacy_title">工作原理 · 隐私</string>
     <string name="prism_setup_privacy_body">PrismSpace 通过 Android 工作资料创建双开空间。应用双开、安装和文件传输等核心流程在设备本地完成；检查更新、PrismProbe 网络测试和诊断分享只会在你主动使用时发起。</string>

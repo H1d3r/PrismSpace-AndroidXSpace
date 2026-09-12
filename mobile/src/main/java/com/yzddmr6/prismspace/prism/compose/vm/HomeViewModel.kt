@@ -320,8 +320,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         } else emptyList()
         val userClones = dualApps.filter { app ->
             app.isInstalled && app.shouldShowAsEnabled() && app.packageName != context.packageName &&
-                // Mirrors the dual list: user clones plus launchable system apps.
-                (!app.isSystem || UserCloneRegistry.contains(context, app.packageName) || app.isLaunchable)
+                // Count user apps and explicitly added system clones, not provisioned system tools.
+                (!app.isSystem || UserCloneRegistry.contains(context, app.packageName))
         }
         val cloneCount = userClones.size
         val overviewClones = userClones.sortedBy { it.label.toString().lowercase() }.take(5)
@@ -341,7 +341,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
         val recentTransfer = runCatching { TransferHistoryStore.load(context).firstOrNull() }.getOrNull()
         val recentTransferText = recentTransfer?.let { record ->
-            listOf(record.displayTitle(), record.location.takeIf { it.isNotBlank() })
+            listOf(record.name, record.location.takeIf { it.isNotBlank() })
                 .filterNotNull().joinToString(" · ")
         }
 

@@ -16,8 +16,8 @@
     <string name="lz_space_row_install">去安装</string>
 
     <!-- SpaceScreen: batch action bar -->
-    <string name="lz_space_batch_copy_to_dual">复制到双开</string>
-    <string name="lz_space_batch_freeze">冻结</string>
+    <string name="lz_space_batch_copy_to_dual">添加分身</string>
+    <string name="lz_space_batch_freeze">暂停</string>
     <string name="lz_space_batch_uninstall">卸载</string>
     <string name="lz_space_batch_cancel">取消</string>
 

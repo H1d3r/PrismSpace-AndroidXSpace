@@ -27,8 +27,8 @@
     <string name="lz_space_row_install">去安裝</string>
     <string name="lz_vm_chip_paused">已暫停</string>
     <string name="lz_vm_chip_system">系統應用程式</string>
-    <string name="lz_space_batch_copy_to_dual">克隆到雙開</string>
-    <string name="lz_space_batch_freeze">凍結</string>
+    <string name="lz_space_batch_copy_to_dual">新增分身</string>
+    <string name="lz_space_batch_freeze">暫停</string>
     <string name="lz_space_batch_uninstall">解除安裝</string>
     <string name="lz_space_batch_cancel">取消</string>
     <string name="lz_space_batch_uninstall_title">解除安裝 %1$d 個應用程式？</string>

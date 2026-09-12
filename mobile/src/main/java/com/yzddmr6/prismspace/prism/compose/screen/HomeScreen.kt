@@ -20,6 +20,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Divider
+import com.yzddmr6.prismspace.prism.compose.component.NavRow
+import com.yzddmr6.prismspace.prism.compose.theme.PrismMinTouchTarget
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -102,9 +107,9 @@ fun HomeScreen(nav: NavHostController) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.lz_home_title)) },
+                title = { Text("PrismSpace") },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
+                    containerColor = MaterialTheme.colorScheme.background,
                 ),
                 actions = {
                     // GitHub icon — normal web Intent (external browser, no embedded WebView)
@@ -206,98 +211,90 @@ fun HomeScreen(nav: NavHostController) {
             }
 
             // ── 主任务：添加分身直达空间页主空间分段；发送文件直达文件页 ────────────
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(PrismSpacing.Md),
-            ) {
-                Button(
-                    onClick = {
-                        AppLaunchSignals.signalOpenSpaceMainSegment()
-                        nav.navigateToTab(PrismRoutes.SPACE)
-                    },
-                    modifier = Modifier.weight(1f),
+            if (state?.primaryAction != HomePrimaryAction.StartSetup) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(PrismSpacing.Md),
                 ) {
-                    Icon(
-                        imageVector = PrismIcons.Add,
-                        contentDescription = null,
-                        modifier = Modifier.padding(end = PrismSpacing.Sm),
-                    )
-                    Text(stringResource(R.string.lz_home_task_add_clone))
-                }
-                Button(
-                    onClick = { nav.navigateToTab(PrismRoutes.FILES) },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Icon(
-                        imageVector = PrismIcons.File,
-                        contentDescription = null,
-                        modifier = Modifier.padding(end = PrismSpacing.Sm),
-                    )
-                    Text(stringResource(R.string.lz_home_task_send_files))
-                }
-            }
-
-            // ── 空间概览：分身头像组 + 最近传输一行（点卡进入空间板块） ──────────────
-            if (state != null && state.cloneCount > 0) {
-                GroupCard(title = stringResource(R.string.lz_home_overview_title)) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { nav.navigateToTab(PrismRoutes.SPACE) }
-                            .padding(horizontal = PrismSpacing.Lg, vertical = PrismSpacing.Sm),
-                        verticalArrangement = Arrangement.spacedBy(PrismSpacing.Sm),
+                    Button(
+                        onClick = {
+                            AppLaunchSignals.signalOpenSpaceMainSegment()
+                            nav.navigateToTab(PrismRoutes.SPACE)
+                        },
+                        modifier = Modifier.weight(1f).heightIn(min = PrismMinTouchTarget),
                     ) {
+                        Icon(
+                            imageVector = PrismIcons.Add,
+                            contentDescription = null,
+                            modifier = Modifier.padding(end = PrismSpacing.Sm),
+                        )
+                        Text(stringResource(R.string.lz_home_task_add_clone))
+                    }
+                    FilledTonalButton(
+                        onClick = { nav.navigateToTab(PrismRoutes.FILES) },
+                        modifier = Modifier.weight(1f).heightIn(min = PrismMinTouchTarget),
+                    ) {
+                        Icon(
+                            imageVector = PrismIcons.File,
+                            contentDescription = null,
+                            modifier = Modifier.padding(end = PrismSpacing.Sm),
+                        )
+                        Text(stringResource(R.string.lz_home_task_send_files))
+                    }
+                }
+
+                // ── 空间概览：分身头像组 + 最近传输一行（点卡进入空间板块） ──────────────
+                if (state != null) {
+                    GroupCard(title = stringResource(R.string.lz_home_overview_title)) {
                         Row(
+                            modifier = Modifier.fillMaxWidth().clickable { nav.navigateToTab(PrismRoutes.SPACE) }
+                                .padding(PrismSpacing.Lg),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(PrismSpacing.Sm),
+                            horizontalArrangement = Arrangement.spacedBy(PrismSpacing.Md),
                         ) {
-                            state.overviewClonePkgs.forEach { pkg ->
-                                HomeCloneIcon(pkg)
+                            Row(horizontalArrangement = Arrangement.spacedBy(-PrismSpacing.Xs)) {
+                                state.overviewClonePkgs.forEach { pkg -> HomeCloneIcon(pkg) }
                             }
-                            Text(
-                                text = stringResource(R.string.lz_home_overview_clones, state.cloneCount),
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
+                            Column(Modifier.weight(1f)) {
+                                Text(stringResource(R.string.lz_home_overview_clones, state.cloneCount),
+                                    style = MaterialTheme.typography.titleSmall)
+                                if (state.overviewCloneLabels.isNotEmpty()) Text(
+                                    overviewLabelsLine(state.overviewCloneLabels, state.cloneCount),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            Icon(PrismIcons.Chev, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        if (state.overviewCloneLabels.isNotEmpty()) {
-                            // 标签行与头像组同一截断口径（同取前 5 个），超出才追加省略号——
-                            // 不再出现 4–5 个分身时头像全显而标签行提前省略的不一致。
-                            Text(
-                                text = overviewLabelsLine(state.overviewCloneLabels, state.cloneCount),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        Text(
-                            text = stringResource(R.string.lz_home_recent_transfer) + "  " +
-                                (state.recentTransferText ?: stringResource(R.string.lz_home_no_transfer)),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        Divider(color = LocalPrismExtraColors.current.cardBorder)
+                        NavRow(
+                            title = stringResource(R.string.lz_home_recent_transfer),
+                            summary = state.recentTransferText ?: stringResource(R.string.lz_home_no_transfer),
+                            leadingIcon = PrismIcons.File,
+                            onClick = { nav.navigateToTab(PrismRoutes.FILES) },
                         )
                     }
                 }
-            }
 
-            // ── 页尾只读参考区：设备与版本（诊断时有上下文，日常使用零打扰） ──────────
-            GroupCard(title = stringResource(R.string.lz_home_device_version)) {
-                StatusRow(
-                    title = stringResource(R.string.lz_home_run_mode),
-                    value = state?.capabilityText ?: "…",
-                    leadingIcon = PrismIcons.Key,
-                )
-                StatusRow(
-                    title = stringResource(R.string.lz_home_android_version),
-                    value = state?.androidText ?: "…",
-                    leadingIcon = PrismIcons.Droid,
-                )
-                StatusRow(
-                    title = stringResource(R.string.lz_home_device),
-                    value = state?.deviceText ?: "…",
-                    leadingIcon = PrismIcons.Phone,
-                )
+                // ── 页尾只读参考区：设备与版本（诊断时有上下文，日常使用零打扰） ──────────
+                GroupCard(title = stringResource(R.string.lz_home_device_version)) {
+                    StatusRow(
+                        title = stringResource(R.string.lz_home_run_mode),
+                        value = state?.capabilityText ?: "…",
+                        leadingIcon = PrismIcons.Key,
+                    )
+                    StatusRow(
+                        title = stringResource(R.string.lz_home_android_version),
+                        value = state?.androidText ?: "…",
+                        leadingIcon = PrismIcons.Droid,
+                    )
+                    StatusRow(
+                        title = stringResource(R.string.lz_home_device),
+                        value = state?.deviceText ?: "…",
+                        leadingIcon = PrismIcons.Phone,
+                    )
+                }
+
             }
 
             Spacer(Modifier.height(PrismSpacing.Sm))
@@ -324,24 +321,27 @@ private fun PendingInstallCard(
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = PrismSpacing.None),
     ) {
-        Column(modifier = Modifier.padding(PrismSpacing.Lg)) {
-            Text(
-                text = if (labels.size == 1) stringResource(R.string.lz_home_pending_title_one, labels.first())
-                else stringResource(R.string.lz_home_pending_title_more, labels.first(), labels.size),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                text = guidance?.takeIf { !gateEnabled } ?: stringResource(R.string.lz_home_pending_body),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(top = PrismSpacing.Xs),
-            )
-            Button(
-                onClick = { if (gateEnabled) onGoInstall() else onBlocked(guidance) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = PrismSpacing.Md),
-            ) {
-                Text(stringResource(R.string.lz_home_pending_action))
+        Row(modifier = Modifier.padding(PrismSpacing.Lg), horizontalArrangement = Arrangement.spacedBy(PrismSpacing.Md)) {
+            Icon(PrismIcons.File, null, Modifier.size(PrismIconSizes.Md))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = if (labels.size == 1) stringResource(R.string.lz_home_pending_title_one, labels.first())
+                    else stringResource(R.string.lz_home_pending_title_more, labels.first(), labels.size),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    text = guidance?.takeIf { !gateEnabled } ?: stringResource(R.string.lz_home_pending_body),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = PrismSpacing.Xs),
+                )
+                Button(
+                    onClick = { if (gateEnabled) onGoInstall() else onBlocked(guidance) },
+                    modifier = Modifier
+                        .heightIn(min = PrismMinTouchTarget)
+                        .padding(top = PrismSpacing.Sm),
+                ) {
+                    Text(stringResource(R.string.lz_home_pending_action))
+                }
             }
         }
     }
@@ -360,13 +360,13 @@ private fun HomeCloneIcon(pkg: String) {
             bitmap = bmp,
             contentDescription = null,
             modifier = Modifier
-                .size(PrismIconSizes.Lg)
+                .size(PrismIconSizes.Md + PrismSpacing.Xs)
                 .clip(CircleShape),
         )
     } else {
         Box(
             modifier = Modifier
-                .size(PrismIconSizes.Lg)
+                .size(PrismIconSizes.Md + PrismSpacing.Xs)
                 .clip(CircleShape),
         )
     }

@@ -16,8 +16,8 @@
     <string name="lz_space_row_install">Install</string>
 
     <!-- SpaceScreen: batch action bar -->
-    <string name="lz_space_batch_copy_to_dual">Copy to dual</string>
-    <string name="lz_space_batch_freeze">Freeze</string>
+    <string name="lz_space_batch_copy_to_dual">Add clones</string>
+    <string name="lz_space_batch_freeze">Pause</string>
     <string name="lz_space_batch_uninstall">Uninstall</string>
     <string name="lz_space_batch_cancel">Cancel</string>
 

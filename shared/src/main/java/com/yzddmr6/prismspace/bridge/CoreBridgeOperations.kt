@@ -2,7 +2,9 @@ package com.yzddmr6.prismspace.bridge
 
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
+import android.app.PendingIntent
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -81,19 +83,23 @@ internal object CoreBridgeOperations {
         context.startActivity(intent)
     }
 
-    /** Presents the system uninstaller from INSIDE the profile: the intent is built from
-     *  [uninstallIntentSpec], which deliberately offers no way to target another user — caller
-     *  user == target user, so no ROM uninstaller behavior can redirect the request at another
-     *  user's copy of the package (issue #6). */
+    /** Creates an immutable, one-use confirmation in the target profile. The foreground parent
+     *  sends it with its visible-activity launch privileges; calling startActivity here would be
+     *  silently blocked by Android's background activity restrictions. The creator user fixes
+     *  the uninstall target, and the sender cannot change the package or inject user extras. */
     fun requestAppUninstall(context: Context, packageName: String): UninstallLaunchDto =
         when (val spec = uninstallIntentSpec(packageName, context.packageName)) {
             is UninstallIntentSpec.Refused -> UninstallLaunchDto(UninstallLaunchKind.Failed, spec.reason)
             is UninstallIntentSpec.Launch -> try {
-                context.startActivity(
-                    Intent(spec.action, Uri.parse(spec.packageUri))
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                )
-                UninstallLaunchDto(UninstallLaunchKind.Launched)
+                check(DevicePolicies(context).isProfileOwner) { "not_profile_owner" }
+                val intent = Intent(spec.action, Uri.parse(spec.packageUri))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                val handler = context.packageManager.resolveActivity(intent, PackageManager.MATCH_SYSTEM_ONLY)
+                    ?.activityInfo ?: error("no_system_uninstaller")
+                intent.component = ComponentName(handler.packageName, handler.name)
+                val confirmation = PendingIntent.getActivity(context, 0, intent,
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_CANCEL_CURRENT)
+                UninstallLaunchDto(UninstallLaunchKind.Prepared, confirmation = confirmation)
             } catch (error: RuntimeException) {
                 DiagnosticLog.w(TAG, "profile uninstall launch failed pkg=$packageName exception=${error.javaClass.name}")
                 UninstallLaunchDto(UninstallLaunchKind.Failed, error.javaClass.simpleName)

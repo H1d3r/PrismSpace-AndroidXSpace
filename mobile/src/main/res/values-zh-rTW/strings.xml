@@ -11,13 +11,13 @@
 
     <!-- Compose setup wizard strings -->
     <string name="prism_setup_hero_title">歡迎使用 PrismSpace</string>
-    <string name="prism_setup_hero_body">在同一部裝置上安全執行另一份獨立的應用副本。</string>
+    <string name="prism_setup_hero_body">在手機上建立一個與主空間系統級隔離的雙開空間：獨立的應用程式、獨立的帳號、獨立的資料。</string>
     <string name="prism_setup_features_title">主要功能</string>
-    <string name="prism_setup_feature_clone_title">應用克隆</string>
+    <string name="prism_setup_feature_clone_title">應用程式分身</string>
     <string name="prism_setup_feature_clone_body">將已安裝的應用克隆到獨立的雙開空間，資料互不干擾。</string>
-    <string name="prism_setup_feature_isolation_title">資料隔離</string>
+    <string name="prism_setup_feature_isolation_title">系統級隔離</string>
     <string name="prism_setup_feature_isolation_body">雙開空間使用獨立的帳號與儲存空間，與主空間應用互相隔離。</string>
-    <string name="prism_setup_feature_files_title">跨空間檔案</string>
+    <string name="prism_setup_feature_files_title">跨空間傳檔案</string>
     <string name="prism_setup_feature_files_body">在主空間與雙開空間之間，依需求安全傳輸檔案。</string>
     <string name="prism_setup_privacy_title">運作方式 · 隱私</string>
     <string name="prism_setup_privacy_body">PrismSpace 透過 Android 工作資料建立雙開空間。應用雙開、安裝和檔案傳輸等核心流程在裝置本機完成；檢查更新、PrismProbe 網路測試和診斷分享只會在你主動使用時發起。</string>
@@ -81,6 +81,7 @@
     <string name="lz_space_main_copy_lost_title">主空間應用程式已不存在</string>
     <string name="lz_space_main_copy_lost_body">完成 %1$s 的系統解除安裝流程後，偵測到它在主空間中的副本已不存在。這是 Android 目前回傳的真實狀態；如有需要，請從備份還原應用程式及其資料。</string>
     <string name="lz_vm_uninstall_queue_summary">解除安裝完成：已移除 %1$d 個、未移除 %2$d 個、無法確認 %3$d 個。</string>
+    <string name="lz_vm_uninstall_queue_aborted">解除安裝已停止：已移除 %1$d 個、未移除 %2$d 個、無法確認 %3$d 個、%4$d 個未執行。%5$s</string>
     <string name="toast_shortcut_failed">快速啟動方式建立失敗</string>
     <string name="lz_app_create_shortcut">新增桌面快速啟動方式</string>
     <string name="toast_error_freeze_failure">凍結失敗</string>
@@ -175,18 +176,18 @@
     <string name="lz_home_device_version">裝置與版本</string>
 
     <!-- App actions -->
-    <string name="lz_app_launch">啟動應用程式</string>
+    <string name="lz_app_launch">開啟應用程式</string>
     <string name="lz_app_launch_frozen_subtitle">已凍結，將先解凍再啟動</string>
-    <string name="lz_app_freeze">凍結</string>
-    <string name="lz_app_unfreeze">解凍</string>
+    <string name="lz_app_freeze">暫停分身</string>
+    <string name="lz_app_unfreeze">恢復分身</string>
     <string name="lz_app_app_info">應用程式資訊</string>
     <string name="lz_app_uninstall_clone">解除安裝分身</string>
     <string name="lz_app_go_to_dual_space">跳到雙開空間</string>
     <string name="lz_app_clone_to_dual_space">克隆到雙開空間</string>
     <string name="lz_app_copy_to">克隆到</string>
     <string name="lz_app_target_already_in_space">%1$s · 已在此空間</string>
-    <string name="lz_app_method_filesync_title">檔案同步安裝</string>
-    <string name="lz_app_method_filesync_summary">把完整應用程式和 split 一起克隆到雙開空間，之後在雙開空間用系統安裝器完成安裝。</string>
+    <string name="lz_app_method_filesync_title">系統確認安裝</string>
+    <string name="lz_app_method_filesync_summary">建議 · 每次安裝都需要你在 Android 畫面中確認</string>
     <string name="lz_app_method_shizuku_title">Shizuku 自動安裝</string>
     <string name="lz_app_method_shizuku_summary_ready">透過 Shizuku 靜默安裝到雙開空間</string>
     <string name="lz_app_method_root_title">Root 自動安裝</string>

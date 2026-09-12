@@ -742,10 +742,10 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             val self = context.packageName
             spaceRepo.dualSpaces().sumOf { d ->
                 runCatching {
-                    // Same counting rule as Home: user clones plus launchable system apps.
+                    // Same counting rule as Home: user apps and explicitly added system clones.
                     spaceRepo.installedApps(d).count { app ->
                         app.isInstalled && app.shouldShowAsEnabled() && app.packageName != self &&
-                            (!app.isSystem || UserCloneRegistry.contains(context, app.packageName) || app.isLaunchable)
+                            (!app.isSystem || UserCloneRegistry.contains(context, app.packageName))
                     }
                 }.getOrElse { 0 }
             }

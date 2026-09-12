@@ -30,6 +30,9 @@ import com.yzddmr6.prismspace.controller.CloneRoute
 import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.prism.compose.component.PrismTextButton
 import com.yzddmr6.prismspace.prism.compose.theme.PrismSpacing
+import com.yzddmr6.prismspace.prism.compose.theme.PrismMinTouchTarget
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.CircularProgressIndicator
 
 /**
  * Add-clone confirmation: the configured install method is a global preference, so adding a clone
@@ -100,7 +103,7 @@ class CloneConfirmSheet(
                 Button(
                     onClick = { if (!cloned) onConfirm(user) },
                     enabled = !cloned,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = PrismMinTouchTarget),
                 ) {
                     Text(
                         stringResource(
@@ -124,6 +127,35 @@ class CloneConfirmSheet(
                     CloneTargetRow(label, icons?.get(user), cloned) { if (!cloned) onConfirm(user) }
                 }
             }
+        }
+    }
+}
+
+@Composable
+internal fun ClonePreparationSheet(
+    appLabel: String,
+    prepared: Boolean,
+    error: String?,
+    onInstall: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(PrismSpacing.Md)) {
+        Text(stringResource(R.string.lz_clone_confirm_title, appLabel), style = MaterialTheme.typography.titleMedium)
+        Text(error ?: stringResource(if (prepared) R.string.lz_home_pending_body else R.string.toast_clone_file_sync_transferring),
+            color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(R.string.lz_shell_prepare_read), style = MaterialTheme.typography.bodyMedium)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(PrismSpacing.Sm)) {
+            if (!prepared && error == null) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            Text(stringResource(if (prepared) R.string.lz_shell_prepare_copied else R.string.lz_shell_prepare_copy),
+                style = MaterialTheme.typography.bodyMedium)
+        }
+        Text(stringResource(R.string.lz_shell_prepare_confirm), style = MaterialTheme.typography.bodyMedium)
+        if (prepared) Button(onClick = onInstall,
+            modifier = Modifier.fillMaxWidth().heightIn(min = PrismMinTouchTarget)) {
+            Text(stringResource(R.string.lz_home_pending_action))
+        }
+        if (prepared || error != null) PrismTextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(if (error != null) android.R.string.cancel else R.string.lz_app_filesync_install_later))
         }
     }
 }

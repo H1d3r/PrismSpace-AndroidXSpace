@@ -36,7 +36,7 @@ internal sealed interface UninstallLaunchReply {
 
 /** The launch step of the uninstall queue: routes the request into the managed profile. */
 internal fun interface UninstallLaunchPort {
-    fun requestUninstall(request: UninstallRequest): UninstallLaunchReply
+    suspend fun requestUninstall(request: UninstallRequest): UninstallLaunchReply
 }
 
 internal data class UninstallCurrent(
@@ -121,6 +121,11 @@ internal object UninstallQueueReducer {
 
     fun launchFailed(state: UninstallQueueState, mainCopyExists: Boolean): UninstallQueueState =
         completeCurrent(state, UninstallOutcomeStatus.TimedOut, mainCopyExists)
+
+    /** A delayed launch check can only finish the exact head that scheduled it. */
+    fun launchUnobserved(state: UninstallQueueState, expected: UninstallCurrent?, mainCopyExists: Boolean): UninstallQueueState =
+        if (state.current === expected && expected?.stage == UninstallStage.AwaitingSystemUi)
+            launchFailed(state, mainCopyExists) else state
 
     private fun completeCurrent(
         state: UninstallQueueState,

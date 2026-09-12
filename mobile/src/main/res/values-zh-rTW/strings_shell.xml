@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lz_space_detail_added">雙開空間中已有分身</string>
+    <string name="lz_space_detail_pending">安裝檔已傳到雙開空間</string>
+    <string name="lz_space_detail_not_added">尚未新增分身</string>
+    <string name="lz_shell_enhanced_method">授權就緒時自動安裝，否則使用系統確認安裝</string>
+    <string name="lz_shell_current_version">目前版本 %1$s</string>
+    <string name="lz_shell_profile_identity">你正在雙開空間中</string>
+    <string name="lz_shell_profile_isolation">這裡的應用和資料與主空間相互隔離。</string>
+    <string name="lz_shell_profile_pick_files">選擇雙開空間中的檔案</string>
+    <string name="lz_set_suspend_title">暫停所有分身</string>
+    <string name="lz_set_suspend_summary">分身將無法開啟，應用程式和資料仍會保留</string>
+    <string name="lz_set_suspend_state_frozen">所有分身均已暫停，關閉開關即可恢復。</string>
+    <string name="lz_set_suspend_state_mixed">部分分身已暫停，開啟開關可暫停其餘分身。</string>
+    <string name="lz_set_suspend_state_unknown">暫時無法確認分身狀態，請重新整理後再試。</string>
+    <string name="lz_set_export_logs_title">匯出診斷資訊</string>
+    <string name="lz_set_export_logs_summary">包含執行記錄和裝置狀態，不包含檔案內容</string>
+    <string name="lz_set_about_summary">專案介紹、版本與開源資訊</string>
+    <string name="lz_pf_files_step1">在雙開空間中選擇檔案，點選系統「分享」。</string>
+    <string name="lz_shell_prepare_read">1 · 已讀取完整安裝檔（含全部分包）</string>
+    <string name="lz_shell_prepare_copy">2 · 正在複製到雙開空間</string>
+    <string name="lz_shell_prepare_copied">2 · 已複製到雙開空間</string>
+    <string name="lz_shell_prepare_confirm">3 · 在 Android 系統安裝程式中確認安裝</string>
+    <string name="lz_shell_space_details">空間詳細資訊</string>
+    <string name="lz_shell_space_details_summary">雙開空間中有 %1$d 個分身，應用程式、帳號和檔案與主空間隔離。</string>
+</resources>

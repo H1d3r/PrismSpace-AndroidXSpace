@@ -29,6 +29,9 @@ import com.yzddmr6.prismspace.util.Apps
 import com.yzddmr6.prismspace.PrismNameManager
 import com.yzddmr6.prismspace.analytics.Analytics
 import com.yzddmr6.prismspace.analytics.analytics
+import com.yzddmr6.prismspace.prism.compose.theme.PrismTheme
+import com.yzddmr6.prismspace.clone.ClonePreparationSheet
+import androidx.compose.runtime.mutableStateOf
 import com.yzddmr6.prismspace.clone.CloneConfirmSheet
 import com.yzddmr6.prismspace.prism.compose.nav.AppLaunchSignals
 import com.yzddmr6.prismspace.prism.compose.vm.ActionFeedback
@@ -68,7 +71,6 @@ import eu.chainfire.libsuperuser.Shell
 import com.yzddmr6.prismspace.prism.service.FileBridgeService
 import com.yzddmr6.prismspace.prism.service.FileTransferFailureReason
 import com.yzddmr6.prismspace.prism.service.FileTransferResult
-import com.yzddmr6.prismspace.prism.service.InstallSourcePermissionHelper
 import com.yzddmr6.prismspace.prism.service.ProfileBridgeResult
 import com.yzddmr6.prismspace.prism.service.ProfileEntryLauncher
 import com.yzddmr6.prismspace.prism.service.TransferHistoryStore
@@ -166,7 +168,7 @@ class PrismAppClones(
 				fragment.dismiss()
 			},
 		)
-		fragment.show(activity) { sheet.compose() }
+		fragment.show(activity) { PrismTheme { sheet.compose() } }
 		return CloneRequestOutcome.Started
 	}
 
@@ -570,12 +572,26 @@ class PrismAppClones(
 					localized.getString(prismModeLabelRes(fallbackFrom)),
 				)
 			})
+			val prepared = mutableStateOf(false)
+			val preparationError = mutableStateOf<String?>(null)
+			val progressSheet = ModelBottomSheetFragment()
+			progressSheet.show(activity) {
+			    PrismTheme {
+			        ClonePreparationSheet(source.label.toString(), prepared.value, preparationError.value,
+			            onInstall = {
+			                val openResult = FileBridgeService().openProfileInstallEntry(activity)
+			                if (openResult.success) progressSheet.dismiss()
+			                else feedback(openResult.message, isError = true)
+			            }, onDismiss = { progressSheet.dismiss() })
+			    }
+			}
 			vm.viewModelScope.launch {
 				val result = stageApkSetToProfile(context, source, apks, onActivating = {
 					feedback(PrismLocale.wrap(context).getString(R.string.prompt_activating_space), isError = false)
 				})
 
 				if (!result.success) {
+					preparationError.value = result.message
 					if (result.failureReason == FileTransferFailureReason.BridgeNotReady) {
 						val profile = Users.profile
 						if (profile != null && ProfileEntryLauncher.start(activity, profile)) {
@@ -590,19 +606,7 @@ class PrismAppClones(
 				}
 				onCloneStateChanged()
 
-				Dialogs.buildAlert(activity, R.string.dialog_title_clone_file_sync, R.string.dialog_clone_file_sync_done)
-					.setPositiveButton(R.string.lz_app_filesync_open_install_entry) { _, _ ->
-						val openResult = FileBridgeService().openProfileInstallEntry(activity)
-						if (!openResult.success) feedback(openResult.message, isError = true)
-				}
-				.setNeutralButton(R.string.lz_app_filesync_allow_file_manager) { _, _ ->
-					val openResult = FileBridgeService().openProfileInstallSourceSettings(
-						activity,
-						InstallSourcePermissionHelper.SYSTEM_FILE_MANAGER_PACKAGE,
-					)
-					if (!openResult.success) feedback(openResult.message, isError = true)
-				}
-				.setNegativeButton(R.string.lz_app_filesync_install_later, null).show()
+				prepared.value = true
 			}
 		}
 

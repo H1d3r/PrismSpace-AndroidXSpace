@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.prism.compose.component.PrismTextButton
+import com.yzddmr6.prismspace.prism.compose.component.GroupCard
 import com.yzddmr6.prismspace.prism.compose.theme.PrismTheme
 
 /**
@@ -77,47 +78,27 @@ private fun SetupContent(
         HeroSection()
         FeaturesSection()
         HowToSection()
-        PrivacySection()
         CtaSection(checking = checking, onPrimary = onPrimaryCta, onHelp = onShowHelp)
+        PrivacySection()
         Spacer(Modifier.height(24.dp))
     }
 }
 
 @Composable
 private fun HeroSection() {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp)),
-        color = MaterialTheme.colorScheme.primaryContainer,
-    ) {
-        Column(
-            modifier = Modifier.padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.prism_setup_hero_title),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
-            Text(
-                text = stringResource(R.string.prism_setup_hero_body),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
-        }
+    Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
+        .background(MaterialTheme.colorScheme.primaryContainer).padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.prism_setup_hero_title), style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold)
+        Text(stringResource(R.string.prism_setup_hero_body), style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 @Composable
 private fun FeaturesSection() {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            text = stringResource(R.string.prism_setup_features_title),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-        )
+    GroupCard {
         FeatureCard(
             icon = Icons.Outlined.ContentCopy,
             title = stringResource(R.string.prism_setup_feature_clone_title),
@@ -138,25 +119,19 @@ private fun FeaturesSection() {
 
 @Composable
 private fun FeatureCard(icon: ImageVector, title: String, body: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    Row(
+        modifier = Modifier.padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(28.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
-                Text(text = title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                Text(text = body, style = MaterialTheme.typography.bodyMedium)
-            }
+        Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(28.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
+            Text(text = title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text(text = body, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
+
 
 /** 创建方式说明（系统引导 + 随时可删除）—— 对齐原型：欢迎、特性、创建方式、CTA、帮助。 */
 @Composable
@@ -167,16 +142,18 @@ private fun HowToSection() {
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
         )
-        FeatureCard(
-            icon = Icons.Outlined.Lock,
-            title = stringResource(R.string.prism_setup_howto_system_title),
-            body = stringResource(R.string.prism_setup_howto_system_body),
-        )
-        FeatureCard(
-            icon = Icons.Outlined.Folder,
-            title = stringResource(R.string.prism_setup_howto_delete_title),
-            body = stringResource(R.string.prism_setup_howto_delete_body),
-        )
+        GroupCard {
+            FeatureCard(
+                icon = Icons.Outlined.Lock,
+                title = stringResource(R.string.prism_setup_howto_system_title),
+                body = stringResource(R.string.prism_setup_howto_system_body),
+            )
+            FeatureCard(
+                icon = Icons.Outlined.Folder,
+                title = stringResource(R.string.prism_setup_howto_delete_title),
+                body = stringResource(R.string.prism_setup_howto_delete_body),
+            )
+        }
     }
 }
 

@@ -12,13 +12,13 @@
 
     <!-- FilesScreen -->
     <string name="lz_pf_files_title">文件</string>
-    <string name="lz_pf_files_send_other">发送文件到另一空间</string>
-    <string name="lz_pf_files_send_other_summary">可一次选择多个文件，PrismSpace 将通过空间桥依次传输。</string>
+    <string name="lz_pf_files_send_other">发送到双开空间</string>
+    <string name="lz_pf_files_send_other_summary">从主空间选择文件，复制到双开空间的下载目录。</string>
     <string name="lz_pf_direction_to_main">传到主空间</string>
     <string name="lz_pf_direction_to_profile">传到双开空间</string>
-    <string name="lz_pf_files_step1">在任意应用里选中文件，点系统的「分享」。</string>
+    <string name="lz_pf_files_step1">在双开空间中选择文件，点击系统「分享」。</string>
     <string name="lz_pf_files_step2">在分享面板选择「导入到此空间 PrismSpace」；找不到时再切换「个人 / 工作」标签。</string>
-    <string name="lz_pf_files_step3">在 PrismSpace 内选择「保存到本空间」或「发送到另一空间」。</string>
+    <string name="lz_pf_files_step3">在 PrismSpace 内选择「发送到另一空间」，传回主空间并等待明确结果。</string>
     <string name="lz_pf_files_step4">等待明确的成功或分类失败结果。</string>
     <string name="lz_pf_files_tab_hint">最终保存空间以 PrismSpace 内的选择为准。部分系统打开接收入口时不会保留分享面板的「个人 / 工作」标签。</string>
     <string name="lz_pf_files_return_title">如何从双开空间传回文件</string>

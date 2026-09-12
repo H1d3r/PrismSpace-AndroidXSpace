@@ -19,7 +19,7 @@ class UninstallRoutingContractTest {
     }
 
     @Test fun launchContentCarriesOutcomeAndReason() {
-        assertEquals("launched", uninstallLaunchContent(true, null))
+        assertEquals("submitted", uninstallLaunchContent(true, null))
         assertEquals("failed:bridge_not_ready", uninstallLaunchContent(false, "bridge_not_ready"))
         assertEquals("failed:unknown", uninstallLaunchContent(false, null))
         assertEquals("failed:unknown", uninstallLaunchContent(false, "  "))

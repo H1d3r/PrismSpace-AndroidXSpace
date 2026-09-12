@@ -28,13 +28,13 @@
 
     <!-- Compose setup wizard strings -->
     <string name="prism_setup_hero_title">Welcome to PrismSpace</string>
-    <string name="prism_setup_hero_body">Run a second, independent copy of your apps safely on the same device.</string>
+    <string name="prism_setup_hero_body">Create a dual space isolated by Android, with independent apps, accounts and data.</string>
     <string name="prism_setup_features_title">Main features</string>
-    <string name="prism_setup_feature_clone_title">App cloning</string>
+    <string name="prism_setup_feature_clone_title">App clones</string>
     <string name="prism_setup_feature_clone_body">Copy installed apps into a separate clone space with its own data.</string>
-    <string name="prism_setup_feature_isolation_title">Data isolation</string>
+    <string name="prism_setup_feature_isolation_title">System-level isolation</string>
     <string name="prism_setup_feature_isolation_body">Clone space uses its own accounts and storage, separated from your main apps.</string>
-    <string name="prism_setup_feature_files_title">Cross-space files</string>
+    <string name="prism_setup_feature_files_title">Transfer files across spaces</string>
     <string name="prism_setup_feature_files_body">Move files between main space and clone space with explicit consent.</string>
     <string name="prism_setup_privacy_title">How it works · Privacy</string>
     <string name="prism_setup_privacy_body">PrismSpace creates the clone space via Android Work Profile. Core clone, install and file-transfer flows run locally; update checks, PrismProbe network tests and diagnostic sharing only run when you choose them.</string>

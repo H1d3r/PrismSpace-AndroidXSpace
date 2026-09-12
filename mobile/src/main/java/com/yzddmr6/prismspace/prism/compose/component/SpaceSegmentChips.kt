@@ -3,6 +3,8 @@ package com.yzddmr6.prismspace.prism.compose.component
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -40,43 +42,49 @@ fun SpaceSegmentChips(
     onSelectMain: () -> Unit,
     onSelectDual: (String) -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     Surface(
         shape = RoundedCornerShape(PrismRadius.Lg),
         color = LocalPrismExtraColors.current.track,
         modifier = modifier.fillMaxWidth(),
     ) {
-        LazyRow(
-            contentPadding = PaddingValues(PrismSpacing.Xs),
-            horizontalArrangement = Arrangement.spacedBy(PrismSpacing.Xs),
-        ) {
-            items(chips, key = { it.id }) { chip ->
-                val selected = chip.selected
-                Surface(
-                    shape = RoundedCornerShape(PrismRadius.Md),
-                    color = if (selected) MaterialTheme.colorScheme.surface else Color.Transparent,
-                    shadowElevation = if (selected) 3.dp else 0.dp,
-                    modifier = Modifier
-                        .heightIn(min = PrismMinTouchTarget)
-                        .semantics(mergeDescendants = true) {
-                            role = Role.Tab
-                            this.selected = selected
-                        }
-                        .clickable {
-                            if (chip.id == "main") onSelectMain() else onSelectDual(chip.id)
-                        },
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = PrismSpacing.Lg, vertical = PrismSpacing.Md),
+        BoxWithConstraints {
+            val chipWidth = (maxWidth - PrismSpacing.Xs * (chips.size + 1)) / chips.size.coerceAtLeast(1)
+            LazyRow(
+                contentPadding = PaddingValues(PrismSpacing.Xs),
+                horizontalArrangement = Arrangement.spacedBy(PrismSpacing.Xs),
+            ) {
+                items(chips, key = { it.id }) { chip ->
+                    val selected = chip.selected
+                    Surface(
+                        shape = RoundedCornerShape(PrismRadius.Md),
+                        color = if (selected) MaterialTheme.colorScheme.surface else Color.Transparent,
+                        shadowElevation = if (selected) 3.dp else 0.dp,
+                        modifier = Modifier
+                            .then(if (chips.size <= 2) Modifier.width(chipWidth) else Modifier)
+                            .heightIn(min = PrismMinTouchTarget)
+                            .semantics(mergeDescendants = true) {
+                                role = Role.Tab
+                                this.selected = selected
+                            }
+                            .clickable(enabled = enabled) {
+                                if (chip.id == "main") onSelectMain() else onSelectDual(chip.id)
+                            },
                     ) {
-                        Text(
-                            text = chip.label,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (selected) MaterialTheme.colorScheme.onSurface
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.padding(horizontal = PrismSpacing.Lg, vertical = PrismSpacing.Md),
+                        ) {
+                            Text(
+                                text = chip.label,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (selected) MaterialTheme.colorScheme.onSurface
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }

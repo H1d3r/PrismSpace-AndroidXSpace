@@ -26,7 +26,7 @@
     <string name="lz_vm_batch_uninstall_ok">Uninstalling %1$d apps</string>
     <string name="lz_vm_batch_uninstall_partial">Uninstall started: %1$d succeeded, %2$d failed</string>
     <string name="lz_vm_uninstall_queue_summary">Uninstall complete: %1$d removed, %2$d not removed, %3$d unconfirmed.</string>
-    <string name="lz_vm_uninstall_queue_aborted">Uninstall stopped: %1$d removed, %2$d not attempted. %3$s</string>
+    <string name="lz_vm_uninstall_queue_aborted">Uninstall stopped: %1$d removed, %2$d not removed, %3$d unconfirmed, %4$d not attempted. %5$s</string>
 
     <!-- Batch clone results: staging is "prepared" (never "cloned"); installed = verified enhanced-route install. -->
     <string name="lz_vm_batch_clone_prepared">Prepared install packages for %1$d apps — confirm installation in the dual space</string>

@@ -49,8 +49,8 @@ fun batchActionFeedback(action: BatchAction, succeeded: Int, failed: Int) =
     batchActionFeedback(action, succeeded, failed, testZhResolver)
 internal fun uninstallQueueFeedback(summary: UninstallSummary, uninstallSkipped: Int = 0) =
     uninstallQueueFeedback(summary, uninstallSkipped, testZhResolver)
-internal fun uninstallAbortFeedback(completed: Int, notAttempted: Int, guidance: String) =
-    uninstallAbortFeedback(completed, notAttempted, guidance, testZhResolver)
+internal fun uninstallAbortFeedback(queue: UninstallQueueState, skipped: Int, guidance: String) =
+    uninstallAbortFeedback(queue, skipped, guidance, testZhResolver)
 internal fun batchCloneFeedback(counts: BatchCloneCounts) = batchCloneFeedback(counts, testZhResolver)
 internal fun mapRows(inputs: List<SpaceAppInput>) = mapRows(inputs, testZhResolver)
 internal fun mapSettingsUiModel(

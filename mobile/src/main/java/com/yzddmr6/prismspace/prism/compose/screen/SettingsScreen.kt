@@ -88,18 +88,26 @@ fun SettingsScreen() {
 
     // Sheet visibility state
     var showModeSheet by remember { mutableStateOf(false) }
+    var showSpaceDetails by remember { mutableStateOf(false) }
     var showAboutSheet by remember { mutableStateOf(false) }
     var showRepairConfirm by remember { mutableStateOf(false) }
     var showDeleteWarning by remember { mutableStateOf(false) }
     var showDeleteFinal by remember { mutableStateOf(false) }
     var showLangDialog by remember { mutableStateOf(false) }
 
+    if (showSpaceDetails) AlertDialog(
+        onDismissRequest = { showSpaceDetails = false },
+        title = { Text(stringResource(R.string.lz_shell_space_details)) },
+        text = { Text(stringResource(R.string.lz_shell_space_details_summary, uiState?.cloneCount ?: 0)) },
+        confirmButton = { PrismTextButton(onClick = { showSpaceDetails = false }) { Text(stringResource(android.R.string.ok)) } },
+    )
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.lz_set_title)) },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
+                    containerColor = MaterialTheme.colorScheme.background,
                 ),
             )
         },
@@ -130,9 +138,10 @@ fun SettingsScreen() {
                         title = state.spaceActionTitle,
                         summary = state.spaceActionSummary,
                         leadingIcon = PrismIcons.Wrench,
-                        enabled = state.spaceActionEnabled,
+                        enabled = state.spaceActionEnabled || state.spaceUsability == com.yzddmr6.prismspace.prism.compose.space.SpaceUsability.Usable,
                         onClick = {
-                            if (state.spaceActionNeedsConfirmation) showRepairConfirm = true
+                            if (state.spaceUsability == com.yzddmr6.prismspace.prism.compose.space.SpaceUsability.Usable) showSpaceDetails = true
+                            else if (state.spaceActionNeedsConfirmation) showRepairConfirm = true
                             else vm.repairSpace(context)
                         },
                     )
@@ -161,8 +170,10 @@ fun SettingsScreen() {
                 // Single label source avoids Home/Settings drift.
                 val modeLabel = stringResource(prismModeLabelRes(uiState?.selectedMode ?: PrismMode.Normal))
                 NavRow(
-                    title = stringResource(R.string.lz_set_run_mode),
-                    summary = modeLabel,
+                    title = if (uiState?.selectedMode == PrismMode.Normal || uiState == null)
+                        stringResource(R.string.lz_app_method_filesync_title) else modeLabel,
+                    summary = if (uiState?.selectedMode == PrismMode.Normal || uiState == null)
+                        stringResource(R.string.lz_app_method_filesync_summary) else stringResource(R.string.lz_shell_enhanced_method),
                     leadingIcon = PrismIcons.Key,
                     onClick = { showModeSheet = true },
                 )
@@ -186,7 +197,7 @@ fun SettingsScreen() {
                 // GitHub Releases update check.
                 ActionRow(
                     title = stringResource(R.string.lz_set_check_update_title),
-                    summary = stringResource(R.string.lz_set_check_update_summary),
+                    summary = stringResource(R.string.lz_shell_current_version, context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""),
                     leadingIcon = PrismIcons.Refresh,
                     onClick = { vm.checkForUpdate() },
                 )

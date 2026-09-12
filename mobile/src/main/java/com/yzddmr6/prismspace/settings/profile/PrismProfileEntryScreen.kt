@@ -1,6 +1,8 @@
 package com.yzddmr6.prismspace.settings.profile
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.os.Build
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
@@ -19,6 +21,10 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.yzddmr6.prismspace.mobile.R
@@ -31,8 +37,8 @@ import com.yzddmr6.prismspace.prism.compose.component.StatusHeroCard
 import com.yzddmr6.prismspace.prism.compose.component.StatusRow
 import com.yzddmr6.prismspace.prism.compose.theme.PrismTheme
 import com.yzddmr6.prismspace.prism.service.TransferHistoryStore
+import com.yzddmr6.prismspace.prism.service.TransferRecord
 import com.yzddmr6.prismspace.prism.service.TransferDirection
-import com.yzddmr6.prismspace.prism.service.displayTitle
 import com.yzddmr6.prismspace.prism.service.openSystemFileManager
 import com.yzddmr6.prismspace.prism.service.prepareSystemFilePickerUsable
 import com.yzddmr6.prismspace.prism.ui.CrossSpaceTransferEntry
@@ -69,11 +75,27 @@ fun PrismProfileEntryScreen() {
     // per-user, so this reads only this profile's records. Reload on every ON_RESUME: a clone/
     // transfer may have written a new record while this screen was backgrounded — a one-shot
     // remember{load()} would show a stale snapshot.
-    var transfers by remember { mutableStateOf(TransferHistoryStore.load(context)) }
+    var transfers by remember { mutableStateOf(emptyList<TransferRecord>()) }
+    var pending by remember { mutableStateOf(emptyList<TransferRecord>()) }
     val transfersLifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(transfersLifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) transfers = TransferHistoryStore.load(context)
+            if (event == Lifecycle.Event.ON_RESUME) transfersLifecycleOwner.lifecycleScope.launch {
+                val (history, tasks) = withContext(Dispatchers.IO) {
+                    val history = TransferHistoryStore.load(context)
+                    history to pendingProfileInstalls(history, isInstalled = { pkg ->
+                        try {
+                            @Suppress("DEPRECATION")
+                            val info = context.packageManager.getApplicationInfo(pkg, PackageManager.MATCH_UNINSTALLED_PACKAGES)
+                            info.flags and ApplicationInfo.FLAG_INSTALLED != 0
+                        } catch (_: PackageManager.NameNotFoundException) { false }
+                    }, hasApks = { item ->
+                        ProfileApkInstaller.hasCopiedApkSet(context, item.packageName!!, item.name)
+                    })
+                }
+                transfers = history
+                pending = tasks
+            }
         }
         transfersLifecycleOwner.lifecycle.addObserver(observer)
         onDispose { transfersLifecycleOwner.lifecycle.removeObserver(observer) }
@@ -84,7 +106,8 @@ fun PrismProfileEntryScreen() {
             topBar = {
                 // Single, orienting title ("双开空间"): the launcher icon already identifies the
                 // profile-side entry, so repeating the full launcher label here would be noisy.
-                TopAppBar(title = { Text(stringResource(R.string.lz_pf_entry_topbar)) })
+                TopAppBar(title = { Text(stringResource(R.string.lz_pf_entry_topbar)) },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background))
             },
         ) { padding ->
             Column(
@@ -96,6 +119,14 @@ fun PrismProfileEntryScreen() {
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 Spacer(Modifier.height(8.dp))
+                Surface(color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)) {
+                    StatusRow(
+                        title = stringResource(R.string.lz_shell_profile_identity),
+                        summary = stringResource(R.string.lz_shell_profile_isolation),
+                        leadingIcon = PrismIcons.Shield,
+                    )
+                }
 
                 if (!state.isProfileOwner) {
                     // Genuine problem state — keep it prominent. Nothing here can fix provisioning
@@ -109,10 +140,6 @@ fun PrismProfileEntryScreen() {
                     )
                 } else {
                     // 待安装 APK 区：安装动作只在这里（传输记录行不再内嵌安装按钮）。
-                    val pending = transfers.filter { item ->
-                        item.packageName != null &&
-                            ProfileApkInstaller.hasCopiedApkSet(context, item.packageName!!, item.name)
-                    }
                     if (pending.isNotEmpty()) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(
@@ -124,11 +151,11 @@ fun PrismProfileEntryScreen() {
                                 pending.forEach { item ->
                                     val pkg = item.packageName!!
                                     ActionRow(
-                                        title = item.displayTitle(),
+                                        title = item.name,
                                         summary = stringResource(R.string.lz_pf_entry_pending_ready),
                                         leadingIcon = PrismIcons.File,
                                         trailing = {
-                                            PrismTextButton(onClick = {
+                                            Button(onClick = {
                                                 ProfileApkInstaller.install(context, pkg, item.name)
                                             }) {
                                                 Text(stringResource(R.string.lz_pf_install))
@@ -144,7 +171,7 @@ fun PrismProfileEntryScreen() {
                     GroupCard {
                         ActionRow(
                             title = stringResource(R.string.lz_pf_entry_send_to_main),
-                            summary = stringResource(R.string.lz_pf_files_send_other_summary),
+                            summary = stringResource(R.string.lz_shell_profile_pick_files),
                             leadingIcon = PrismIcons.File,
                             onClick = {
                                 if (prepareSystemFilePickerUsable(context)) {
@@ -155,15 +182,6 @@ fun PrismProfileEntryScreen() {
                             },
                         )
                     }
-                    // Export starts from the source app through the system share sheet.
-                    GroupCard {
-                        StatusRow(
-                            title = stringResource(R.string.lz_pf_entry_export_title),
-                            summary = stringResource(R.string.lz_pf_entry_export_summary),
-                            leadingIcon = Icons.Outlined.IosShare,
-                        )
-                    }
-
                     // Files that have arrived in this space — tap a row to open the file manager.
                     // Same section wording as the main space's Files tab ("传输记录") for consistency.
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -178,7 +196,7 @@ fun PrismProfileEntryScreen() {
                                     // Plain history rows: tap opens the file manager; install actions
                                     // live in the 待安装 section above, not in record rows.
                                     ActionRow(
-                                        title = item.displayTitle(),
+                                        title = item.name,
                                         summary = listOf(
                                             item.direction?.let { direction -> stringResource(
                                                 if (direction == TransferDirection.ToMain) R.string.lz_pf_direction_to_main

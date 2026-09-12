@@ -16,8 +16,25 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.coroutines.runBlocking
 
 class UninstallQueueTest {
+
+    @Test fun delayedLaunchWatchdogCannotCancelAResumedOrReplacementHead() {
+        val awaiting = UninstallQueueReducer.launched(UninstallQueueReducer.start(listOf(request("one"))))
+        val resumed = UninstallQueueReducer.returned(awaiting, 100)
+        assertEquals(resumed, UninstallQueueReducer.launchUnobserved(resumed, awaiting.current, true))
+        val replacement = UninstallQueueReducer.launched(UninstallQueueReducer.start(listOf(request("one"))))
+        assertEquals(replacement, UninstallQueueReducer.launchUnobserved(replacement, awaiting.current, true))
+    }
+
+    @Test fun silentLaunchFailureTerminatesWithoutClaimingRemoval() {
+        val state = UninstallQueueReducer.launched(UninstallQueueReducer.start(listOf(request("one"))))
+        val failed = UninstallQueueReducer.launchUnobserved(state, state.current, true)
+        assertTrue(failed.complete)
+        assertEquals(0, failed.summary.succeeded)
+        assertEquals(1, failed.summary.timedOut)
+    }
 
     @Test fun allConfirmedAdvanceOneAtATimeAndCountRealSuccess() {
         var state = UninstallQueueReducer.start(listOf(request("one"), request("two")))
@@ -196,10 +213,25 @@ class UninstallQueueTest {
     }
 
     @Test fun abortFeedbackCountsNotAttemptedHeadsHonestly() {
-        val fb = uninstallAbortFeedback(2, 3, "请先在设置中修复双开空间连接，然后再卸载分身")
+        var state = UninstallQueueReducer.start((1..5).map { request("app$it") })
+        state = UninstallQueueReducer.launched(state)
+        state = UninstallQueueReducer.returned(state, 0)
+        state = UninstallQueueReducer.observed(state, false, true, 0)
+        state = UninstallQueueReducer.launched(state)
+        state = UninstallQueueReducer.returned(state, 0)
+        state = UninstallQueueReducer.observed(state, true, true, UNINSTALL_CANCEL_GRACE_MS)
+        state = UninstallQueueReducer.launchFailed(state, true)
 
-        assertEquals("卸载已停止：已卸载 2 个，3 个未执行。请先在设置中修复双开空间连接，然后再卸载分身", fb.message)
+        val fb = uninstallAbortFeedback(state, 1, "请先在设置中修复双开空间连接，然后再卸载分身")
+
+        assertEquals("卸载已停止：已卸载 1 个，未卸载 1 个，未能确认 1 个，3 个未执行。请先在设置中修复双开空间连接，然后再卸载分身", fb.message)
         assertTrue(fb.isError)
+    }
+
+    @Test fun abortBeforeFirstLaunchDoesNotClaimAnyRemoval() {
+        val state = UninstallQueueReducer.start(listOf(request("one"), request("two")))
+        val fb = uninstallAbortFeedback(state, 0, "请先恢复双开空间")
+        assertEquals("卸载已停止：已卸载 0 个，未卸载 0 个，未能确认 0 个，2 个未执行。请先恢复双开空间", fb.message)
     }
 
     /** Mirrors the production mapping in SpaceViewModel.driveUninstallLaunch: a launched reply
@@ -208,9 +240,9 @@ class UninstallQueueTest {
         state: UninstallQueueState,
         port: UninstallLaunchPort,
         mainCopyExists: Boolean,
-    ): UninstallQueueState {
-        val current = state.current?.takeIf { it.stage == UninstallStage.ReadyToLaunch } ?: return state
-        return when (port.requestUninstall(current.request)) {
+    ): UninstallQueueState = runBlocking {
+        val current = state.current?.takeIf { it.stage == UninstallStage.ReadyToLaunch } ?: return@runBlocking state
+        when (port.requestUninstall(current.request)) {
             UninstallLaunchReply.Launched -> UninstallQueueReducer.launched(state)
             is UninstallLaunchReply.Failed -> UninstallQueueReducer.launchFailed(state, mainCopyExists)
         }

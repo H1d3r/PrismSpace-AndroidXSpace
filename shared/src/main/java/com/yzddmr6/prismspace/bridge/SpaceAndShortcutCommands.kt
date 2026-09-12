@@ -1,6 +1,7 @@
 package com.yzddmr6.prismspace.bridge
 
 import android.os.Bundle
+import android.app.PendingIntent
 import android.os.Parcelable
 import kotlinx.parcelize.Parcelize
 
@@ -157,12 +158,13 @@ data class OpenAppDetailsInProfile(val packageName: String) : ProfileCommand<Uni
     override fun decodeResult(src: Bundle) = Unit
 }
 
-enum class UninstallLaunchKind { Launched, Failed }
+enum class UninstallLaunchKind { Prepared, Failed }
 
 @Parcelize
 data class UninstallLaunchDto(
     val kind: UninstallLaunchKind,
     val reason: String? = null,
+    val confirmation: PendingIntent? = null,
 ) : Parcelable
 
 @Parcelize

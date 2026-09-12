@@ -8,11 +8,11 @@
     <string name="lz_set_update_title">New version %1$s available</string>
     <string name="lz_set_update_download">Download</string>
     <string name="lz_set_update_later">Later</string>
-    <string name="lz_set_suspend_title">Freeze entire space</string>
-    <string name="lz_set_suspend_summary">Freezes all your clones at once and stops their background processes; toggle off to unfreeze — no data loss</string>
-    <string name="lz_set_suspend_state_frozen">All eligible clones are frozen. Turn this off to unfreeze them.</string>
-    <string name="lz_set_suspend_state_mixed">Some eligible clones are frozen. Turn this on to freeze all of them consistently.</string>
-    <string name="lz_set_suspend_state_unknown">Current app freeze state could not be confirmed; refresh before changing it.</string>
+    <string name="lz_set_suspend_title">Pause all clones</string>
+    <string name="lz_set_suspend_summary">Clones cannot open while paused; apps and data are preserved</string>
+    <string name="lz_set_suspend_state_frozen">All eligible clones are paused. Turn this off to resume them.</string>
+    <string name="lz_set_suspend_state_mixed">Some clones are paused. Turn this on to pause all eligible clones.</string>
+    <string name="lz_set_suspend_state_unknown">Pause state is unavailable. Try refreshing.</string>
     <string name="lz_set_repair_title">Repair dual space</string>
     <string name="lz_set_repair_summary">Rebuilds the work profile connection; clones will close during the process</string>
     <string name="lz_set_create_title">Create dual space</string>
@@ -35,18 +35,18 @@
     <string name="lz_set_reconnect_failed">The profile bridge failed. Open the dual-space entry to diagnose and reconnect it.</string>
     <string name="lz_set_reconnect_not_checked">The profile bridge has not completed a successful check. Open the dual-space entry and retry.</string>
     <string name="lz_set_ready_title">Dual space ready</string>
-    <string name="lz_set_ready_summary">No recovery action is currently required.</string>
+    <string name="lz_set_ready_summary">Tap to view clone count and space details.</string>
     <string name="lz_set_delete_space_title">Delete dual space</string>
     <string name="lz_set_delete_space_summary">Permanently removes the dual space and all clone data inside it</string>
-    <string name="lz_set_export_logs_title">Export diagnostic logs</string>
-    <string name="lz_set_export_logs_summary">Exports a detailed 2 MB rolling log and current system snapshot</string>
+    <string name="lz_set_export_logs_title">Export diagnostics</string>
+    <string name="lz_set_export_logs_summary">Includes logs and device status, without file contents</string>
     <string name="lz_set_feedback_title">Feedback and discussion</string>
     <string name="lz_set_feedback_summary">For feedback and discussion, search WeChat for “%1$s”.</string>
     <string name="lz_set_feedback_account">熵减矩阵</string>
     <string name="lz_set_feedback_copy">Copy</string>
     <string name="lz_set_feedback_copied">WeChat account name copied</string>
     <string name="lz_set_about_title">About PrismSpace</string>
-    <string name="lz_set_about_summary">Project intro</string>
+    <string name="lz_set_about_summary">Project, version and open-source information</string>
     <string name="lz_set_cancel">Cancel</string>
 
     <!-- ModeGuideSheet.kt -->

@@ -182,7 +182,7 @@ fun GroupCard(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
                     .padding(horizontal = PrismSpacing.Lg)
                     .padding(bottom = PrismSpacing.Xs),
@@ -198,9 +198,6 @@ fun GroupCard(
             border = BorderStroke(PrismSpacing.Hair, LocalPrismExtraColors.current.cardBorder),
         ) {
             Column(
-                // 8/4 rhythm (was a too-tight 4/2 that made grouped rows feel cramped).
-                modifier = Modifier.padding(vertical = PrismSpacing.Sm),
-                verticalArrangement = Arrangement.spacedBy(PrismSpacing.Xs),
                 content = content,
             )
         }

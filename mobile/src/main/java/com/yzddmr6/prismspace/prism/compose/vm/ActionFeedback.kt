@@ -73,12 +73,18 @@ internal fun uninstallQueueFeedback(
 /** Pure: the queue stopped on a mid-run usability gate trip; unlaunched heads are counted as
  *  not attempted (never fired), followed by the state-specific guidance. */
 internal fun uninstallAbortFeedback(
-    completed: Int,
-    notAttempted: Int,
+    queue: UninstallQueueState,
+    skipped: Int,
     guidance: String,
     res: StringResolver,
 ): ActionFeedback = ActionFeedback(
-    res(R.string.lz_vm_uninstall_queue_aborted, arrayOf(completed, notAttempted, guidance)),
+    res(R.string.lz_vm_uninstall_queue_aborted, arrayOf(
+        queue.summary.succeeded,
+        queue.summary.cancelled,
+        queue.summary.timedOut,
+        queue.total - queue.outcomes.size + skipped,
+        guidance,
+    )),
     isError = true,
 )
 

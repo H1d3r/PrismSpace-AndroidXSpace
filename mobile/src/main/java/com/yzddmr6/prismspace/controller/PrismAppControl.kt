@@ -273,4 +273,4 @@ internal fun uninstallItemCategory(system: Boolean) = if (system) "system" else 
 
 /** Launch outcome carried by the uninstall event, recorded after the launch result is known. */
 internal fun uninstallLaunchContent(launched: Boolean, failureReason: String?) =
-	if (launched) "launched" else "failed:${failureReason?.takeIf { it.isNotBlank() } ?: "unknown"}"
+	if (launched) "submitted" else "failed:${failureReason?.takeIf { it.isNotBlank() } ?: "unknown"}"

@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- AppActionSheet -->
-    <string name="lz_app_launch">Launch app</string>
+    <string name="lz_app_launch">Open app</string>
     <string name="lz_app_launch_frozen_subtitle">Frozen — will be unfrozen before launch</string>
-    <string name="lz_app_freeze">Freeze</string>
-    <string name="lz_app_unfreeze">Unfreeze</string>
+    <string name="lz_app_freeze">Pause clone</string>
+    <string name="lz_app_unfreeze">Resume clone</string>
     <string name="lz_app_create_shortcut">Add shortcut to Home screen</string>
     <string name="lz_app_app_info">App info</string>
     <string name="lz_app_uninstall_clone">Uninstall clone</string>
@@ -16,8 +16,8 @@
     <string name="lz_app_target_already_in_space">%1$s · Already in this space</string>
 
     <!-- Clone install method labels (were hardcoded Chinese in PrismAppClones.request — i18n fix) -->
-    <string name="lz_app_method_filesync_title">File-sync install</string>
-    <string name="lz_app_method_filesync_summary">Copies the full app, including splits, into the dual space. The user finishes installation with the system installer there.</string>
+    <string name="lz_app_method_filesync_title">System-confirmed installation</string>
+    <string name="lz_app_method_filesync_summary">Recommended · Android asks you to confirm each installation</string>
     <string name="lz_app_method_shizuku_title">Shizuku auto-install</string>
     <string name="lz_app_method_shizuku_summary_ready">Silently install into the dual space via Shizuku</string>
     <string name="lz_app_method_root_title">Root auto-install</string>

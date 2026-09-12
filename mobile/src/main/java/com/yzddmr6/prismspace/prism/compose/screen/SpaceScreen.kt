@@ -23,6 +23,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Divider
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.ui.graphics.RectangleShape
+import com.yzddmr6.prismspace.prism.compose.theme.PrismMinTouchTarget
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -120,13 +126,17 @@ fun SpaceScreen() {
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE) vm.onHostPaused()
             if (event == Lifecycle.Event.ON_RESUME) {
                 vm.onHostResumed()
                 vm.refresh()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        onDispose {
+            vm.onHostPaused()
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     // rememberSaveable: survives configuration change AND system process death
@@ -209,15 +219,7 @@ fun SpaceScreen() {
                 onEnterBatch = { vm.enterMultiSelect(entryDomainRows) },
             )
         },
-        containerColor = MaterialTheme.colorScheme.background,
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-        ) {
-            // In multi-select, batch actions sit at the top (they used to be a bottom bar that
-            // overlapped/duplicated the global 4-tab navigation). Otherwise the normal toolbar.
+        bottomBar = {
             if (uiState.isMultiSelect) {
                 BatchBar(
                     segment = uiState.segment,
@@ -235,6 +237,14 @@ fun SpaceScreen() {
                     onCancel = { vm.exitMultiSelect() },
                 )
             }
+        },
+        containerColor = MaterialTheme.colorScheme.background,
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+        ) {
             // The toolbar (search + view controls) stays visible during multi-select — frozen to
             // the entry-time query/filter, which the selection domain snapshots.
             SpaceToolbar(
@@ -497,8 +507,11 @@ private fun AppListSection(
         }
         else -> {
             LazyColumn(
-                contentPadding = PaddingValues(horizontal = PrismSpacing.Lg, vertical = PrismSpacing.Sm),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.padding(horizontal = PrismSpacing.Lg)
+                    .clip(RoundedCornerShape(PrismRadius.Lg))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(PrismSpacing.Hair, LocalPrismExtraColors.current.cardBorder, RoundedCornerShape(PrismRadius.Lg)),
+                contentPadding = PaddingValues(0.dp),
             ) {
                 items(filteredRows, key = { it.pkg }) { row ->
                     val isSelected = selectedPkgs?.contains(row.pkg) == true
@@ -520,6 +533,8 @@ private fun AppListSection(
                         },
                         onPrimaryAction = { action -> onRowPrimaryAction(row, action) },
                     )
+                    if (row != filteredRows.last()) Divider(color = LocalPrismExtraColors.current.cardBorder,
+                        modifier = Modifier.padding(horizontal = PrismSpacing.Lg))
                 }
             }
         }
@@ -719,7 +734,7 @@ private fun SpaceToolbar(
     ) {
         // N-chip space switcher — horizontally scrollable row above the search box.
         // Hidden in multi-select: switching space would invalidate the snapshotted selection domain.
-        if (enabled) {
+        run {
             val chips = spaceChips(
                 spaces = uiState.spaces,
                 selectedMain = uiState.segment == SpaceSegment.Main,
@@ -729,6 +744,7 @@ private fun SpaceToolbar(
                 chips = chips,
                 onSelectMain = onSelectMain,
                 onSelectDual = onSelectDual,
+                enabled = enabled,
             )
 
             Spacer(modifier = Modifier.height(PrismSpacing.Sm))
@@ -786,7 +802,7 @@ private fun SpaceToolbar(
                 val showSystem = if (uiState.segment == SpaceSegment.Dual) uiState.showSystemDual else uiState.showSystem
                 val viewDirty = uiState.sortOrder != SortOrder.Name ||
                     (uiState.segment == SpaceSegment.Main && uiState.cloneFilter != CloneFilter.All) ||
-                    !showSystem
+                    showSystem
                 Box {
                 IconButton(
                     onClick = onViewPanelToggle,
@@ -985,17 +1001,12 @@ private fun AppCard(
                 onClick = onClick,
                 onLongClick = onLongClick,
             ),
-        shape = RoundedCornerShape(PrismRadius.Lg),
+        shape = RectangleShape,
         color = if (isSelected) MaterialTheme.colorScheme.primaryContainer
                 else MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
-        border = androidx.compose.foundation.BorderStroke(
-            width = PrismSpacing.Hair,
-            // 同屏单一边框 token：未选中与 GroupCard/StatCard 同色同宽；选中描边是选择态而非边框色。
-            color = if (isSelected) MaterialTheme.colorScheme.primary
-                    else extra.cardBorder,
-        ),
+
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 15.dp, vertical = 13.dp),
@@ -1003,10 +1014,7 @@ private fun AppCard(
         ) {
             // Keep the app icon visible in multi-select; overlay a selection check in the corner
             // (the icon used to be replaced by a checkbox, hiding which app it is).
-            Box(contentAlignment = Alignment.BottomEnd) {
-                AppIcon(pkg = row.pkg, label = row.label)
-                if (isMultiSelect) SelectionCheckBadge(checked = isSelected)
-            }
+            AppIcon(pkg = row.pkg, label = row.label)
 
             Spacer(modifier = Modifier.width(14.dp))
 
@@ -1021,15 +1029,19 @@ private fun AppCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    text = row.pkg,
+                if (row.segment == SpaceSegment.Main && !row.system) Text(
+                    text = stringResource(when {
+                        row.cloned -> R.string.lz_space_detail_added
+                        row.primaryAction == SpaceRowAction.ContinueInstall -> R.string.lz_space_detail_pending
+                        else -> R.string.lz_space_detail_not_added
+                    }),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 // 状态标签：健康行不贴标签，仅异常状态（已暂停/待安装/系统应用）呈现。
-                if (row.chipText != null) {
+                if (row.chipText != null && (row.segment == SpaceSegment.Dual || row.system)) {
                     Spacer(modifier = Modifier.height(6.dp))
                     Surface(
                         shape = RoundedCornerShape(7.dp),
@@ -1047,11 +1059,21 @@ private fun AppCard(
             }
 
             // 行内按钮 = 该行当前唯一主动作（打开/恢复/添加分身/去安装）；无动作不显示。
+            if (isMultiSelect) SelectionCheckBadge(checked = isSelected)
             val action = row.primaryAction
             if (!isMultiSelect && action != null) {
                 Spacer(modifier = Modifier.width(PrismSpacing.Sm))
-                PrismTextButton(
+                Button(
                     onClick = { onPrimaryAction(action) },
+                    modifier = Modifier.defaultMinSize(minHeight = PrismMinTouchTarget),
+                    shape = CircleShape,
+                    contentPadding = PaddingValues(horizontal = PrismSpacing.Md),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (action == SpaceRowAction.Open) MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.primary,
+                        contentColor = if (action == SpaceRowAction.Open) MaterialTheme.colorScheme.onPrimaryContainer
+                            else MaterialTheme.colorScheme.onPrimary,
+                    ),
                 ) {
                     Text(
                         text = stringResource(
