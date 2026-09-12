@@ -43,6 +43,9 @@ internal object BridgeDispatcher {
             is CompleteClonePreparation -> fileBridge(command) {
                 completeClonePreparation(context, command.packageName)
             }
+            QueryPendingClonePreparations -> fileBridge(QueryPendingClonePreparations) {
+                queryPendingClonePreparations(context)
+            }
             QueryLatestVisibleImage -> fileBridge(QueryLatestVisibleImage) { queryLatestVisibleImage(context) }
             OpenImagePickerInProfile -> fileBridge(OpenImagePickerInProfile) { openImagePicker(context) }
             is OpenLatestForRead -> fileBridge(command) { openLatestForRead(context, command.store) }

@@ -14,4 +14,5 @@
     <string name="lz_shell_prepare_confirm">3 · Confirm installation in the Android installer</string>
     <string name="lz_shell_space_details">Space details</string>
     <string name="lz_shell_space_details_summary">%1$d clones in dual space. Apps, accounts and files are isolated from main space.</string>
+    <string name="lz_shell_pending_unavailable">Cannot read pending installations. Reconnect from PrismSpace in main space and try again.</string>
 </resources>

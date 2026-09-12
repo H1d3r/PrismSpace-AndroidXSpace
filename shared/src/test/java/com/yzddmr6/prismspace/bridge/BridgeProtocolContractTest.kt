@@ -142,6 +142,7 @@ class BridgeProtocolContractTest {
     }
 
     private object FakeFileBridgePort : FileBridgePort {
+        override fun queryPendingClonePreparations(context: Context): List<String> = emptyList()
         override fun openWriteSession(
             context: Context,
             store: BridgeFileStore,

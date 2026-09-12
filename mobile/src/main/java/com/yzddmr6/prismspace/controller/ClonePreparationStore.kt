@@ -71,6 +71,10 @@ object ClonePreparationStore {
         ClonePreparationStateStore(persistence(context)).contains(packageName)
     }
 
+    fun pendingPackages(context: Context): Set<String> = synchronized(lock) {
+        persistence(context).read()
+    }
+
     fun reconcileInstalled(context: Context, installedPackages: Set<String>): Set<String> = synchronized(lock) {
         ClonePreparationStateStore(persistence(context)).reconcileInstalled(installedPackages)
     }

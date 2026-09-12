@@ -14,4 +14,5 @@
     <string name="lz_shell_prepare_confirm">3 · 在 Android 系统安装器中确认安装</string>
     <string name="lz_shell_space_details">空间详情</string>
     <string name="lz_shell_space_details_summary">双开空间中有 %1$d 个分身，应用、账号和文件与主空间隔离。</string>
+    <string name="lz_shell_pending_unavailable">暂时无法读取待安装任务，请在主空间 PrismSpace 重新连接后再试。</string>
 </resources>

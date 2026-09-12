@@ -14,6 +14,7 @@ class BridgeCommandParcelTest {
 
     @Test fun everyCommandAndResultRoundTrips() {
         assertRoundTrip(Ping, true)
+        assertRoundTrip(QueryPendingClonePreparations, listOf("one", "two"))
         assertRoundTrip(SetAppFrozen("pkg", true), true)
         assertRoundTrip(EnsureAppHiddenState("pkg", false), false)
         assertRoundTrip(SetPackageSuspended("pkg", true), true)

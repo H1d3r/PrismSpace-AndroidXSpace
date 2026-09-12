@@ -1055,6 +1055,9 @@ internal object MobileFileBridgePort : FileBridgePort {
         return true
     }
 
+    override fun queryPendingClonePreparations(context: Context): List<String> =
+        ClonePreparationStore.pendingPackages(context).sorted()
+
     override fun queryLatestVisibleImage(context: Context): ProfileMediaEntryDto? =
         FileBridgeMediaVisibilityVerifier(AndroidFileBridgeMediaQueryStore(context)).latestVisibleImage()?.let {
             ProfileMediaEntryDto(it.displayName, it.mimeType, it.uri)

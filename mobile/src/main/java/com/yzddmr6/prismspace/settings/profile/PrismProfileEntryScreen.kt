@@ -1,8 +1,6 @@
 package com.yzddmr6.prismspace.settings.profile
 
 import android.content.Context
-import android.content.pm.ApplicationInfo
-import android.content.pm.PackageManager
 import android.os.Build
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
@@ -36,8 +34,6 @@ import com.yzddmr6.prismspace.prism.compose.component.PrismTextButton
 import com.yzddmr6.prismspace.prism.compose.component.StatusHeroCard
 import com.yzddmr6.prismspace.prism.compose.component.StatusRow
 import com.yzddmr6.prismspace.prism.compose.theme.PrismTheme
-import com.yzddmr6.prismspace.prism.service.TransferHistoryStore
-import com.yzddmr6.prismspace.prism.service.TransferRecord
 import com.yzddmr6.prismspace.prism.service.TransferDirection
 import com.yzddmr6.prismspace.prism.service.openSystemFileManager
 import com.yzddmr6.prismspace.prism.service.prepareSystemFilePickerUsable
@@ -75,26 +71,14 @@ fun PrismProfileEntryScreen() {
     // per-user, so this reads only this profile's records. Reload on every ON_RESUME: a clone/
     // transfer may have written a new record while this screen was backgrounded — a one-shot
     // remember{load()} would show a stale snapshot.
-    var transfers by remember { mutableStateOf(emptyList<TransferRecord>()) }
-    var pending by remember { mutableStateOf(emptyList<TransferRecord>()) }
+    var transferState by remember { mutableStateOf<ProfileTransfers?>(null) }
+    val transfers = transferState?.history.orEmpty()
+    val pending = transferState?.pending.orEmpty()
     val transfersLifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(transfersLifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) transfersLifecycleOwner.lifecycleScope.launch {
-                val (history, tasks) = withContext(Dispatchers.IO) {
-                    val history = TransferHistoryStore.load(context)
-                    history to pendingProfileInstalls(history, isInstalled = { pkg ->
-                        try {
-                            @Suppress("DEPRECATION")
-                            val info = context.packageManager.getApplicationInfo(pkg, PackageManager.MATCH_UNINSTALLED_PACKAGES)
-                            info.flags and ApplicationInfo.FLAG_INSTALLED != 0
-                        } catch (_: PackageManager.NameNotFoundException) { false }
-                    }, hasApks = { item ->
-                        ProfileApkInstaller.hasCopiedApkSet(context, item.packageName!!, item.name)
-                    })
-                }
-                transfers = history
-                pending = tasks
+                transferState = withContext(Dispatchers.IO) { loadProfileTransfers(context) }
             }
         }
         transfersLifecycleOwner.lifecycle.addObserver(observer)
@@ -140,6 +124,11 @@ fun PrismProfileEntryScreen() {
                     )
                 } else {
                     // 待安装 APK 区：安装动作只在这里（传输记录行不再内嵌安装按钮）。
+                    if (transferState != null && transferState?.pending == null) {
+                        Text(stringResource(R.string.lz_shell_pending_unavailable),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium)
+                    }
                     if (pending.isNotEmpty()) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(
