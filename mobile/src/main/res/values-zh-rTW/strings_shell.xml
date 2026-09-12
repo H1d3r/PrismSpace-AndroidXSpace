@@ -24,4 +24,6 @@
     <string name="lz_shell_space_details">空間詳細資訊</string>
     <string name="lz_shell_space_details_summary">雙開空間中有 %1$d 個分身，應用程式、帳號和檔案與主空間隔離。</string>
     <string name="lz_shell_pending_unavailable">暫時無法讀取待安裝工作，請在主空間 PrismSpace 重新連線後再試。</string>
+    <string name="lz_space_detail_unknown">分身狀態待確認</string>
+    <string name="lz_space_cached_list">雙開空間暫時無法使用，清單中的分身狀態可能不是最新。</string>
 </resources>

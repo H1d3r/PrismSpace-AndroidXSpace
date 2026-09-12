@@ -1,6 +1,13 @@
 package com.yzddmr6.prismspace.prism.compose.screen
 
-import android.graphics.drawable.Drawable
+import android.graphics.Bitmap
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.material3.LinearProgressIndicator
+import com.yzddmr6.prismspace.prism.service.SpaceIconLoader
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -65,7 +72,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.graphics.drawable.toBitmap
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -92,14 +98,13 @@ import com.yzddmr6.prismspace.prism.compose.vm.SpaceSegment
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceSegmentState
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceUiState
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceViewModel
+import com.yzddmr6.prismspace.prism.compose.vm.SpaceBrowseOptions
 import com.yzddmr6.prismspace.prism.compose.vm.SpaceActionGate
 import com.yzddmr6.prismspace.prism.compose.vm.ActionFeedback
 import com.yzddmr6.prismspace.prism.compose.vm.AppFeedbackBus
-import com.yzddmr6.prismspace.prism.compose.vm.applyListTransform
 import com.yzddmr6.prismspace.prism.compose.vm.batchActionsFor
 import com.yzddmr6.prismspace.prism.compose.vm.batchAllSelected
 import com.yzddmr6.prismspace.prism.compose.vm.continueInstallGate
-import com.yzddmr6.prismspace.prism.compose.vm.filterSystemAppRows
 import com.yzddmr6.prismspace.prism.compose.vm.prismResolver
 import com.yzddmr6.prismspace.prism.compose.vm.uninstallGate
 import com.yzddmr6.prismspace.prism.service.FileBridgeService
@@ -129,7 +134,6 @@ fun SpaceScreen() {
             if (event == Lifecycle.Event.ON_PAUSE) vm.onHostPaused()
             if (event == Lifecycle.Event.ON_RESUME) {
                 vm.onHostResumed()
-                vm.refresh()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -139,25 +143,18 @@ fun SpaceScreen() {
         }
     }
 
-    // rememberSaveable: survives configuration change AND system process death
-    // for the most user-affecting state (search query). selectedRow / viewPanelExpanded
-    // are transient sheet/panel state and stay on plain `remember`.
-    var searchQuery by rememberSaveable { mutableStateOf("") }
-    var systemSearchQuery by rememberSaveable { mutableStateOf("") }
+    // Browsing choices live in the ViewModel saved state; each list saves its own scroll.
+    // The action sheet and view menu are transient.
+    val searchQuery = uiState.query
+    val systemSearchQuery = uiState.systemQuery
+    val listStates = rememberSaveableStateHolder()
     var systemAppsOpen by rememberSaveable { mutableStateOf(false) }
     var selectedRow by remember { mutableStateOf<SpaceRow?>(null) }
     var viewPanelExpanded by remember { mutableStateOf(false) }
 
     // Entry-time filtered result set: snapshotted as the multi-select domain on entry, so
     // search/filter/sort survive batch mode and 全选 covers exactly this set.
-    val entryDomainRows = applyListTransform(
-        rows = (uiState.current as? SpaceSegmentState.Content)?.rows ?: emptyList(),
-        segment = uiState.segment,
-        query = searchQuery,
-        sort = uiState.sortOrder,
-        cloneFilter = uiState.cloneFilter,
-        showSystem = if (uiState.segment == SpaceSegment.Dual) uiState.showSystemDual else uiState.showSystem,
-    )
+    val entryDomainRows = (uiState.current as? SpaceSegmentState.Content)?.rows.orEmpty()
 
     // Cross-tab entries: 首页「添加分身」直达主空间分段；设置「系统应用」直达双开系统应用视图。
     // Nonce signals: each collector acts once per nonce (acknowledged via lastHandled).
@@ -217,6 +214,7 @@ fun SpaceScreen() {
                 onSelectAll = { vm.selectAll() },
                 onExit = { vm.exitMultiSelect() },
                 onEnterBatch = { vm.enterMultiSelect(entryDomainRows) },
+                canEnterBatch = !uiState.calculating,
             )
         },
         bottomBar = {
@@ -262,11 +260,10 @@ fun SpaceScreen() {
                     vm.selectSpace(it)
                 },
                 onSearchChanged = {
-                    if (systemAppsOpen) systemSearchQuery = it else searchQuery = it
+                    if (systemAppsOpen) vm.setSystemQuery(it) else vm.setQuery(it)
                 },
                 onCloseSystemApps = {
                     systemAppsOpen = false
-                    systemSearchQuery = ""
                 },
                 onViewPanelToggle = { viewPanelExpanded = !viewPanelExpanded },
                 onViewPanelDismiss = { viewPanelExpanded = false },
@@ -288,48 +285,62 @@ fun SpaceScreen() {
                 },
             )
 
-            // App list — client-side filter/sort/search applied over loaded rows
-            AppListSection(
-                segment = uiState.segment,
-                currentState = if (systemAppsOpen) uiState.systemApps else uiState.current,
-                systemAppsMode = systemAppsOpen,
-                isMultiSelect = uiState.isMultiSelect,
-                multiSelectDomain = uiState.multiSelectDomain,
-                selectedPkgs = uiState.selectedPkgs,
-                searchQuery = if (systemAppsOpen) systemSearchQuery else searchQuery,
-                sortOrder = uiState.sortOrder,
-                cloneFilter = uiState.cloneFilter,
-                showSystem = if (uiState.segment == SpaceSegment.Dual) uiState.showSystemDual else uiState.showSystem,
-                dualUsability = uiState.dualUsability,
-                onToggleSelect = { vm.toggleSelect(it) },
-                onEnterMultiSelect = { vm.enterMultiSelect(it, entryDomainRows) },
-                onRowSelected = { selectedRow = it },
-                onRowPrimaryAction = { row, action ->
-                    when (action) {
-                        SpaceRowAction.Open -> vm.launch(context, row.pkg, SpaceSegment.Dual)
-                        SpaceRowAction.Resume -> vm.setFrozen(row.pkg, false)
-                        SpaceRowAction.AddClone -> {
-                            // Same entry as the action sheet: confirm sheet follows the configured
-                            // method; the row button never skips it.
-                            val app = vm.appFor(row.pkg, SpaceSegment.Main)
-                            if (app != null && activity != null) {
-                                PrismAppClones(activity, prismAppsVm, app, onCloneStateChanged = vm::refresh).request()
+            uiState.refreshError?.let { message ->
+                Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(horizontal = PrismSpacing.Lg))
+            }
+            if (uiState.selectedDualSpaceId != null && uiState.dualUsability != SpaceUsability.Usable &&
+                uiState.current is SpaceSegmentState.Content) {
+                Text(stringResource(R.string.lz_space_cached_list), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = PrismSpacing.Lg))
+            }
+            // Render the cached projection; each space owns its saved list state.
+            val listKey = uiState.activeSpaceId + if (systemAppsOpen) ":system" else ":apps"
+            listStates.SaveableStateProvider(listKey) {
+                AppListSection(
+                    listKey = listKey,
+                    icons = vm.icons,
+                    criteria = if (systemAppsOpen) SpaceBrowseOptions(systemQuery = systemSearchQuery) else uiState.browse.copy(systemQuery = ""),
+                    projectionReady = !uiState.calculating,
+                    segment = uiState.segment,
+                    currentState = if (systemAppsOpen) uiState.systemApps else uiState.current,
+                    systemAppsMode = systemAppsOpen,
+                    isMultiSelect = uiState.isMultiSelect,
+                    multiSelectDomain = uiState.multiSelectDomain,
+                    selectedPkgs = uiState.selectedPkgs,
+                    searchQuery = if (systemAppsOpen) systemSearchQuery else searchQuery,
+                    dualUsability = uiState.dualUsability,
+                    onToggleSelect = { vm.toggleSelect(it) },
+                    onEnterMultiSelect = { vm.enterMultiSelect(it, entryDomainRows) },
+                    onRowSelected = { selectedRow = it },
+                    onRowPrimaryAction = { row, action ->
+                        when (action) {
+                            SpaceRowAction.Open -> vm.launch(context, row.pkg, SpaceSegment.Dual)
+                            SpaceRowAction.Resume -> vm.setFrozen(row.pkg, false)
+                            SpaceRowAction.AddClone -> {
+                                // Same entry as the action sheet: confirm sheet follows the configured
+                                // method; the row button never skips it.
+                                val app = vm.appFor(row.pkg, SpaceSegment.Main)
+                                if (app != null && activity != null) {
+                                    PrismAppClones(activity, prismAppsVm, app, onCloneStateChanged = vm::refresh).request()
+                                }
                             }
-                        }
-                        SpaceRowAction.ContinueInstall -> {
-                            // Pending-install row action: gated like the sheet's 继续安装 entry.
-                            if (!installEntry.enabled) {
-                                installEntry.guidance?.let(vm::reportTransientError)
-                            } else if (activity != null) {
-                                val result = FileBridgeService().openProfileInstallEntry(activity)
-                                if (!result.success) {
-                                    AppFeedbackBus.emit(ActionFeedback(result.message, true))
+                            SpaceRowAction.ContinueInstall -> {
+                                // Pending-install row action: gated like the sheet's 继续安装 entry.
+                                if (!installEntry.enabled) {
+                                    installEntry.guidance?.let(vm::reportTransientError)
+                                } else if (activity != null) {
+                                    val result = FileBridgeService().openProfileInstallEntry(activity)
+                                    if (!result.success) {
+                                        AppFeedbackBus.emit(ActionFeedback(result.message, true))
+                                    }
                                 }
                             }
                         }
-                    }
-                },
-            )
+                    },
+                )
+            }
         }
     }
 
@@ -406,6 +417,7 @@ private fun SpaceTopBar(
     onSelectAll: () -> Unit,
     onExit: () -> Unit,
     onEnterBatch: () -> Unit,
+    canEnterBatch: Boolean,
 ) {
     TopAppBar(
         title = {
@@ -433,7 +445,7 @@ private fun SpaceTopBar(
                 }
             } else if (!systemAppsOpen) {
                 // 批量管理是顶栏显式入口（不再只依赖长按）。
-                PrismTextButton(onClick = onEnterBatch) {
+                PrismTextButton(onClick = onEnterBatch, enabled = canEnterBatch) {
                     Text(stringResource(R.string.lz_space_batch_manage))
                 }
             }
@@ -450,6 +462,10 @@ private fun SpaceTopBar(
 
 @Composable
 private fun AppListSection(
+    listKey: String,
+    icons: SpaceIconLoader,
+    criteria: SpaceBrowseOptions,
+    projectionReady: Boolean,
     segment: SpaceSegment,
     currentState: SpaceSegmentState,
     systemAppsMode: Boolean,
@@ -457,31 +473,24 @@ private fun AppListSection(
     multiSelectDomain: List<SpaceRow>?,
     selectedPkgs: Set<String>?,
     searchQuery: String,
-    sortOrder: SortOrder,
-    cloneFilter: CloneFilter,
-    showSystem: Boolean,
     dualUsability: SpaceUsability,
     onToggleSelect: (String) -> Unit,
     onEnterMultiSelect: (String) -> Unit,
     onRowSelected: (SpaceRow) -> Unit,
     onRowPrimaryAction: (SpaceRow, SpaceRowAction) -> Unit,
 ) {
-    val allRows = (currentState as? SpaceSegmentState.Content)?.rows ?: emptyList()
-    val filteredRows = if (systemAppsMode) {
-        filterSystemAppRows(allRows, searchQuery)
-    } else if (isMultiSelect) {
-        // The selection domain is the entry-time snapshot; background refreshes must not reshape it.
-        multiSelectDomain ?: allRows.filterNot { it.system }
-    } else {
-        applyListTransform(
-            rows = allRows,
-            segment = segment,
-            query = searchQuery,
-            sort = sortOrder,
-            cloneFilter = cloneFilter,
-            showSystem = showSystem,
-        )
+    val listState = rememberLazyListState()
+    var displayedCriteria by rememberSaveable { mutableStateOf(criteria) }
+    LaunchedEffect(criteria, projectionReady) {
+        // Explicitly changing a query/filter/sort starts its new result at the top. Returning to
+        // the same space restores the saved criteria and therefore never triggers this reset.
+        if (projectionReady && displayedCriteria != criteria) {
+            listState.scrollToItem(0)
+            displayedCriteria = criteria
+        }
     }
+    val allRows = (currentState as? SpaceSegmentState.Content)?.rows.orEmpty()
+    val filteredRows = if (isMultiSelect) multiSelectDomain ?: allRows.filterNot { it.system } else allRows
 
     when {
         currentState is SpaceSegmentState.Loading -> {
@@ -507,16 +516,18 @@ private fun AppListSection(
         }
         else -> {
             LazyColumn(
+                state = listState,
                 modifier = Modifier.padding(horizontal = PrismSpacing.Lg)
                     .clip(RoundedCornerShape(PrismRadius.Lg))
                     .background(MaterialTheme.colorScheme.surface)
                     .border(PrismSpacing.Hair, LocalPrismExtraColors.current.cardBorder, RoundedCornerShape(PrismRadius.Lg)),
                 contentPadding = PaddingValues(0.dp),
             ) {
-                items(filteredRows, key = { it.pkg }) { row ->
+                items(filteredRows, key = { "$listKey:${it.pkg}" }) { row ->
                     val isSelected = selectedPkgs?.contains(row.pkg) == true
                     AppCard(
                         row = row,
+                        icons = icons,
                         isMultiSelect = isMultiSelect,
                         isSelected = isSelected,
                         onClick = {
@@ -843,7 +854,9 @@ private fun SpaceToolbar(
             }
         }
 
-        Spacer(modifier = Modifier.height(PrismSpacing.Sm))
+        Box(Modifier.fillMaxWidth().height(PrismSpacing.Sm)) {
+            if (uiState.refreshing || uiState.calculating) LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.Center))
+        }
     }
 }
 
@@ -984,6 +997,7 @@ private fun MenuCheckItem(
 @Composable
 private fun AppCard(
     row: SpaceRow,
+    icons: SpaceIconLoader,
     isMultiSelect: Boolean,
     isSelected: Boolean,
     onClick: () -> Unit,
@@ -1012,9 +1026,8 @@ private fun AppCard(
             modifier = Modifier.padding(horizontal = 15.dp, vertical = 13.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Keep the app icon visible in multi-select; overlay a selection check in the corner
-            // (the icon used to be replaced by a checkbox, hiding which app it is).
-            AppIcon(pkg = row.pkg, label = row.label)
+            // Keep identity visible in multi-select; the selection check stays on the trailing side.
+            AppIcon(row, icons)
 
             Spacer(modifier = Modifier.width(14.dp))
 
@@ -1031,6 +1044,7 @@ private fun AppCard(
                 )
                 if (row.segment == SpaceSegment.Main && !row.system) Text(
                     text = stringResource(when {
+                        !row.cloneStateKnown -> R.string.lz_space_detail_unknown
                         row.cloned -> R.string.lz_space_detail_added
                         row.primaryAction == SpaceRowAction.ContinueInstall -> R.string.lz_space_detail_pending
                         else -> R.string.lz_space_detail_not_added
@@ -1124,37 +1138,20 @@ private fun SelectionCheckBadge(checked: Boolean) {
 }
 
 @Composable
-private fun AppIcon(pkg: String, label: String) {
-    val context = LocalContext.current
-    val icon: Drawable? = remember(pkg) {
-        try { context.packageManager.getApplicationIcon(pkg) } catch (_: Exception) { null }
+private fun AppIcon(row: SpaceRow, icons: SpaceIconLoader) {
+    val pixels = with(LocalDensity.current) { 44.dp.roundToPx() }
+    val dark = isSystemInDarkTheme()
+    val bitmap by produceState<Bitmap?>(null, row.userId, row.pkg, row.iconVersion, pixels, dark) {
+        value = icons.load(row.userId, row.pkg, row.iconVersion, pixels, dark)
     }
-
-    if (icon != null) {
-        val bmp = remember(icon) { icon.toBitmap(48, 48).asImageBitmap() }
-        Image(
-            bitmap = bmp,
-            contentDescription = null,
-            modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(10.dp)),
-        )
+    val image = bitmap?.let { remember(it) { it.asImageBitmap() } }
+    if (image != null) {
+        Image(image, null, Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)))
     } else {
-        // Fallback: colored circle with initial
-        val initial = label.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = initial,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
+        Box(Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center) {
+            Text(row.label.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
+                style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
         }
     }
 }

@@ -1,6 +1,8 @@
 package com.yzddmr6.prismspace.prism.compose.space
 
 import com.yzddmr6.prismspace.data.PrismAppInfo
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 
 enum class PrismSpaceKind { Main, Dual }
 
@@ -26,6 +28,8 @@ interface SpaceRepository {
     /** Cheap CE-unlock-aware usability of the given space; bridge state comes from cache only. */
     fun usabilityOf(space: PrismSpace): SpaceUsability
     fun installedApps(space: PrismSpace): Collection<PrismAppInfo>
+    /** Package and label changes, grouped by Android user; no polling. */
+    fun appChanges(): Flow<Set<Int>> = emptyFlow()
     /** Replaces PrismAppClones `targets.size` magic; == 1(main)+#managed-profiles. */
     fun cloneTargetSpaceCount(): Int
 }

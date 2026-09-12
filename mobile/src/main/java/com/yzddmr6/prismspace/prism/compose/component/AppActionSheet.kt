@@ -200,7 +200,10 @@ fun AppActionSheet(
                     vm.openSystemSettings(row.pkg, SpaceSegment.Main)
                 }
 
-                if (row.cloned) {
+                if (!row.cloneStateKnown) {
+                    SheetAction(icon = PrismIcons.Info, title = stringResource(R.string.lz_space_detail_unknown),
+                        subtitle = stringResource(R.string.lz_space_cached_list), enabled = false) {}
+                } else if (row.cloned) {
                     SheetAction(
                         icon = PrismIcons.Grid,
                         title = stringResource(R.string.lz_app_go_to_dual_space),
