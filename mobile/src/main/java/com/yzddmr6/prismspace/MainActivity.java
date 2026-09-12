@@ -51,6 +51,12 @@ public class MainActivity extends FragmentActivity {
 			return;
 		}
 		mIsDeviceOwner = new DevicePolicies(this).isProfileOrDeviceOwnerOnCallingUser();
+		// Restored fragments attach during onStart. Their container must exist before asynchronous
+		// profile discovery returns, otherwise a theme/language recreation leaves an unattached view.
+		WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+		getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
+		getWindow().setNavigationBarColor(android.graphics.Color.TRANSPARENT);
+		setContentView(R.layout.activity_main);
 		continueParentStartup(savedInstanceState);
 	}
 
@@ -141,11 +147,7 @@ public class MainActivity extends FragmentActivity {
 			return;
 		}
 		mMainUiStarted = true;
-		WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
-		getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
-		getWindow().setNavigationBarColor(android.graphics.Color.TRANSPARENT);
-		setContentView(R.layout.activity_main);
-		if (savedInstanceState != null) return;
+		if (getSupportFragmentManager().findFragmentById(R.id.container) != null) return;
 		final PrismComposeHostFragment fragment = new PrismComposeHostFragment();
 		getSupportFragmentManager().beginTransaction().replace(R.id.container, fragment).commit();
 		performOverallAnalyticsIfNeeded();
