@@ -91,8 +91,8 @@ class SetupController(
                 stateVm.incompleteSetupAcked = true
                 stateVm.setUiState(SetupUiState.Welcome)
             }
-            R.string.button_setup_space_with_root -> {
-                PrismSetup.requestProfileOwnerSetupWithRoot(Activities.findActivityFrom(activity))
+            R.string.button_setup_space_privileged -> {
+                PrismSetup.requestPrivilegedSetup(Activities.findActivityFrom(activity))
             }
             R.string.button_setup_try_provision_anyway -> {
                 // The pre-check is heuristic; the launch itself is the truthful capability
@@ -182,7 +182,7 @@ class SetupController(
                         vm.setUiState(SetupUiState.Error(
                             messageRes = R.string.setup_solution_for_cancelled_provision,
                             messageParams = null,
-                            extraActionRes = R.string.button_setup_space_with_root,
+                            extraActionRes = R.string.button_setup_space_privileged,
                         ))
                     }
                     SetupCompletionAction.WaitForHealth -> {

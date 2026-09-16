@@ -127,7 +127,7 @@ public class SetupViewModel {
 		final @StringRes int message = ProvisioningProbe.errorMessageFor(probe.classify(), profile_count);
 		final SetupViewModel error = buildErrorVM(message, null);
 		if (message == R.string.setup_error_provisioning_blocked_by_profile)
-			error.withExtraAction(R.string.button_setup_space_with_root);
+			error.withExtraAction(R.string.button_setup_space_privileged);
 		return error.withTryProvisionAnyway();
 	}
 

@@ -31,7 +31,7 @@ class SetupManagedDeviceBoundaryTest {
     fun `device owner precondition is checked before any root fallback is offered`() {
         val source = File("src/main/java/com/yzddmr6/prismspace/setup/compose/SetupController.kt").readText()
         val precondition = source.indexOf("checkManagedProvisioningPrerequisites")
-        val rootFallback = source.indexOf("R.string.button_setup_space_with_root")
+        val rootFallback = source.indexOf("R.string.button_setup_space_privileged")
 
         assertTrue(precondition >= 0)
         assertTrue(rootFallback >= 0)

@@ -30,13 +30,14 @@
     <string name="prism_setup_howto_delete_body">雙開空間只是手機上的一個工作資料，不需要時可以完整刪除。</string>
     <string name="prism_setup_error_title">無法繼續</string>
     <string name="dialog_root_setup_profile_exists">裝置上已存在 PrismSpace 雙開空間。如需重新建立，請先在主空間中刪除已有的雙開空間，然後再次嘗試設定。</string>
+    <string name="dialog_shizuku_permission_denied">未獲得 Shizuku 授權，無法繼續特權建立。請再次點擊並選擇「允許」；如 Shizuku 未執行，請先安裝並啟動 Shizuku / Sui。</string>
     <string name="setup_root_profile_progress">正在建立雙開空間…</string>
     <string name="setup_error_managed_profile_not_supported">抱歉，此裝置不支援必需的「Android 工作資料」特性。</string>
     <string name="setup_error_provisioning_incomplete">雙開空間的建立不完整，在此之前的建立嘗試可能並未成功。\n\n<b>如果您的裝置或其它三方工具施加了「自啟動」（或類似的）限制，請務必首先將 PrismSpace 解除限制或加入白名單，然後再次建立雙開空間。</b></string>
     <string name="setup_error_managed_device">Android 目前不允許裝置擁有者（Device Owner）與工作設定檔共存，而且互斥是雙向的；Root 或其他特權模式也無法繞過這項平台規則。\n\n目前接管裝置的應用程式：%1$s。\n\n如要建立雙開空間，請先停用該裝置管理應用程式（例如 Dhizuku），然後重試。雙開空間存在期間，也無法再啟用 Device Owner 類工具。</string>
     <string name="setup_unknown_device_owner">未知裝置管理應用程式</string>
     <string name="setup_error_missing_managed_provisioning">抱歉，由於此裝置並未完整支援必需的「Android 工作資料」特性。</string>
-    <string name="setup_error_provisioning_blocked_by_profile">偵測到裝置上已存在系統「應用雙開」或其他工作資料，建立工作資料的入口可能被佔用。請先在系統設定中關閉「應用雙開」或「手機分身」（或移除其他工作資料）後重試；也可以嘗試透過 ROOT 直接建立。</string>
+    <string name="setup_error_provisioning_blocked_by_profile">偵測到裝置上已存在系統「應用雙開」或其他工作資料，建立工作資料的入口可能被佔用。請先在系統設定中關閉「應用雙開」或「手機分身」（或移除其他工作資料）後重試；也可以透過 Shizuku / ROOT 直接建立。</string>
     <string name="setup_error_existing_space_state">裝置上已有尚未就緒的雙開資料。請返回設定修復，或刪除後再重新建立。</string>
     <string name="setup_error_orphan_profile">Android 中已有不受 PrismSpace 管理的工作資料。請先在系統設定中確認並移除該資料。</string>
     <string name="setup_solution_for_cancelled_provision">建立雙開空間遇到了困難？\n\n如果建立過程被中斷，請重新進入系統建立流程，並確保 PrismSpace 允許背景啟動。部分深度客製系統還需要先關閉電池最佳化或安全限制，然後再重試。\n\nRoot 建立只作為進階兜底路徑，普通使用者路徑不依賴 Root。</string>
@@ -44,7 +45,7 @@
 
     <string name="button_setup_help">建立說明</string>
     <string name="button_have_checked">我已檢查</string>
-    <string name="button_setup_space_with_root">透過 ROOT 建立雙開空間</string>
+    <string name="button_setup_space_privileged">透過 Shizuku / ROOT 建立</string>
     <string name="button_setup_try_provision_anyway">仍要嘗試系統建立</string>
     <string name="prism_help_setup_title">建立說明</string>
     <string name="prism_help_setup_body">PrismSpace 透過 Android 工作資料建立獨立的雙開空間。\n\n如果建立失敗，先檢查這些項目：\n· 允許 PrismSpace 背景執行和自啟動。\n· 系統建立頁面工作時不要手動關閉。\n· 關閉安全中心或電池策略對 PrismSpace 的限制後重試。\n· Root 建立僅作為普通建立被系統攔截後的進階兜底。</string>
