@@ -53,7 +53,7 @@ public class SetupViewModel {
 	public static @CheckResult SetupViewModel checkManagedProvisioningPrerequisites(final Context context, final boolean ignore_incomplete_setup) {
 		final PackageManager pm = context.getPackageManager();
 		if (buildManagedProfileProvisioningIntent(context).resolveActivity(pm) == null)
-			return buildErrorVM(R.string.setup_error_missing_managed_provisioning, reason("lack_managed_provisioning"));
+			return buildMissingProvisioningError(context);
 
 		// Check for incomplete provisioning, before DPM.isProvisioningAllowed() check which returns true in this case.
 		if (! Users.hasProfile()) for (final int profile_id : PrismManager.getProfileIdsIncludingDisabled(context)) {
@@ -99,6 +99,28 @@ public class SetupViewModel {
 
 	private static Analytics.Event reason(final String reason) {
 		return Analytics.$().event("setup_prism_failure").with(Analytics.Param.ITEM_CATEGORY, reason);
+	}
+
+	/**
+	 * The provisioning activity does not resolve. With the manifest {@code <queries>} entry this
+	 * means the component is genuinely absent or disabled — on MIUI that happens while the
+	 * system 应用双开/手机分身 (or another work profile) occupies the profile slot, which is a
+	 * recoverable state, not a missing platform feature. Distinguish the two honestly: profiles
+	 * present → actionable guidance plus the ROOT alternative; none → the classic not-supported.
+	 */
+	private static SetupViewModel buildMissingProvisioningError(final Context context) {
+		int profile_count = 0;
+		try {
+			final android.os.UserManager um = context.getSystemService(android.os.UserManager.class);
+			if (um != null) profile_count = Math.max(0, um.getUserProfiles().size() - 1);
+		} catch (final RuntimeException ignored) {}
+		reason("lack_managed_provisioning").withRaw("profiles", String.valueOf(profile_count))
+				.withRaw("miui", String.valueOf(com.yzddmr6.prismspace.util.RomVariants.isMiui())).send();
+		if (profile_count > 0) {
+			return buildErrorVM(R.string.setup_error_provisioning_blocked_by_profile, null)
+					.withExtraAction(R.string.button_setup_space_with_root);
+		}
+		return buildErrorVM(R.string.setup_error_missing_managed_provisioning, null);
 	}
 
 	private static SetupViewModel buildErrorVM(final @StringRes int message, final @Nullable Analytics.Event event) {

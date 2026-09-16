@@ -48,6 +48,7 @@ fun PrismSetupScreen(controller: SetupController) {
                 checking = state is SetupUiState.Checking,
                 onPrimaryCta = { controller.onPrimaryCta() },
                 onShowHelp = { controller.onShowHelp() },
+                onExportDiagnostics = { controller.onExportDiagnostics() },
             )
             if (state is SetupUiState.Error) {
                 SetupErrorDialog(
@@ -66,6 +67,7 @@ private fun SetupContent(
     checking: Boolean,
     onPrimaryCta: () -> Unit,
     onShowHelp: () -> Unit,
+    onExportDiagnostics: () -> Unit,
 ) {
     Column(
         modifier = modifier
@@ -78,7 +80,8 @@ private fun SetupContent(
         HeroSection()
         FeaturesSection()
         HowToSection()
-        CtaSection(checking = checking, onPrimary = onPrimaryCta, onHelp = onShowHelp)
+        CtaSection(checking = checking, onPrimary = onPrimaryCta, onHelp = onShowHelp,
+            onExportDiagnostics = onExportDiagnostics)
         PrivacySection()
         Spacer(Modifier.height(24.dp))
     }
@@ -180,7 +183,12 @@ private fun PrivacySection() {
 }
 
 @Composable
-private fun CtaSection(checking: Boolean, onPrimary: () -> Unit, onHelp: () -> Unit) {
+private fun CtaSection(
+    checking: Boolean,
+    onPrimary: () -> Unit,
+    onHelp: () -> Unit,
+    onExportDiagnostics: () -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(
             onClick = onPrimary,
@@ -196,12 +204,16 @@ private fun CtaSection(checking: Boolean, onPrimary: () -> Unit, onHelp: () -> U
                     style = MaterialTheme.typography.titleMedium,
                 )
         }
-        PrismTextButton(
-            onClick = onHelp,
-            modifier = Modifier
-                .fillMaxWidth(),
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
         ) {
-            Text(text = stringResource(R.string.prism_setup_cta_help))
+            PrismTextButton(onClick = onHelp) {
+                Text(text = stringResource(R.string.prism_setup_cta_help))
+            }
+            PrismTextButton(onClick = onExportDiagnostics) {
+                Text(text = stringResource(R.string.lz_set_export_logs_title))
+            }
         }
     }
 }
