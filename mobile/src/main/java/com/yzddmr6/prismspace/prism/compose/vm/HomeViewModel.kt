@@ -236,6 +236,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private val _uiState = MutableStateFlow<HomeUiModel?>(null)
     val uiState: StateFlow<HomeUiModel?> = _uiState
 
+    private val _updateInfo = MutableStateFlow<UpdateInfo?>(null)
+    val updateInfo: StateFlow<UpdateInfo?> = _updateInfo
+
     init {
         viewModelScope.launch {
             stateRepo.state.collectLatest { snapshot ->
@@ -246,6 +249,19 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         }
+        viewModelScope.launch {
+            // Show the still-undismissed pending prompt instantly, then refresh silently in the
+            // background (throttled; failures never surface and keep the pending prompt).
+            _updateInfo.value = UpdateChecker.pendingPrompt(getApplication())
+            val decision = UpdateChecker.check(getApplication(), force = false)
+            if (decision is UpdateDecision.Prompt) _updateInfo.value = decision.info
+        }
+    }
+
+    /** Dismiss the home update dialog: the same version never prompts again automatically. */
+    fun dismissUpdate() {
+        _updateInfo.value?.let { UpdateChecker.markDismissed(getApplication(), it.version) }
+        _updateInfo.value = null
     }
 
     fun refresh() {

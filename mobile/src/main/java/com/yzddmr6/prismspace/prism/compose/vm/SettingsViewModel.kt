@@ -99,27 +99,6 @@ data class SettingsUiModel(
     val spaceSuspended: Boolean get() = spaceFreezeState == SpaceFreezeState.Frozen
 }
 
-/** A newer GitHub release than the installed build. */
-data class UpdateInfo(val version: String, val notes: String, val url: String)
-
-/**
- * Compare dotted numeric versions ("0.0.2" vs "0.0.1"). Returns >0 if [a] is newer than [b],
- * 0 if equal, <0 if older. Non-numeric / missing segments are treated as 0. Pure & unit-testable.
- */
-fun compareSemver(a: String, b: String): Int {
-    fun parts(v: String) = v.trim().removePrefix("v").removePrefix("V")
-        .split(".").map { it.takeWhile(Char::isDigit).toIntOrNull() ?: 0 }
-    val pa = parts(a); val pb = parts(b)
-    for (i in 0 until maxOf(pa.size, pb.size)) {
-        val d = (pa.getOrNull(i) ?: 0) - (pb.getOrNull(i) ?: 0)
-        if (d != 0) return d
-    }
-    return 0
-}
-
-/** The GitHub repo whose Releases drive the in-app update check. */
-private const val GITHUB_REPO = "yzddmr6/PrismSpace"
-
 // ---------------------------------------------------------------------------
 // Pure mapper — maps raw flags + PrismSettingsModeState to SettingsUiModel.
 // ---------------------------------------------------------------------------
@@ -291,45 +270,27 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * 检查更新: query the GitHub Releases API for the latest release, compare its tag_name to the
      * installed versionName, and surface the update dialog (notes + release page) when newer.
+     * The manual check always runs; the automatic home-page check shares the same UpdateChecker.
      */
     fun checkForUpdate() {
         setFeedback(str(R.string.lz_setvm_update_checking), isError = false)
         viewModelScope.launch {
-            val release = withContext(Dispatchers.IO) { fetchLatestRelease() }
-            val ctx: Context = getApplication()
-            val current = runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }
-                .getOrNull() ?: "0.0.0"
-            when {
-                release == null -> setFeedback(str(R.string.lz_setvm_update_failed), isError = true)
-                compareSemver(release.version, current) > 0 ->
-                    _uiState.value = _uiState.value?.copy(updateInfo = UpdateInfo(
-                        release.version.trim().removePrefix("v").removePrefix("V"), release.notes, release.url))
-                else -> setFeedback(str(R.string.lz_setvm_update_latest, current), isError = false)
+            when (val decision = UpdateChecker.check(getApplication(), force = true)) {
+                is UpdateDecision.Prompt ->
+                    _uiState.value = _uiState.value?.copy(updateInfo = decision.info)
+                UpdateDecision.NoPrompt ->
+                    setFeedback(str(R.string.lz_setvm_update_latest, UpdateChecker.currentVersion(getApplication())), isError = false)
+                UpdateDecision.Unavailable ->
+                    setFeedback(str(R.string.lz_setvm_update_failed), isError = true)
             }
         }
     }
 
-    /** Dismiss the update dialog (用户点「稍后」). */
-    fun dismissUpdate() { _uiState.value = _uiState.value?.copy(updateInfo = null) }
-
-    private fun fetchLatestRelease(): ReleaseInfo? = runCatching {
-        val conn = (java.net.URL("https://api.github.com/repos/$GITHUB_REPO/releases/latest").openConnection()
-            as java.net.HttpURLConnection).apply {
-            connectTimeout = 10_000; readTimeout = 10_000
-            setRequestProperty("Accept", "application/vnd.github+json")
-            setRequestProperty("User-Agent", "PrismSpace")
-        }
-        try {
-            if (conn.responseCode != 200) return null
-            val json = org.json.JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
-            ReleaseInfo(
-                version = json.optString("tag_name"),
-                notes = json.optString("body").ifBlank { json.optString("name") },
-                url = json.optString("html_url").ifBlank { "https://github.com/$GITHUB_REPO/releases" })
-        } finally { conn.disconnect() }
-    }.getOrNull()
-
-    private data class ReleaseInfo(val version: String, val notes: String, val url: String)
+    /** Dismiss the update dialog (用户点「稍后」): the same version never prompts again automatically. */
+    fun dismissUpdate() {
+        _uiState.value?.updateInfo?.let { UpdateChecker.markDismissed(getApplication(), it.version) }
+        _uiState.value = _uiState.value?.copy(updateInfo = null)
+    }
 
     fun checkShizuku(): Boolean {
         val authorized = isShizukuAuthorized()
