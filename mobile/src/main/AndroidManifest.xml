@@ -25,9 +25,9 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="market" />
         </intent>
-        <!-- Android 11+ package visibility: without this the provisioning pre-check
-             resolveActivity() returns null even when the system supports work profiles,
-             which was misreported as "device does not support Android work profile". -->
+        <!-- Android 11+ package visibility. This app already holds QUERY_ALL_PACKAGES,
+             so these entries are belt-and-suspenders: they keep the provisioning pre-check
+             honest if that permission is ever dropped from the manifest. -->
         <intent>
             <action android:name="android.app.action.PROVISION_MANAGED_PROFILE" />
         </intent>

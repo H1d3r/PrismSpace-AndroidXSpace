@@ -236,17 +236,29 @@ private fun SetupErrorDialog(
         title = { Text(stringResource(R.string.prism_setup_error_title)) },
         text = { Text(message) },
         confirmButton = {
-            val extra = state.extraActionRes
-            if (extra != null) {
-                PrismTextButton(onClick = {
-                    onExtraAction(extra)
-                    onDismiss()
-                }) {
-                    Text(stringResource(extra))
+            Column(horizontalAlignment = Alignment.End) {
+                if (state.tryProvisionAnyway) {
+                    // No onDismiss here: the launch either leaves the wizard (system
+                    // provisioning UI) or its catch sets a fresh error state — dismissing
+                    // first would clobber that honest fallback with the Welcome state.
+                    PrismTextButton(onClick = {
+                        onExtraAction(R.string.button_setup_try_provision_anyway)
+                    }) {
+                        Text(stringResource(R.string.button_setup_try_provision_anyway))
+                    }
                 }
-            } else {
-                PrismTextButton(onClick = onDismiss) {
-                    Text(stringResource(android.R.string.ok))
+                val extra = state.extraActionRes
+                if (extra != null) {
+                    PrismTextButton(onClick = {
+                        onExtraAction(extra)
+                        onDismiss()
+                    }) {
+                        Text(stringResource(extra))
+                    }
+                } else {
+                    PrismTextButton(onClick = onDismiss) {
+                        Text(stringResource(android.R.string.ok))
+                    }
                 }
             }
         },

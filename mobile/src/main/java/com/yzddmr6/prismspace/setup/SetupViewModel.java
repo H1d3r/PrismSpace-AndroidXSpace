@@ -48,6 +48,9 @@ public class SetupViewModel {
 	public @StringRes int message;
 	public @Nullable Object[] message_params;
 	public int action_extra;
+	/** True when the error state should offer "try system setup anyway" — the resolveActivity
+	 *  pre-check is a heuristic and must never hard-block the one truthful test: attempting. */
+	public boolean try_provision_anyway;
 
 	/** @return null if all prerequisites are met. */
 	public static @CheckResult SetupViewModel checkManagedProvisioningPrerequisites(final Context context, final boolean ignore_incomplete_setup) {
@@ -102,11 +105,12 @@ public class SetupViewModel {
 	}
 
 	/**
-	 * The provisioning activity does not resolve. With the manifest {@code <queries>} entry this
-	 * means the component is genuinely absent or disabled — on MIUI that happens while the
-	 * system 应用双开/手机分身 (or another work profile) occupies the profile slot, which is a
-	 * recoverable state, not a missing platform feature. Distinguish the two honestly: profiles
-	 * present → actionable guidance plus the ROOT alternative; none → the classic not-supported.
+	 * The provisioning activity does not resolve. This app holds {@code QUERY_ALL_PACKAGES},
+	 * so package visibility is ruled out; the entry is genuinely absent or disabled. Vendor
+	 * dual-apps features (MIUI 应用双开/手机分身) are known to occupy the entry — a
+	 * recoverable state, not a missing platform feature. The probe separates the realities
+	 * for diagnostics, the copy only claims occupation when a handler exists to be occupied,
+	 * and the user always keeps the option to attempt the system flow anyway.
 	 */
 	private static SetupViewModel buildMissingProvisioningError(final Context context) {
 		int profile_count = 0;
@@ -114,13 +118,17 @@ public class SetupViewModel {
 			final android.os.UserManager um = context.getSystemService(android.os.UserManager.class);
 			if (um != null) profile_count = Math.max(0, um.getUserProfiles().size() - 1);
 		} catch (final RuntimeException ignored) {}
+		final ProvisioningProbe probe = ProvisioningProbe.collect(context);
+		com.yzddmr6.prismspace.analytics.DiagnosticLog.INSTANCE.i(TAG,
+				"provisioning entry missing: " + probe.toLogString() + " profiles=" + profile_count);
 		reason("lack_managed_provisioning").withRaw("profiles", String.valueOf(profile_count))
-				.withRaw("miui", String.valueOf(com.yzddmr6.prismspace.util.RomVariants.isMiui())).send();
-		if (profile_count > 0) {
-			return buildErrorVM(R.string.setup_error_provisioning_blocked_by_profile, null)
-					.withExtraAction(R.string.button_setup_space_with_root);
-		}
-		return buildErrorVM(R.string.setup_error_missing_managed_provisioning, null);
+				.withRaw("miui", String.valueOf(com.yzddmr6.prismspace.util.RomVariants.isMiui()))
+				.withRaw("mp", probe.classify().name().toLowerCase(java.util.Locale.US)).send();
+		final @StringRes int message = ProvisioningProbe.errorMessageFor(probe.classify(), profile_count);
+		final SetupViewModel error = buildErrorVM(message, null);
+		if (message == R.string.setup_error_provisioning_blocked_by_profile)
+			error.withExtraAction(R.string.button_setup_space_with_root);
+		return error.withTryProvisionAnyway();
 	}
 
 	private static SetupViewModel buildErrorVM(final @StringRes int message, final @Nullable Analytics.Event event) {
@@ -141,6 +149,8 @@ public class SetupViewModel {
 	}
 
 	private SetupViewModel withExtraAction(final @StringRes int text) { action_extra = text; return this; }
+
+	private SetupViewModel withTryProvisionAnyway() { try_provision_anyway = true; return this; }
 
 	/** Public accessor for the Compose {@link com.yzddmr6.prismspace.setup.compose.SetupController}.
 	 *  Same intent the Java state machine launched; do not modify. */
