@@ -77,6 +77,9 @@ class SpaceStateRepository(context: Context) {
     /** A destructive route is authorized only by facts collected for that exact attempt. */
     suspend fun preflightDelete(): SpaceState? = store.refreshAndRead("preflight_delete")
 
+    /** Most recent facts line behind the current classification; diagnostics-export only. */
+    fun lastFactsDiagnosticLine(): String? = store.lastFactsLine
+
     /** Java bridge for legacy callers. Invoke from a worker thread only. */
     fun preflightCreateBlocking(): SpaceState? = runBlocking { preflightCreate() }
 
@@ -111,6 +114,7 @@ internal class SpaceStateStore(
     private val invalidations = Channel<String>(Channel.CONFLATED)
 
     val state: StateFlow<SpaceSnapshot> = mutableState.asStateFlow()
+    @Volatile var lastFactsLine: String? = null; internal set
 
     init {
         scope.launch {
@@ -196,8 +200,10 @@ private object SpaceStateStores {
             collector = { reason ->
                 withContext(Dispatchers.IO) {
                     val facts = SpaceStateFactCollector(context).facts()
-                    SpaceStateClassifier.classify(facts).also { state ->
-                        DiagnosticLog.i(SpaceStateRepository.TAG, "reason=$reason ${facts.diagnosticLine()} -> $state")
+                    SpaceStateClassifier.classify(facts, Modules.MODULE_ENGINE).also { state ->
+                        val line = "reason=$reason ${facts.diagnosticLine()} -> $state"
+                        store.lastFactsLine = line
+                        DiagnosticLog.i(SpaceStateRepository.TAG, line)
                     }
                 }
             },
@@ -238,7 +244,6 @@ private class SpaceStateFactCollector(private val appContext: Context) {
             .onFailure { DiagnosticLog.w(SpaceStateRepository.TAG, "profile enumeration failed", it) }
             .getOrDefault(emptyList())
             .filterNot { it == Users.current() }
-
         return SpaceFacts(profiles.map { profile ->
             collectProfileFacts(userManager, launcherApps, profile)
         })
@@ -271,6 +276,11 @@ private class SpaceStateFactCollector(private val appContext: Context) {
         }.onFailure {
             DiagnosticLog.w(SpaceStateRepository.TAG, "marker fact unavailable user=$userId", it)
         }.getOrDefault(false)
+        val ownerPackage = runCatching {
+            DevicePolicies.getProfileOwnerAsUser(appContext, profile)?.orElse(null)?.packageName
+        }.onFailure {
+            DiagnosticLog.w(SpaceStateRepository.TAG, "profile owner fact unavailable user=$userId", it)
+        }.getOrNull()
         val running = runCatching { Users.isProfileRunning(appContext, profile) }.getOrDefault(false)
         val quiet = runCatching { Users.isProfileQuietModeEnabled(appContext, profile) }.getOrDefault(false)
         val unlocked = runCatching { userManager.isUserUnlocked(profile) }.getOrDefault(false)
@@ -301,6 +311,7 @@ private class SpaceStateFactCollector(private val appContext: Context) {
             bridgeCause = cachedHealth?.ping?.toBridgeCause() ?: SpaceBridgeCause.NotChecked,
             profileOwner = exact?.profileOwner,
             provisionComplete = exact?.provisionComplete,
+            profileOwnerPackage = ownerPackage,
         )
     }
 
@@ -331,7 +342,8 @@ private fun SpaceFacts.diagnosticLine(): String = profiles.joinToString(
     postfix = "])",
 ) { p ->
     "${p.userId}:pkg=${p.prismPackagePresent},marker=${p.ownershipMarkerPresent}," +
-        "running=${p.running},unlocked=${p.unlocked},quiet=${p.quietMode},bridge=${p.bridgeReady}"
+        "owner=${p.profileOwnerPackage ?: "-"},running=${p.running},unlocked=${p.unlocked}," +
+        "quiet=${p.quietMode},bridge=${p.bridgeReady}"
 }
 
 internal enum class ProvisioningEndSignal {

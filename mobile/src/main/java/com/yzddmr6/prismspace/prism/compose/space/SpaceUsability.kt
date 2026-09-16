@@ -28,9 +28,13 @@ fun spaceUsability(
  * independently expiring set of Android/bridge facts. */
 fun spaceUsabilityFromState(state: SpaceState?, userId: Int): SpaceUsability {
     if (state == null) return SpaceUsability.Unknown
+    // A foreign profile belongs to another app/system feature; our space is absent regardless of
+    // which user id the caller is tracking.
+    if (state is SpaceState.ForeignProfile) return SpaceUsability.NotProvisioned
     if (state.userId != null && state.userId != userId) return SpaceUsability.Unknown
     return when (state) {
-        SpaceState.NoProfile, is SpaceState.OrphanProfile -> SpaceUsability.NotProvisioned
+        SpaceState.NoProfile, is SpaceState.OrphanProfile, is SpaceState.ForeignProfile ->
+            SpaceUsability.NotProvisioned
         is SpaceState.Provisioning -> SpaceUsability.Unknown
         is SpaceState.HalfProvisioned, is SpaceState.BridgeDown -> SpaceUsability.BridgeNotReady
         is SpaceState.Locked -> SpaceUsability.LockedNeedsUnlock

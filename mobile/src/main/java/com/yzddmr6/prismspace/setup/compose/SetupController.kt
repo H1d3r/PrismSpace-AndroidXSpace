@@ -54,6 +54,8 @@ class SetupController(
                     return@launch
                 }
                 SpaceState.NoProfile -> Unit
+                // A foreign profile (MIUI XSpace, another DPC, ...) is not ours; setup may proceed.
+                is SpaceState.ForeignProfile -> Unit
                 is SpaceState.OrphanProfile -> {
                     stateVm.setUiState(SetupUiState.Error(
                         messageRes = R.string.setup_error_orphan_profile,

@@ -14,64 +14,98 @@ class SpaceStateClassifierTest {
         quiet: Boolean = false,
         bridge: Boolean? = true,
         owner: Boolean? = true,
+        ownerPackage: String? = null,
     ) = SpaceProfileFacts(userId, pkg, marker, provisioning, running, unlocked, quiet, bridge,
-        profileOwner = owner)
+        profileOwner = owner, profileOwnerPackage = ownerPackage)
 
-    @Test fun noProfile() = assertEquals(SpaceState.NoProfile, SpaceStateClassifier.classify(SpaceFacts(emptyList())))
+    private fun classify(facts: SpaceFacts) = SpaceStateClassifier.classify(facts, PRISM_PACKAGE)
 
-    @Test fun orphanHasNoPrismPackage() = assertEquals(
-        SpaceState.OrphanProfile(22), SpaceStateClassifier.classify(SpaceFacts(listOf(profile(pkg = false, marker = false)))),
+    @Test fun noProfile() = assertEquals(SpaceState.NoProfile, classify(SpaceFacts(emptyList())))
+
+    @Test fun orphanRequiresOwnershipEvidence_profileOwnerPackage() = assertEquals(
+        SpaceState.OrphanProfile(22),
+        classify(SpaceFacts(listOf(profile(pkg = false, marker = false, ownerPackage = PRISM_PACKAGE)))),
     )
+
+    /** A profile created by the root flow carries our package, so a genuine leftover keeps both
+     *  package and owner evidence; without any of them it must degrade to foreign. */
+    @Test fun rootLeftoverWithoutAnyEvidenceIsForeign() = assertEquals(
+        SpaceState.ForeignProfile(13, null),
+        classify(SpaceFacts(listOf(profile(userId = 13, pkg = false, marker = false)))),
+    )
+
+    @Test fun miuiXSpaceIsForeignNotOrphan() = assertEquals(
+        SpaceState.ForeignProfile(999, null),
+        classify(SpaceFacts(listOf(profile(userId = 999, pkg = false, marker = false)))),
+    )
+
+    @Test fun otherDpcProfileIsForeignWithItsOwnerPackage() = assertEquals(
+        SpaceState.ForeignProfile(10, "com.other.dpc"),
+        classify(SpaceFacts(listOf(
+            profile(userId = 10, pkg = false, marker = false, ownerPackage = "com.other.dpc"),
+        ))),
+    )
+
+    @Test fun foreignNeverOutranksPrismEvidence() {
+        val xspace999 = profile(userId = 999, pkg = false, marker = false)
+        val orphan22 = profile(userId = 22, pkg = false, marker = false, ownerPackage = PRISM_PACKAGE)
+        assertEquals(SpaceState.OrphanProfile(22), classify(SpaceFacts(listOf(xspace999, orphan22))))
+        assertEquals(SpaceState.ForeignProfile(999, null), classify(SpaceFacts(listOf(xspace999))))
+    }
 
     @Test fun provisioningPrecedesIncompleteMarker() = assertEquals(
         SpaceState.Provisioning(22),
-        SpaceStateClassifier.classify(SpaceFacts(listOf(profile(marker = false, provisioning = true)))),
+        classify(SpaceFacts(listOf(profile(marker = false, provisioning = true)))),
     )
 
     @Test fun halfProvisionedIsPreciselyResumableOnlyWithBridgeAndOwnership() {
-        assertEquals(SpaceState.HalfProvisioned(22, true), SpaceStateClassifier.classify(
+        assertEquals(SpaceState.HalfProvisioned(22, true), classify(
             SpaceFacts(listOf(profile(marker = false, bridge = true, owner = true)))))
-        assertEquals(SpaceState.HalfProvisioned(22, false), SpaceStateClassifier.classify(
+        assertEquals(SpaceState.HalfProvisioned(22, false), classify(
             SpaceFacts(listOf(profile(marker = false, bridge = false, owner = true)))))
-        assertEquals(SpaceState.HalfProvisioned(22, false), SpaceStateClassifier.classify(
+        assertEquals(SpaceState.HalfProvisioned(22, false), classify(
             SpaceFacts(listOf(profile(marker = false, bridge = true, owner = false)))))
     }
 
     @Test fun quietModePrecedesItsDerivedStoppedAndLockedFacts() = assertEquals(
         SpaceState.Inactive(22),
-        SpaceStateClassifier.classify(SpaceFacts(listOf(profile(running = false, unlocked = false, quiet = true)))),
+        classify(SpaceFacts(listOf(profile(running = false, unlocked = false, quiet = true)))),
     )
 
     @Test fun unlockedFalseWhileRunningIsLocked() = assertEquals(
-        SpaceState.Locked(22), SpaceStateClassifier.classify(SpaceFacts(listOf(profile(unlocked = false)))),
+        SpaceState.Locked(22), classify(SpaceFacts(listOf(profile(unlocked = false)))),
     )
 
     @Test fun quietOrStoppedIsInactive() {
-        assertEquals(SpaceState.Inactive(22), SpaceStateClassifier.classify(SpaceFacts(listOf(profile(quiet = true)))))
-        assertEquals(SpaceState.Inactive(22), SpaceStateClassifier.classify(SpaceFacts(listOf(profile(running = false)))))
+        assertEquals(SpaceState.Inactive(22), classify(SpaceFacts(listOf(profile(quiet = true)))))
+        assertEquals(SpaceState.Inactive(22), classify(SpaceFacts(listOf(profile(running = false)))))
     }
 
     @Test fun missingAndFailedBridgeAreExplicit() {
-        assertEquals(SpaceState.BridgeDown(22, SpaceBridgeCause.NotChecked), SpaceStateClassifier.classify(
+        assertEquals(SpaceState.BridgeDown(22, SpaceBridgeCause.NotChecked), classify(
             SpaceFacts(listOf(profile(bridge = null)))))
-        assertEquals(SpaceState.BridgeDown(22, SpaceBridgeCause.TimedOut), SpaceStateClassifier.classify(
+        assertEquals(SpaceState.BridgeDown(22, SpaceBridgeCause.TimedOut), classify(
             SpaceFacts(listOf(profile(bridge = false).copy(bridgeCause = SpaceBridgeCause.TimedOut)))))
     }
 
     @Test fun healthy() = assertEquals(
-        SpaceState.Healthy(22), SpaceStateClassifier.classify(SpaceFacts(listOf(profile()))),
+        SpaceState.Healthy(22), classify(SpaceFacts(listOf(profile()))),
     )
 
     @Test fun multipleProfilesUseEvidenceThenStableIdNotEnumerationOrder() {
-        val orphan999 = profile(userId = 999, pkg = false, marker = false)
+        val orphan999 = profile(userId = 999, pkg = false, marker = false, ownerPackage = PRISM_PACKAGE)
         val half100 = profile(userId = 100, marker = false)
         val managed22 = profile(userId = 22)
-        assertEquals(SpaceState.Healthy(22), SpaceStateClassifier.classify(SpaceFacts(listOf(orphan999, half100, managed22))))
-        assertEquals(SpaceState.HalfProvisioned(100, true), SpaceStateClassifier.classify(SpaceFacts(listOf(orphan999, half100))))
+        assertEquals(SpaceState.Healthy(22), classify(SpaceFacts(listOf(orphan999, half100, managed22))))
+        assertEquals(SpaceState.HalfProvisioned(100, true), classify(SpaceFacts(listOf(orphan999, half100))))
     }
 
     @Test fun specialUserIdsAreDataNotSentinels() {
-        assertEquals(SpaceState.Healthy(999), SpaceStateClassifier.classify(SpaceFacts(listOf(profile(userId = 999)))))
-        assertEquals(SpaceState.Healthy(100), SpaceStateClassifier.classify(SpaceFacts(listOf(profile(userId = 100)))))
+        assertEquals(SpaceState.Healthy(999), classify(SpaceFacts(listOf(profile(userId = 999)))))
+        assertEquals(SpaceState.Healthy(100), classify(SpaceFacts(listOf(profile(userId = 100)))))
+    }
+
+    private companion object {
+        const val PRISM_PACKAGE = "com.yzddmr6.prismspace"
     }
 }
