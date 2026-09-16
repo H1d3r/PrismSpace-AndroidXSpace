@@ -23,7 +23,16 @@ class HomeStateTest {
         assertTrue(SpaceStateRepository.shouldOpenSetup(SpaceState.NoProfile))
         assertFalse(SpaceStateRepository.shouldOpenSetup(null))
         assertFalse(SpaceStateRepository.shouldOpenSetup(SpaceState.OrphanProfile(22)))
+        assertFalse(SpaceStateRepository.shouldOpenSetup(SpaceState.ForeignProfile(999)))
         assertFalse(SpaceStateRepository.shouldOpenSetup(SpaceState.HalfProvisioned(22, resumable = true)))
+    }
+
+    @Test fun `foreign profile maps to not created everywhere`() {
+        assertEquals(SpaceHealth.NotCreated, spaceHealth(SpaceState.ForeignProfile(999)))
+        assertEquals(
+            R.string.lz_home_profile_not_created,
+            profileStatusLabelRes(SpaceState.ForeignProfile(999)),
+        )
     }
 
     @Test fun `canonical space states map to truthful home health`() {

@@ -479,6 +479,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                 setFeedback(str(R.string.lz_setvm_state_refresh_failed), isError = true)
                 return@launch
             }
+            DiagnosticLog.i(TAG, "settings repair plan=$plan activationOnly=$activationOnly")
             // A home-page resume request must not turn into setup or policy repair if facts
             // changed while navigating. Those operations retain their explicit settings entry.
             if (activationOnly && plan !is SpaceRecoveryPlan.Activate &&
@@ -558,6 +559,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                 is SpaceRecoveryPlan.OpenSystemProfileSettings -> {
                     val manager = stateRepo.profileOwnerPackage(plan.userId)
                         ?: str(R.string.lz_setvm_orphan_manager_unknown)
+                    DiagnosticLog.w(TAG, "manual profile removal required user=${plan.userId} owner=$manager")
                     setFeedback(str(R.string.lz_setvm_orphan_profile, manager), isError = true)
                     (context as? Activity)?.let(PrismSetup::promptManualRemoval)
                 }
@@ -614,7 +616,10 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                 ClonePreparationStore.clear(getApplication())
             }
             setFeedback(fb.message, isError = fb.isError)
-            if (fb.routeToSystemRemoval) PrismSetup.promptManualRemoval(activity)
+            if (fb.routeToSystemRemoval) {
+                DiagnosticLog.w(TAG, "manual profile removal required after delete user=${space.userId} result=$result")
+                PrismSetup.promptManualRemoval(activity)
+            }
             refreshCapabilities()
         }
     }
@@ -804,10 +809,20 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun collectProfileDiagnostics(context: Context): List<DiagnosticSection> {
-        val profile = Users.profile ?: return listOf(DiagnosticSection(
-            title = "Dual-space diagnostic snapshot",
-            body = "No managed profile is currently known to the main space.",
-        ))
+        val profile = Users.profile ?: run {
+            // No PrismSpace-managed profile: the classified state and its facts are the single most
+            // valuable clue for foreign-profile (XSpace/OEM clone) and orphan misclassification bugs.
+            val state = (stateRepo.state.value as? SpaceSnapshot.Loaded)?.state
+            val facts = stateRepo.lastFactsDiagnosticLine()
+            return listOf(DiagnosticSection(
+                title = "Dual-space diagnostic snapshot",
+                body = buildString {
+                    append("No managed profile is currently known to the main space.")
+                    append("\nClassified space state: ").append(state ?: "unknown")
+                    if (facts != null) append("\nLast classification: ").append(facts)
+                },
+            ))
+        }
         val healthSection = try {
             DiagnosticSection(
                 title = "Dual-space shuttle health user=${profile.toId()}",

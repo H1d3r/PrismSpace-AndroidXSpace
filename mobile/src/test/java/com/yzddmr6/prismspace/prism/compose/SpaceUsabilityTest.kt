@@ -62,6 +62,7 @@ class SpaceUsabilityTest {
         assertEquals(SpaceUsability.Unknown, spaceUsabilityFromState(null, userId))
         assertEquals(SpaceUsability.NotProvisioned, spaceUsabilityFromState(SpaceState.NoProfile, userId))
         assertEquals(SpaceUsability.NotProvisioned, spaceUsabilityFromState(SpaceState.OrphanProfile(userId), userId))
+        assertEquals(SpaceUsability.NotProvisioned, spaceUsabilityFromState(SpaceState.ForeignProfile(999), userId))
         assertEquals(SpaceUsability.Unknown, spaceUsabilityFromState(SpaceState.Provisioning(userId), userId))
         assertEquals(SpaceUsability.BridgeNotReady, spaceUsabilityFromState(SpaceState.HalfProvisioned(userId, true), userId))
         assertEquals(SpaceUsability.LockedNeedsUnlock, spaceUsabilityFromState(SpaceState.Locked(userId), userId))

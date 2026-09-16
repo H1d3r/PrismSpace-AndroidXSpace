@@ -55,7 +55,7 @@ object SpaceProvisioningEngine {
         val stateRepository = SpaceStateRepository(context)
         val preflight = stateRepository.preflightCreate()
             ?: return@withContext CreateSpaceResult.StateRefreshFailed
-        if (preflight != SpaceState.NoProfile) {
+        if (preflight != SpaceState.NoProfile && preflight !is SpaceState.ForeignProfile) {
             DiagnosticLog.w(TAG, "root create blocked by state=$preflight")
             return@withContext CreateSpaceResult.BlockedByState(preflight)
         }
@@ -88,10 +88,12 @@ object SpaceProvisioningEngine {
         val create = parsePmCreateOutput(output)
         when (create) {
             PmCreateOutcome.LimitReached -> {
+                DiagnosticLog.w(TAG, "root create blocked: device max-users cap=$cap")
                 SpaceProvisioningTracker.clear()
                 return@withContext CreateSpaceResult.CapReached(cap)
             }
             PmCreateOutcome.ManagedProfileLimit -> {
+                DiagnosticLog.w(TAG, "root create blocked: managed profile slot occupied (existing work profile)")
                 SpaceProvisioningTracker.clear()
                 return@withContext CreateSpaceResult.ManagedProfileLimitReached
             }

@@ -52,6 +52,7 @@ internal fun spaceHealth(state: SpaceState): SpaceHealth = when (presentSpace(st
 
 internal fun profileStatusLabelRes(state: SpaceState): Int = when (state) {
     SpaceState.NoProfile -> R.string.lz_home_profile_not_created
+    is SpaceState.ForeignProfile -> R.string.lz_home_profile_not_created
     is SpaceState.Provisioning -> R.string.lz_home_tag_provisioning
     is SpaceState.Inactive -> R.string.lz_home_profile_suspended
     is SpaceState.Locked -> R.string.lz_home_tag_locked

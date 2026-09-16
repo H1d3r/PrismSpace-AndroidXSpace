@@ -65,4 +65,13 @@ class SpacePresentationTest {
             presentSpace(SpaceState.BridgeDown(22, SpaceBridgeCause.PermissionDenied)).bridgeCause,
         )
     }
+
+    @Test fun foreignProfilePresentsAsMissingAndNeverAsOwned() {
+        val presentation = presentSpace(SpaceState.ForeignProfile(999, null))
+
+        assertEquals(SpacePresentationKind.Missing, presentation.kind)
+        assertEquals(SpaceRecoveryPlan.StartSetup, presentation.recovery)
+        assertFalse(presentation.hasProfile)
+        assertFalse(presentation.isReady)
+    }
 }

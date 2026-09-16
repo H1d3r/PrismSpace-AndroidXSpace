@@ -25,7 +25,10 @@ data class SpacePresentation(
     val bridgeCause: SpaceBridgeCause? = null,
 ) {
     val isReady: Boolean get() = kind == SpacePresentationKind.Ready
-    val hasProfile: Boolean get() = state != null && state != SpaceState.NoProfile
+    /** Whether a PrismSpace-owned profile exists. Foreign profiles belong to other apps/system
+     *  features and never count. */
+    val hasProfile: Boolean get() =
+        state != null && state != SpaceState.NoProfile && state !is SpaceState.ForeignProfile
     val permitsStateChange: Boolean get() = state != null
 }
 
@@ -41,6 +44,13 @@ fun presentSpace(snapshot: SpaceSnapshot): SpacePresentation = when (snapshot) {
 
 fun presentSpace(state: SpaceState): SpacePresentation = when (state) {
     SpaceState.NoProfile -> SpacePresentation(
+        SpacePresentationKind.Missing,
+        state,
+        recovery = SpaceRecoveryPlan.StartSetup,
+    )
+    /** A foreign profile is not PrismSpace's to repair or remove; the space simply does not
+     *  exist yet, so the honest recovery is creating one. */
+    is SpaceState.ForeignProfile -> SpacePresentation(
         SpacePresentationKind.Missing,
         state,
         recovery = SpaceRecoveryPlan.StartSetup,

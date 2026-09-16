@@ -112,7 +112,8 @@ private fun deletionFacts(
     capabilities: CapabilityRepository,
 ): SpaceDeletionFacts {
     val targetMatches = state?.userId == targetUserId
-    val owned = targetMatches && state !is SpaceState.OrphanProfile
+    val owned = targetMatches &&
+        state !is SpaceState.OrphanProfile && state !is SpaceState.ForeignProfile
     val runtime = capabilities.runtimeSnapshot()
     return SpaceDeletionFacts(
         currentUserId,

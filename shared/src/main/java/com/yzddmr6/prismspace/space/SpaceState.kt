@@ -13,6 +13,7 @@ data class SpaceProfileFacts(
     val bridgeCause: SpaceBridgeCause = SpaceBridgeCause.NotChecked,
     val profileOwner: Boolean? = null,
     val provisionComplete: Boolean? = null,
+    val profileOwnerPackage: String? = null,
 )
 
 data class SpaceFacts(val profiles: List<SpaceProfileFacts>)
@@ -24,6 +25,9 @@ sealed interface SpaceState {
 
     data object NoProfile : SpaceState { override val userId: Int? = null }
     data class OrphanProfile(override val userId: Int) : SpaceState
+    /** A profile that carries no PrismSpace ownership evidence (e.g. MIUI XSpace, another DPC's
+     *  work profile, Samsung Secure Folder). Never repaired, blocked or deleted by PrismSpace. */
+    data class ForeignProfile(override val userId: Int, val ownerPackage: String? = null) : SpaceState
     data class Provisioning(override val userId: Int) : SpaceState
     data class HalfProvisioned(override val userId: Int, val resumable: Boolean) : SpaceState
     data class Locked(override val userId: Int) : SpaceState
@@ -33,18 +37,36 @@ sealed interface SpaceState {
 }
 
 object SpaceStateClassifier {
+    /** A profile is PrismSpace's responsibility only when positive ownership evidence exists.
+     *  Bare profile presence proves nothing: MIUI XSpace (user 999), OEM clone users, Secure
+     *  Folder and other DPCs' work profiles all appear in the same profile group, and must
+     *  never be treated as PrismSpace orphans.
+     *  Profile names are deliberately NOT evidence: they are not readable without fragile
+     *  hidden-API access, and vendor-generic names ("工作资料") prove nothing anyway. A root-flow
+     *  leftover without any of these signals degrades to foreign — creation then surfaces the
+     *  honest system managed-profile cap instead of a false repair loop. */
+    fun hasPrismOwnershipEvidence(profile: SpaceProfileFacts, prismPackage: String): Boolean =
+        profile.prismPackagePresent || profile.ownershipMarkerPresent ||
+            profile.profileOwnerPackage == prismPackage
+
     /**
      * Select one deterministic PrismSpace candidate, then classify by the first failed invariant.
-     * A marker is the strongest ownership evidence, package presence is the recovery evidence, and
-     * user id is only a stable tie-breaker. Android's profile enumeration order is never trusted.
+     * Ownership evidence outranks every other signal: without it a profile is foreign, never an
+     * orphan. A marker is the strongest per-Prism evidence, package presence is the recovery
+     * evidence, and user id is only a stable tie-breaker. Android's profile enumeration order is
+     * never trusted.
      */
-    fun classify(facts: SpaceFacts): SpaceState {
+    fun classify(facts: SpaceFacts, prismPackage: String): SpaceState {
         val profile = facts.profiles.sortedWith(
-            compareByDescending<SpaceProfileFacts> { it.ownershipMarkerPresent }
+            compareByDescending<SpaceProfileFacts> { hasPrismOwnershipEvidence(it, prismPackage) }
+                .thenByDescending { it.ownershipMarkerPresent }
                 .thenByDescending { it.prismPackagePresent }
                 .thenBy { it.userId },
         ).firstOrNull() ?: return SpaceState.NoProfile
 
+        if (!hasPrismOwnershipEvidence(profile, prismPackage)) {
+            return SpaceState.ForeignProfile(profile.userId, profile.profileOwnerPackage)
+        }
         if (!profile.prismPackagePresent) return SpaceState.OrphanProfile(profile.userId)
         if (profile.provisioningActive) return SpaceState.Provisioning(profile.userId)
         if (!profile.ownershipMarkerPresent) {
