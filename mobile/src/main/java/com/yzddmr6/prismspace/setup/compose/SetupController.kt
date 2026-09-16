@@ -107,6 +107,29 @@ class SetupController(
         PrismHelp.showSetupHelp(activity)
     }
 
+    /** Export diagnostics from the setup wizard — a stuck user may never reach the Settings tab. */
+    fun onExportDiagnostics() {
+        activity.lifecycleScope.launch {
+            try {
+                val subject = activity.getString(R.string.lz_setvm_report_subject)
+                val (fileName, intent) = com.yzddmr6.prismspace.prism.compose.vm.DiagnosticsExporter.buildShare(
+                    activity,
+                    subject = subject,
+                    attachedText = { name -> activity.getString(R.string.lz_setvm_report_attached, name) },
+                )
+                com.yzddmr6.prismspace.prism.compose.vm.DiagnosticsExporter.launchShare(activity, subject, intent)
+                DiagnosticLog.i(TAG, "setup diagnostic export shared file=$fileName")
+            } catch (e: Exception) {
+                DiagnosticLog.e(TAG, "setup diagnostic export failed", e)
+                android.widget.Toast.makeText(
+                    activity,
+                    activity.getString(R.string.lz_setvm_export_failed, e.message ?: e.javaClass.simpleName),
+                    android.widget.Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
+
     /** Dismiss error and return to welcome. */
     fun onDismissError() {
         stateVm.setUiState(SetupUiState.Welcome)

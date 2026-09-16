@@ -41,6 +41,7 @@
     <string name="setup_error_managed_device">Android 当前不允许设备所有者（Device Owner）与工作资料共存，且互斥是双向的；Root 或其他特权模式也无法绕过这项平台规则。\n\n当前接管设备的应用：%1$s。\n\n如要创建双开空间，请先停用该设备管理应用（例如 Dhizuku），然后重试。双开空间存在期间，也无法再启用 Device Owner 类工具。</string>
     <string name="setup_unknown_device_owner">未知设备管理应用</string>
     <string name="setup_error_missing_managed_provisioning">抱歉，由于此设备并未完整支持必需的“Android 工作资料”特性。</string>
+    <string name="setup_error_provisioning_blocked_by_profile">检测到设备上已存在系统「应用双开」或其他工作资料，创建工作资料的入口可能被占用。请先在系统设置中关闭「应用双开」或「手机分身」（或移除其他工作资料）后重试；也可以尝试通过 ROOT 直接创建。</string>
     <string name="setup_error_existing_space_state">设备上已有尚未就绪的双开资料。请返回设置修复，或删除后再重新创建。</string>
     <string name="setup_error_orphan_profile">Android 中已有不受 PrismSpace 管理的工作资料。请先在系统设置中确认并移除该资料。</string>
     <string name="setup_solution_for_cancelled_provision">创建双开空间遇到了困难？\n\n如果创建过程被中断，请重新进入系统创建流程，并确保 PrismSpace 允许后台启动。部分深度定制系统还需要先关闭电池优化或安全限制，然后再重试。\n\nRoot 创建只作为高级兜底路径，普通用户路径不依赖 Root。</string>
