@@ -37,7 +37,7 @@
     <string name="prism_setup_feature_files_title">Transfer files across spaces</string>
     <string name="prism_setup_feature_files_body">Move files between main space and clone space with explicit consent.</string>
     <string name="prism_setup_privacy_title">How it works · Privacy</string>
-    <string name="prism_setup_privacy_body">PrismSpace creates the clone space via Android Work Profile. Core clone, install and file-transfer flows run locally; update checks, PrismProbe network tests and diagnostic sharing only run when you choose them.</string>
+    <string name="prism_setup_privacy_body">PrismSpace creates the clone space via Android Work Profile. Core clone, install and file-transfer flows run locally; updates are checked automatically when you open the app; PrismProbe network tests and diagnostic sharing only run when you choose them.</string>
     <string name="prism_setup_cta_primary">Create clone space</string>
     <string name="prism_setup_cta_help">Having trouble?</string>
     <string name="prism_setup_error_title">Setup error</string>

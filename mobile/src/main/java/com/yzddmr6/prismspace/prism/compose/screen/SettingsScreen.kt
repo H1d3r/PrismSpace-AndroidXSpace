@@ -54,6 +54,7 @@ import com.yzddmr6.prismspace.prism.compose.component.PrismTextButton
 import com.yzddmr6.prismspace.prism.compose.component.RepairConfirmSheet
 import com.yzddmr6.prismspace.prism.compose.component.StatusRow
 import com.yzddmr6.prismspace.prism.compose.component.SwitchRow
+import com.yzddmr6.prismspace.prism.compose.component.UpdateAvailableDialog
 import com.yzddmr6.prismspace.prism.compose.theme.PrismSpacing
 import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.prism.compose.vm.ActionFeedback
@@ -362,22 +363,7 @@ fun SettingsScreen() {
 
     // ── update-available dialog ───────────────────────────────────────────────
     uiState?.updateInfo?.let { info ->
-        AlertDialog(
-            onDismissRequest = { vm.dismissUpdate() },
-            title = { Text(stringResource(R.string.lz_set_update_title, info.version)) },
-            text = { Text(info.notes) },
-            confirmButton = {
-                PrismTextButton(onClick = {
-                    runCatching {
-                        context.startActivity(
-                            android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(info.url))
-                                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
-                    }
-                    vm.dismissUpdate()
-                }) { Text(stringResource(R.string.lz_set_update_download)) }
-            },
-            dismissButton = { PrismTextButton(onClick = { vm.dismissUpdate() }) { Text(stringResource(R.string.lz_set_update_later)) } },
-        )
+        UpdateAvailableDialog(info = info, context = context, onDismiss = { vm.dismissUpdate() })
     }
 
 }

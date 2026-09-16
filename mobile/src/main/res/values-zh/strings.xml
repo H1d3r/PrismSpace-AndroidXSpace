@@ -30,7 +30,7 @@
     <string name="prism_setup_feature_files_title">跨空间传文件</string>
     <string name="prism_setup_feature_files_body">在主空间与双开空间之间，按需安全地传输文件。</string>
     <string name="prism_setup_privacy_title">工作原理 · 隐私</string>
-    <string name="prism_setup_privacy_body">PrismSpace 通过 Android 工作资料创建双开空间。应用双开、安装和文件传输等核心流程在设备本地完成；检查更新、PrismProbe 网络测试和诊断分享只会在你主动使用时发起。</string>
+    <string name="prism_setup_privacy_body">PrismSpace 通过 Android 工作资料创建双开空间。应用双开、安装和文件传输等核心流程在设备本地完成；打开应用时会自动检查更新；PrismProbe 网络测试和诊断分享只会在你主动使用时发起。</string>
     <string name="prism_setup_cta_primary">开始创建双开空间</string>
     <string name="prism_setup_cta_help">遇到问题？</string>
     <string name="prism_setup_error_title">无法继续</string>

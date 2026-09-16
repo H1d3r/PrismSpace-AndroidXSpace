@@ -20,7 +20,7 @@
     <string name="prism_setup_feature_files_title">跨空間傳檔案</string>
     <string name="prism_setup_feature_files_body">在主空間與雙開空間之間，依需求安全傳輸檔案。</string>
     <string name="prism_setup_privacy_title">運作方式 · 隱私</string>
-    <string name="prism_setup_privacy_body">PrismSpace 透過 Android 工作資料建立雙開空間。應用雙開、安裝和檔案傳輸等核心流程在裝置本機完成；檢查更新、PrismProbe 網路測試和診斷分享只會在你主動使用時發起。</string>
+    <string name="prism_setup_privacy_body">PrismSpace 透過 Android 工作資料建立雙開空間。應用雙開、安裝和檔案傳輸等核心流程在裝置本機完成；打開應用程式時會自動檢查更新；PrismProbe 網路測試和診斷分享只會在你主動使用時發起。</string>
     <string name="prism_setup_cta_primary">開始建立雙開空間</string>
     <string name="prism_setup_cta_help">遇到問題？</string>
     <string name="prism_setup_howto_title">建立方式</string>
