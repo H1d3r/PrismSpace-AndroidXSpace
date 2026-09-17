@@ -36,6 +36,16 @@ class SettingsSpaceActionTest {
         assertEquals(R.string.lz_set_reconnect_timed_out.toString(), timeout.summary)
     }
 
+    @Test fun miuiBridgeFailureAppendsAutostartHint() {
+        val hint = R.string.lz_set_reconnect_miui_hint.toString()
+        val miui = settingsSpaceAction(SpacePresentationKind.BridgeUnavailable, SpaceBridgeCause.Failed, res, isMiui = true)
+        assertTrue(miui.summary.endsWith(hint))
+        assertTrue(miui.summary.startsWith(R.string.lz_set_reconnect_failed.toString()))
+
+        val stock = settingsSpaceAction(SpacePresentationKind.BridgeUnavailable, SpaceBridgeCause.Failed, res, isMiui = false)
+        assertEquals(R.string.lz_set_reconnect_failed.toString(), stock.summary)
+    }
+
     // ── 暂停所有分身 switch presentation (真实聚合状态驱动；锁定/断连禁用并说明) ──
 
     @Test fun suspendSwitchFollowsRealAggregateState() {

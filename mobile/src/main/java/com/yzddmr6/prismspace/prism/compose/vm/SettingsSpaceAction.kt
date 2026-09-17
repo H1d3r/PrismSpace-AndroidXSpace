@@ -16,6 +16,7 @@ internal fun settingsSpaceAction(
     kind: SpacePresentationKind,
     bridgeCause: SpaceBridgeCause?,
     res: StringResolver,
+    isMiui: Boolean = false,
 ): SettingsSpaceAction {
     fun text(id: Int) = res(id, emptyArray())
     return when (kind) {
@@ -39,7 +40,12 @@ internal fun settingsSpaceAction(
             text(R.string.lz_set_unlock_title), text(R.string.lz_set_unlock_summary), false, true,
         )
         SpacePresentationKind.BridgeUnavailable -> SettingsSpaceAction(
-            text(R.string.lz_set_reconnect_title), text(bridgeCauseSummary(bridgeCause)), false, true,
+            text(R.string.lz_set_reconnect_title),
+            // MIUI's background-launch gating is the observed top cause of bridge flapping;
+            // the hint treats the soil without blocking the repair action.
+            text(bridgeCauseSummary(bridgeCause)) +
+                if (isMiui) "\n" + text(R.string.lz_set_reconnect_miui_hint) else "",
+            false, true,
         )
         SpacePresentationKind.Incomplete -> SettingsSpaceAction(
             text(R.string.lz_set_repair_title), text(R.string.lz_set_repair_summary), true, true,

@@ -34,6 +34,7 @@
     <string name="lz_set_reconnect_timed_out">The profile bridge timed out. Open the dual-space entry and retry.</string>
     <string name="lz_set_reconnect_failed">The profile bridge failed. Open the dual-space entry to diagnose and reconnect it.</string>
     <string name="lz_set_reconnect_not_checked">The profile bridge has not completed a successful check. Open the dual-space entry and retry.</string>
+    <string name="lz_set_reconnect_miui_hint">On Xiaomi/Redmi devices: if the connection keeps dropping, allow PrismSpace to auto-start and run in the background in system settings.</string>
     <string name="lz_set_ready_title">Dual space ready</string>
     <string name="lz_set_ready_summary">Tap to view clone count and space details.</string>
     <string name="lz_set_delete_space_title">Delete dual space</string>
