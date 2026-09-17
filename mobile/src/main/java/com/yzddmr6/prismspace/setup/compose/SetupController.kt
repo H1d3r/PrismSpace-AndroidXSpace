@@ -94,6 +94,12 @@ class SetupController(
             R.string.button_setup_space_with_root -> {
                 PrismSetup.requestProfileOwnerSetupWithRoot(Activities.findActivityFrom(activity))
             }
+            R.string.button_setup_try_provision_anyway -> {
+                // The pre-check is heuristic; the launch itself is the truthful capability
+                // test and its ActivityNotFoundException fallback re-shows an honest error.
+                DiagnosticLog.i(TAG, "user chose to attempt managed provisioning despite precheck failure")
+                if (!stateVm.provisioningLaunched) launchManagedProvisioning()
+            }
             R.string.button_return_to_prismspace -> {
                 activity.startActivity(Intent(activity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
                 activity.finish()
@@ -145,6 +151,7 @@ class SetupController(
             stateVm.consumeProvisioningLaunched()
             SpaceProvisioningTracker.clear()
             Log.w(TAG, "Managed provisioning activity not found", e)
+            DiagnosticLog.w(TAG, "managed provisioning launch failed: ${e.message}")
             stateVm.setUiState(SetupUiState.Error(
                 messageRes = R.string.setup_error_missing_managed_provisioning,
                 messageParams = null,
@@ -251,6 +258,8 @@ sealed interface SetupUiState {
         /** Message format args. List (not Array) so data-class equality is content-based. */
         val messageParams: List<String>?,
         @StringRes val extraActionRes: Int?,
+        /** Offer "try system setup anyway" — pre-check failures are heuristic, not proof. */
+        val tryProvisionAnyway: Boolean = false,
     ) : SetupUiState
 }
 
@@ -262,5 +271,6 @@ private fun SetupViewModel.toErrorState(): SetupUiState.Error {
         messageRes = message,
         messageParams = params,
         extraActionRes = action_extra.takeIf { it != 0 },
+        tryProvisionAnyway = try_provision_anyway,
     )
 }
