@@ -35,13 +35,14 @@
     <string name="prism_setup_cta_help">遇到问题？</string>
     <string name="prism_setup_error_title">无法继续</string>
     <string name="dialog_root_setup_profile_exists">设备上已存在 PrismSpace 双开空间。如需重新创建，请先在主空间中删除已有的双开空间，然后再次尝试设置。</string>
+    <string name="dialog_shizuku_permission_denied">未获得 Shizuku 授权，无法继续特权创建。请再次点击并选择「允许」；如 Shizuku 未运行，请先安装并启动 Shizuku / Sui。</string>
     <string name="setup_root_profile_progress">正在创建双开空间…</string>
     <string name="setup_error_managed_profile_not_supported">抱歉，此设备不支持必需的“Android 工作资料”特性。</string>
     <string name="setup_error_provisioning_incomplete">双开空间的创建不完整，此前的创建尝试可能并未成功。\n\n<b>如果您的设备或其它三方工具施加了“自启动”（或类似的）限制，请务必首先将 PrismSpace 解除限制或加入白名单，然后再次创建双开空间。</b></string>
     <string name="setup_error_managed_device">Android 当前不允许设备所有者（Device Owner）与工作资料共存，且互斥是双向的；Root 或其他特权模式也无法绕过这项平台规则。\n\n当前接管设备的应用：%1$s。\n\n如要创建双开空间，请先停用该设备管理应用（例如 Dhizuku），然后重试。双开空间存在期间，也无法再启用 Device Owner 类工具。</string>
     <string name="setup_unknown_device_owner">未知设备管理应用</string>
     <string name="setup_error_missing_managed_provisioning">抱歉，由于此设备并未完整支持必需的“Android 工作资料”特性。</string>
-    <string name="setup_error_provisioning_blocked_by_profile">检测到设备上已存在系统「应用双开」或其他工作资料，创建工作资料的入口可能被占用。请先在系统设置中关闭「应用双开」或「手机分身」（或移除其他工作资料）后重试；也可以尝试通过 ROOT 直接创建。</string>
+    <string name="setup_error_provisioning_blocked_by_profile">检测到设备上已存在系统「应用双开」或其他工作资料，创建工作资料的入口可能被占用。请先在系统设置中关闭「应用双开」或「手机分身」（或移除其他工作资料）后重试；也可以通过 Shizuku / ROOT 直接创建。</string>
     <string name="setup_error_existing_space_state">设备上已有尚未就绪的双开资料。请返回设置修复，或删除后再重新创建。</string>
     <string name="setup_error_orphan_profile">Android 中已有不受 PrismSpace 管理的工作资料。请先在系统设置中确认并移除该资料。</string>
     <string name="setup_solution_for_cancelled_provision">创建双开空间遇到了困难？\n\n如果创建过程被中断，请重新进入系统创建流程，并确保 PrismSpace 允许后台启动。部分深度定制系统还需要先关闭电池优化或安全限制，然后再重试。\n\nRoot 创建只作为高级兜底路径，普通用户路径不依赖 Root。</string>
@@ -51,7 +52,7 @@
 
     <string name="button_setup_help">创建帮助</string>
     <string name="button_have_checked">我已检查</string>
-    <string name="button_setup_space_with_root">通过 ROOT 创建双开空间</string>
+    <string name="button_setup_space_privileged">通过 Shizuku / ROOT 创建</string>
     <string name="button_setup_try_provision_anyway">仍要尝试系统创建</string>
     <string name="prism_help_setup_title">创建帮助</string>
     <string name="prism_help_setup_body">PrismSpace 通过 Android 工作资料创建独立的双开空间。\n\n如果创建失败，先检查这些项目：\n· 允许 PrismSpace 后台运行和自启动。\n· 系统创建页面工作时不要手动关闭。\n· 关闭安全中心或电池策略对 PrismSpace 的限制后重试。\n· Root 创建仅作为普通创建被系统拦截后的高级兜底。</string>

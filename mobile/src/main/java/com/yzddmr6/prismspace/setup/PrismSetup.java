@@ -27,7 +27,28 @@ import com.yzddmr6.prismspace.util.SafeAsyncTask;
  */
 public class PrismSetup {
 
-	public static void requestProfileOwnerSetupWithRoot(final Activity activity) {
+	/**
+	 * Privileged space creation entry (setup wizard fallback). Exactly one transport is used:
+	 * an authorized Shizuku wins; otherwise the engine probes su. When Shizuku is running but
+	 * not yet authorized, permission is requested here — only on this explicit user action.
+	 */
+	public static void requestPrivilegedSetup(final Activity activity) {
+		if (ShizukuSetupAuthorization.isAuthorized() || ! ShizukuSetupAuthorization.isRunning()) {
+			startPrivilegedSetup(activity);
+			return;
+		}
+		ShizukuSetupAuthorization.requestPermissionCompat(granted -> {
+			if (granted) {
+				startPrivilegedSetup(activity);
+			} else {
+				Analytics.$().event("setup_prism_shizuku_denied").send();
+				Dialogs.buildAlert(activity, R.string.dialog_title_warning, R.string.dialog_shizuku_permission_denied)
+						.withOkButton(null).show();
+			}
+		});
+	}
+
+	private static void startPrivilegedSetup(final Activity activity) {
 		final ProgressDialog progress = ProgressDialog.show(activity, null, activity.getString(R.string.setup_root_profile_progress), true);
 		SafeAsyncTask.execute(activity,
 				SpaceProvisioningEngine::createSpaceBlocking,

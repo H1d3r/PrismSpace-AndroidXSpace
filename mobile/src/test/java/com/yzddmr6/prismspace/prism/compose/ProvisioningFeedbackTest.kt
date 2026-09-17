@@ -15,7 +15,7 @@ class ProvisioningFeedbackTest {
     }
     @Test fun `create root unavailable`() {
         val f = provisioningFeedback(CreateSpaceResult.RootUnavailable)
-        assertEquals("需要 Root 权限才能创建空间，请先在设置中启用 Root", f.message); assertTrue(f.isError)
+        assertEquals("需要特权通道才能创建空间：请安装并启动 Shizuku（Android 11+ 可用无线调试激活）或 Sui，或为设备启用 Root 后重试", f.message); assertTrue(f.isError)
     }
     @Test fun `create cap reached`() {
         val f = provisioningFeedback(CreateSpaceResult.CapReached(4))
@@ -28,7 +28,7 @@ class ProvisioningFeedbackTest {
     @Test fun `delete success and root-unavailable and failed`() {
         assertEquals("已删除该双开空间", provisioningFeedback(DeleteSpaceResult.Success).message)
         val rootUnavailable = provisioningFeedback(DeleteSpaceResult.RootUnavailable)
-        assertEquals("普通模式无法直接删除双开空间，请在系统设置中移除工作资料；启用 Root 后可一键删除。", rootUnavailable.message)
+        assertEquals("普通模式无法直接删除双开空间，请在系统设置中移除工作资料；启用 Shizuku / Sui 或 Root 后可一键删除。", rootUnavailable.message)
         assertTrue(rootUnavailable.isError)
         assertTrue(rootUnavailable.routeToSystemRemoval)
         assertEquals("删除空间失败：x，空间未被破坏，可重试",

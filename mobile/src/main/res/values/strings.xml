@@ -47,7 +47,7 @@
     <string name="setup_error_managed_device">Android currently does not allow a Device Owner and a work profile to coexist; this restriction applies in both directions and cannot be bypassed with Root or another privileged mode.\n\nThis device is currently managed by %1$s.\n\nTo create a dual space, first deactivate that device manager (such as Dhizuku), then try again. While the dual space exists, Device Owner tools cannot be activated.</string>
     <string name="setup_unknown_device_owner">Unknown device-management app</string>
     <string name="setup_error_missing_managed_provisioning">Sorry, the required \"Android for Work\" feature may not be fully supported on your device.</string>
-    <string name="setup_error_provisioning_blocked_by_profile">Another app-clone or work profile already exists on this device and may be occupying the provisioning entry. Turn off the system \"Dual apps\" / \"Second space\" feature (or remove the other work profile), then retry — or try creating with ROOT.</string>
+    <string name="setup_error_provisioning_blocked_by_profile">Another app-clone or work profile already exists on this device and may be occupying the provisioning entry. Turn off the system \"Dual apps\" / \"Second space\" feature (or remove the other work profile), then retry — or create via Shizuku / ROOT.</string>
     <string name="setup_error_existing_space_state">A dual-space profile already exists but is not ready. Return to Settings to repair it or remove it before creating another.</string>
     <string name="setup_error_orphan_profile">Android already has a work profile not managed by PrismSpace. Review and remove that profile in system settings before continuing.</string>
     <string name="setup_solution_for_cancelled_provision">Trouble setting up PrismSpace?\n\nIf setup was interrupted, return to the system setup screen and keep PrismSpace allowed to start in the background. On heavily customized ROMs, also disable battery or security restrictions for PrismSpace before retrying.\n\nRoot setup is available as an advanced fallback only when normal setup is blocked.</string>
@@ -57,7 +57,7 @@
 
     <string name="button_setup_help">Setup help</string>
     <string name="button_have_checked">I\'ve checked</string>
-    <string name="button_setup_space_with_root">Setup PrismSpace with root</string>
+    <string name="button_setup_space_privileged">Create with Shizuku / ROOT</string>
     <string name="button_setup_try_provision_anyway">Try system setup anyway</string>
     <string name="prism_help_setup_title">Setup help</string>
     <string name="prism_help_setup_body">PrismSpace creates a managed clone space through Android work profile setup.\n\nIf setup fails, check these items first:\n· Keep PrismSpace allowed to run in the background.\n· Do not close the system provisioning screen while it is working.\n· Disable aggressive security or battery restrictions for PrismSpace, then retry.\n· Use root setup only as an advanced fallback when normal setup is blocked.</string>
@@ -75,6 +75,7 @@
     <string name="dialog_critical_app_warning">This app (or component) is critical for the Android system or other apps to work properly. If proceed, some apps or the whole system may become unstable or malfunctional.\n\nDo you really want to proceed?</string>
     <string name="dialog_space_setup_failed">Sorry, something went wrong in PrismSpace setup. (stage %1$d)</string>
     <string name="dialog_root_setup_profile_exists">A PrismSpace clone space already exists on this device. To create it again, first remove the existing one from the main space, then try setup again.</string>
+    <string name="dialog_shizuku_permission_denied">Shizuku permission was not granted, so the privileged setup cannot continue. Tap again and choose Allow, or install and start Shizuku / Sui first.</string>
 
     <string name="action_continue">Continue</string>
 

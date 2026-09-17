@@ -48,12 +48,14 @@ fun provisioningFeedback(result: DeleteSpaceResult, res: StringResolver): Destro
         DestroyFeedback(res(R.string.lz_vm_delete_failed, arrayOf(result.reason?.takeIf { it.isNotBlank() } ?: res(R.string.lz_vm_unknown_error, emptyArray()))), isError = true, routeToSystemRemoval = false)
 }
 
-/** Java bridge for the legacy setup Activity shell. Only cap failures replace its staged
- * diagnostic copy; all other failures keep the existing stage-specific presentation. */
+/** Java bridge for the legacy setup Activity shell. Only failures with an actionable,
+ *  evidence-backed message replace its staged diagnostic copy; all other failures keep
+ *  the existing stage-specific presentation. */
 fun specificRootSetupFailure(
     result: CreateSpaceResult,
     res: StringResolver,
 ): String? = when (result) {
+    CreateSpaceResult.RootUnavailable,
     is CreateSpaceResult.CapReached,
     CreateSpaceResult.ManagedProfileLimitReached,
     CreateSpaceResult.StateRefreshFailed -> provisioningFeedback(result, res).message

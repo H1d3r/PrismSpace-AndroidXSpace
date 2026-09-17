@@ -10,6 +10,7 @@ import com.yzddmr6.prismspace.util.Modules
 import com.yzddmr6.prismspace.util.UserHandles
 import com.yzddmr6.prismspace.util.Users
 import com.yzddmr6.prismspace.prism.compose.vm.CapabilityRepositoryProvider
+import com.yzddmr6.prismspace.prism.compose.vm.ShizukuUtil
 import com.yzddmr6.prismspace.space.SpaceState
 import eu.chainfire.libsuperuser.Shell
 import kotlinx.coroutines.Dispatchers
@@ -18,18 +19,32 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/** Root-gated create/delete of PrismSpace-managed profile spaces. PUBLIC APIs only;
- *  pure parsing/decisions delegated to SpaceProvisioningParsers. Activity-free. */
+/** Privileged-transport-gated create/delete of PrismSpace-managed profile spaces. PUBLIC APIs only;
+ *  pure parsing/decisions delegated to SpaceProvisioningParsers. Activity-free.
+ *  The command transaction is transport-agnostic; only the shell channel differs (Shizuku or su). */
 object SpaceProvisioningEngine {
 
     private const val DEFAULT_MAX_USERS_SETPROP = 10  // historical fw.max_users AOSP default; used only when the real cap is Unknown
 
-    private fun rootOk(context: Context): Boolean {
-        val available = isRootOutput(Shell.SU.run("id"))
-        CapabilityRepositoryProvider.get(context).let {
-            if (available) it.markRootReady() else it.markRootUnavailable()
+    private fun probeSu(): Boolean = isRootOutput(Shell.SU.run("id"))
+
+    /** Resolves exactly one transport per operation; never falls back mid-transaction. */
+    private fun resolveShell(context: Context): PrivilegedShell? {
+        val capabilities = CapabilityRepositoryProvider.get(context)
+        return when (chooseTransport(ShizukuUtil.isAuthorized()) { probeSu() }) {
+            PrivilegedTransport.SHIZUKU -> {
+                capabilities.markShizukuReady()
+                ShizukuPrivilegedShell()
+            }
+            PrivilegedTransport.SU -> {
+                capabilities.markRootReady()
+                SuPrivilegedShell()
+            }
+            null -> {
+                capabilities.markRootUnavailable()
+                null
+            }
         }
-        return available
     }
 
     private fun maxUsersProperty(): String? =
@@ -56,10 +71,10 @@ object SpaceProvisioningEngine {
         val preflight = stateRepository.preflightCreate()
             ?: return@withContext CreateSpaceResult.StateRefreshFailed
         if (preflight != SpaceState.NoProfile && preflight !is SpaceState.ForeignProfile) {
-            DiagnosticLog.w(TAG, "root create blocked by state=$preflight")
+            DiagnosticLog.w(TAG, "privileged create blocked by state=$preflight")
             return@withContext CreateSpaceResult.BlockedByState(preflight)
         }
-        if (!rootOk(context)) return@withContext CreateSpaceResult.RootUnavailable
+        val shell = resolveShell(context) ?: return@withContext CreateSpaceResult.RootUnavailable
         val probe = probeMaxSpaces()
         (probe as? SpaceCapProbe.Known)
             ?.takeIf { it.current >= it.max }
@@ -79,21 +94,21 @@ object SpaceProvisioningEngine {
         ProvisioningSideEffects.logMaxUsersWrite(maxUsersOriginal, cap)
         SpaceProvisioningTracker.markStarted()
         val output = try {
-            runDetachedProvisioningTransaction(context, command)
+            runDetachedProvisioningTransaction(shell, command)
         } catch (e: RuntimeException) {
-            DiagnosticLog.e(TAG, "root provisioning shell failed", e)
+            DiagnosticLog.e(TAG, "privileged provisioning shell failed transport=${shell.name}", e)
             SpaceProvisioningTracker.clear()
             return@withContext CreateSpaceResult.Failed(e.message, analyticsPhase = 2)
         }
         val create = parsePmCreateOutput(output)
         when (create) {
             PmCreateOutcome.LimitReached -> {
-                DiagnosticLog.w(TAG, "root create blocked: device max-users cap=$cap")
+                DiagnosticLog.w(TAG, "privileged create blocked: device max-users cap=$cap transport=${shell.name}")
                 SpaceProvisioningTracker.clear()
                 return@withContext CreateSpaceResult.CapReached(cap)
             }
             PmCreateOutcome.ManagedProfileLimit -> {
-                DiagnosticLog.w(TAG, "root create blocked: managed profile slot occupied (existing work profile)")
+                DiagnosticLog.w(TAG, "privileged create blocked: managed profile slot occupied transport=${shell.name}")
                 SpaceProvisioningTracker.clear()
                 return@withContext CreateSpaceResult.ManagedProfileLimitReached
             }
@@ -107,52 +122,53 @@ object SpaceProvisioningEngine {
         if (!provisioningCompleted(output, pid)) {
             SpaceProvisioningTracker.clear()
             val reason = provisioningFailure(output) ?: "provisioning transaction incomplete"
-            DiagnosticLog.w(TAG, "root create incomplete user=$pid reason=$reason")
+            DiagnosticLog.w(TAG, "privileged create incomplete user=$pid transport=${shell.name} reason=$reason")
             return@withContext CreateSpaceResult.Failed(reason, analyticsPhase = 2)
         }
         val pending = UserHandles.of(pid)
         val la = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
         return@withContext if (la.getActivityList(context.packageName, pending).isNotEmpty()) {
             SpaceProvisioningTracker.markReturnedSuccess()
-            DiagnosticLog.i(TAG, "root create success user=$pid")
+            DiagnosticLog.i(TAG, "privileged create success user=$pid transport=${shell.name}")
             CreateSpaceResult.Success(pid)
         } else {
             SpaceProvisioningTracker.clear()
             val reason = output?.joinToString("\n")?.ifBlank { null } ?: "provisioning incomplete"
-            DiagnosticLog.w(TAG, "root create incomplete user=$pid reason=$reason")
+            DiagnosticLog.w(TAG, "privileged create incomplete user=$pid transport=${shell.name} reason=$reason")
             CreateSpaceResult.Failed(reason, analyticsPhase = 2)
         }
     }
 
     suspend fun deleteSpace(context: Context, space: PrismSpace): DeleteSpaceResult = withContext(Dispatchers.IO) {
-        if (!rootOk(context)) return@withContext DeleteSpaceResult.RootUnavailable
-        val output = Shell.SU.run(buildVerifiedRootRemovalCommand(space.userId, Modules.MODULE_ENGINE))
+        val shell = resolveShell(context) ?: return@withContext DeleteSpaceResult.RootUnavailable
+        val output = shell.run(buildVerifiedRootRemovalCommand(space.userId, Modules.MODULE_ENGINE))
         if (rootRemovalOwnerMismatch(output)) {
-            DiagnosticLog.w(TAG, "root delete refused: owner mismatch user=${space.userId}")
+            DiagnosticLog.w(TAG, "privileged delete refused: owner mismatch user=${space.userId} transport=${shell.name}")
             return@withContext DeleteSpaceResult.ManualRemovalRequired("PrismSpace is not profile owner")
         }
         when (val r = parsePmRemoveOutput(output)) {
             PmRemoveOutcome.Removed -> {
-                SpaceStateRepository(context).refresh("root_delete_success")
-                DiagnosticLog.i(TAG, "root delete success user=${space.userId}")
+                SpaceStateRepository(context).refresh("privileged_delete_success")
+                DiagnosticLog.i(TAG, "privileged delete success user=${space.userId} transport=${shell.name}")
                 DeleteSpaceResult.Success
             }
             is PmRemoveOutcome.Failed -> {
-                DiagnosticLog.w(TAG, "root delete failed user=${space.userId} reason=${r.reason}")
+                DiagnosticLog.w(TAG, "privileged delete failed user=${space.userId} transport=${shell.name} reason=${r.reason}")
                 DeleteSpaceResult.Failed(r.reason)
             }
         }
     }
 
-    private suspend fun runDetachedProvisioningTransaction(context: Context, command: String): List<String>? {
-        val outputFile = File(context.cacheDir, ROOT_TRANSACTION_OUTPUT_FILE)
-        if (runCatching {
-                outputFile.parentFile?.mkdirs()
-                outputFile.writeText("")
-            }.isFailure) {
-            return null
-        }
-        val pid = Shell.SU.run(detachedRootProvisioningLauncher(command, outputFile.absolutePath))
+    /**
+     * Runs the detached transaction and polls its output file. The file lives in
+     * /data/local/tmp because a shell-uid transaction cannot write the app-private
+     * directory (0700), while every transport can write there and the app can read
+     * it back; removal goes through the transport since the file is not ours.
+     */
+    private suspend fun runDetachedProvisioningTransaction(shell: PrivilegedShell, command: String): List<String>? {
+        val outputFile = File(ROOT_TRANSACTION_OUTPUT_PATH)
+        runCatching { outputFile.delete() }   // stale output from an older run must not fake completion
+        val pid = shell.run(detachedRootProvisioningLauncher(command, outputFile.absolutePath))
             ?.asSequence()
             ?.map(String::trim)
             ?.mapNotNull(String::toLongOrNull)
@@ -163,20 +179,20 @@ object SpaceProvisioningEngine {
         while (SystemClock.elapsedRealtime() < deadline) {
             lines = runCatching { outputFile.readLines() }.getOrDefault(emptyList())
             if (provisioningTransactionFinished(lines)) {
-                outputFile.delete()
+                shell.run("rm -f ${shellQuote(outputFile.absolutePath)}")
                 return lines
             }
             delay(ROOT_TRANSACTION_POLL_MS)
         }
-        Shell.SU.run("kill -TERM $pid")
+        shell.run("kill -TERM $pid")
         delay(ROOT_TRANSACTION_POLL_MS)
         lines = runCatching { outputFile.readLines() }.getOrDefault(lines)
-        outputFile.delete()
+        shell.run("rm -f ${shellQuote(outputFile.absolutePath)}")
         return lines + "PRISM_PROVISION_FAILED stage=timeout"
     }
 
     private const val TAG = "Prism.SpaceProvision"
-    private const val ROOT_TRANSACTION_OUTPUT_FILE = "root-provisioning-transaction.log"
+    private const val ROOT_TRANSACTION_OUTPUT_PATH = "/data/local/tmp/prism-provisioning-transaction.log"
     private const val ROOT_TRANSACTION_TIMEOUT_MS = 120_000L
     private const val ROOT_TRANSACTION_POLL_MS = 200L
 }
