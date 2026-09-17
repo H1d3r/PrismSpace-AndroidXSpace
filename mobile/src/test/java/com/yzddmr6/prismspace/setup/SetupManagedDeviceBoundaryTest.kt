@@ -37,4 +37,16 @@ class SetupManagedDeviceBoundaryTest {
         assertTrue(rootFallback >= 0)
         assertTrue(precondition < rootFallback)
     }
+
+    @Test
+    fun `launch-failure fallback reuses the probe-driven error with identical actions`() {
+        // The ActivityNotFoundException catch must not hand-build a weaker dialog without the
+        // privileged fallback — it delegates to the same builder the pre-check path uses.
+        val source = File("src/main/java/com/yzddmr6/prismspace/setup/compose/SetupController.kt").readText()
+        val catch = source.indexOf("catch (e: ActivityNotFoundException)")
+        val sharedBuilder = source.indexOf("missingProvisioningErrorPublic")
+
+        assertTrue(catch >= 0)
+        assertTrue(sharedBuilder > catch)
+    }
 }

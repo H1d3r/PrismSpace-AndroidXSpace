@@ -3,6 +3,8 @@ package com.yzddmr6.prismspace.setup
 import android.content.pm.PackageManager
 import com.yzddmr6.prismspace.mobile.R
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProvisioningProbeTest {
@@ -48,26 +50,39 @@ class ProvisioningProbeTest {
     @Test
     fun `blocked-by-profile copy only shows when a handler exists to be occupied`() {
         assertEquals(R.string.setup_error_provisioning_blocked_by_profile,
-            ProvisioningProbe.errorMessageFor(ProvisioningProbe.MissingState.COMPONENT_DISABLED, 1))
+            ProvisioningProbe.errorMessageFor(ProvisioningProbe.MissingState.COMPONENT_DISABLED, 1, true))
         assertEquals(R.string.setup_error_provisioning_blocked_by_profile,
-            ProvisioningProbe.errorMessageFor(ProvisioningProbe.MissingState.PACKAGE_DISABLED, 1))
+            ProvisioningProbe.errorMessageFor(ProvisioningProbe.MissingState.PACKAGE_DISABLED, 1, false))
         assertEquals(R.string.setup_error_provisioning_blocked_by_profile,
-            ProvisioningProbe.errorMessageFor(ProvisioningProbe.MissingState.UNKNOWN, 1))
+            ProvisioningProbe.errorMessageFor(ProvisioningProbe.MissingState.UNKNOWN, 1, true))
     }
 
     @Test
-    fun `absent or stripped handler keeps the not-supported copy even with profiles present`() {
-        assertEquals(R.string.setup_error_missing_managed_provisioning,
-            ProvisioningProbe.errorMessageFor(ProvisioningProbe.MissingState.ABSENT, 1))
-        assertEquals(R.string.setup_error_missing_managed_provisioning,
-            ProvisioningProbe.errorMessageFor(ProvisioningProbe.MissingState.NO_HANDLER, 1))
+    fun `absent or stripped handler on a capable device gets the privileged-fallback copy`() {
+        // The HyperOS 1 reality: entry package removed but FEATURE_MANAGED_USERS present.
+        // The copy must point at Shizuku/ROOT instead of claiming the device is unsupported.
+        assertEquals(R.string.setup_error_provisioning_entry_stripped,
+            ProvisioningProbe.errorMessageFor(ProvisioningProbe.MissingState.ABSENT, 1, true))
+        assertEquals(R.string.setup_error_provisioning_entry_stripped,
+            ProvisioningProbe.errorMessageFor(ProvisioningProbe.MissingState.NO_HANDLER, 1, true))
+        assertEquals(R.string.setup_error_provisioning_entry_stripped,
+            ProvisioningProbe.errorMessageFor(ProvisioningProbe.MissingState.ABSENT, 0, true))
     }
 
     @Test
-    fun `no profiles always yields the not-supported copy`() {
+    fun `genuinely incapable device keeps the not-supported copy`() {
         ProvisioningProbe.MissingState.values().forEach { state ->
             assertEquals(R.string.setup_error_missing_managed_provisioning,
-                ProvisioningProbe.errorMessageFor(state, 0))
+                ProvisioningProbe.errorMessageFor(state, 0, false))
+            if (state == ProvisioningProbe.MissingState.ABSENT || state == ProvisioningProbe.MissingState.NO_HANDLER)
+                assertEquals(R.string.setup_error_missing_managed_provisioning,
+                    ProvisioningProbe.errorMessageFor(state, 1, false))
         }
+    }
+
+    @Test
+    fun `privileged fallback is offered exactly when the platform can run managed users`() {
+        assertTrue(ProvisioningProbe.shouldOfferPrivilegedFallback(true))
+        assertFalse(ProvisioningProbe.shouldOfferPrivilegedFallback(false))
     }
 }

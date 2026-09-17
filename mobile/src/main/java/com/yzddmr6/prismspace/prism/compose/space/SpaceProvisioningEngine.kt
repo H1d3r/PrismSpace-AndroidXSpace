@@ -31,7 +31,14 @@ object SpaceProvisioningEngine {
     /** Resolves exactly one transport per operation; never falls back mid-transaction. */
     private fun resolveShell(context: Context): PrivilegedShell? {
         val capabilities = CapabilityRepositoryProvider.get(context)
-        return when (chooseTransport(ShizukuUtil.isAuthorized()) { probeSu() }) {
+        val shizukuAuthorized = ShizukuUtil.isAuthorized()
+        var suAvailable: Boolean? = null  // null = not probed (Shizuku already won)
+        val transport = chooseTransport(shizukuAuthorized) { probeSu().also { suAvailable = it } }
+        DiagnosticLog.i(
+            TAG,
+            "transport resolve: shizukuAuthorized=$shizukuAuthorized suAvailable=$suAvailable chosen=${transport?.name ?: "none"}",
+        )
+        return when (transport) {
             PrivilegedTransport.SHIZUKU -> {
                 capabilities.markShizukuReady()
                 ShizukuPrivilegedShell()

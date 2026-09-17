@@ -124,11 +124,22 @@ public class SetupViewModel {
 		reason("lack_managed_provisioning").withRaw("profiles", String.valueOf(profile_count))
 				.withRaw("miui", String.valueOf(com.yzddmr6.prismspace.util.RomVariants.isMiui()))
 				.withRaw("mp", probe.classify().name().toLowerCase(java.util.Locale.US)).send();
-		final @StringRes int message = ProvisioningProbe.errorMessageFor(probe.classify(), profile_count);
+		final @StringRes int message = ProvisioningProbe.errorMessageFor(probe.classify(), profile_count, probe.managed_users_feature);
 		final SetupViewModel error = buildErrorVM(message, null);
-		if (message == R.string.setup_error_provisioning_blocked_by_profile)
+		if (ProvisioningProbe.shouldOfferPrivilegedFallback(probe.managed_users_feature))
 			error.withExtraAction(R.string.button_setup_space_privileged);
-		return error.withTryProvisionAnyway();
+		error.withTryProvisionAnyway();
+		com.yzddmr6.prismspace.analytics.DiagnosticLog.INSTANCE.i(TAG,
+				"setup error offered: message=" + context.getResources().getResourceEntryName(message)
+						+ " extra=" + (error.action_extra != 0 ? context.getResources().getResourceEntryName(error.action_extra) : "none")
+						+ " tryAnyway=" + error.try_provision_anyway);
+		return error;
+	}
+
+	/** Public entry for the Compose controller's launch-failure fallback, so the post-attempt
+	 *  error offers exactly the same actions as the pre-check error — a single source of truth. */
+	public static SetupViewModel missingProvisioningErrorPublic(final Context context) {
+		return buildMissingProvisioningError(context);
 	}
 
 	private static SetupViewModel buildErrorVM(final @StringRes int message, final @Nullable Analytics.Event event) {
