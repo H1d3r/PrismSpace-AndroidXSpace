@@ -6,6 +6,7 @@ import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
@@ -50,6 +51,7 @@ import com.yzddmr6.prismspace.util.UserHandles
 import com.yzddmr6.prismspace.space.SpaceState
 import eu.chainfire.libsuperuser.Shell
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -185,6 +187,8 @@ internal fun mapSettingsUiModel(
 
 private const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
 private const val SHIZUKU_PERMISSION_REQUEST = 1601
+private const val REPAIR_CONVERGENCE_WAIT_MS = 15_000L
+private const val REPAIR_CONVERGENCE_POLL_MS = 500L
 private const val PRISM_PROBE_PACKAGE = "com.yzddmr6.prismprobe"
 private const val BYTES_PER_MB = 1024L * 1024L
 
@@ -476,12 +480,43 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                     val active = Users.isProfileAvailable(context, profile) ||
                         (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
                             runCatching { Users.requestQuietModeDisabled(context, profile) }.getOrDefault(false))
-                    val opened = active && ProfileEntryLauncher.start(context, profile)
-                    setFeedback(
-                        if (opened) str(R.string.lz_setvm_bridge_repair_opened_profile)
-                        else str(R.string.lz_setvm_incomplete_cannot_auto_repair),
-                        isError = !opened,
-                    )
+                    when {
+                        !active -> setFeedback(
+                            str(R.string.lz_setvm_repair_failed, str(R.string.lz_setvm_profile_activation_failed)),
+                            isError = true,
+                        )
+                        ProfileEntryLauncher.isEnabled(context, profile) -> {
+                            val opened = ProfileEntryLauncher.start(context, profile)
+                            setFeedback(
+                                if (opened) str(R.string.lz_setvm_bridge_repair_opened_profile)
+                                else str(R.string.lz_setvm_incomplete_cannot_auto_repair),
+                                isError = !opened,
+                            )
+                        }
+                        else -> {
+                            // Entry disabled ⟺ profile-side provisioning never ran, so opening the
+                            // entry is guaranteed to fail and the bridge is down by definition.
+                            // Drive convergence through the always-on trampoline instead.
+                            val triggered = ProfileEntryLauncher.startConvergence(context, profile)
+                            DiagnosticLog.i(TAG, "settings repair convergence trigger user=${plan.userId} triggered=$triggered")
+                            if (triggered) {
+                                // Bounded convergence wait; refreshCapabilities() afterwards
+                                // carries the final state either way.
+                                val deadline = SystemClock.elapsedRealtime() + REPAIR_CONVERGENCE_WAIT_MS
+                                while (SystemClock.elapsedRealtime() < deadline) {
+                                    val healthy = runCatching {
+                                        stateRepo.refresh("settings_repair_convergence") &&
+                                            stateRepo.currentState() is SpaceState.Healthy
+                                    }.getOrDefault(false)
+                                    if (healthy) break
+                                    delay(REPAIR_CONVERGENCE_POLL_MS)
+                                }
+                                setFeedback(str(R.string.lz_setvm_incomplete_repaired), isError = false)
+                            } else {
+                                setFeedback(str(R.string.lz_setvm_incomplete_cannot_auto_repair), isError = true)
+                            }
+                        }
+                    }
                     refreshCapabilities()
                 }
                 is SpaceRecoveryPlan.OpenProfileUnlock -> {

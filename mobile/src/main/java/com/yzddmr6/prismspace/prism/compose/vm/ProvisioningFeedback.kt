@@ -33,6 +33,8 @@ fun provisioningFeedback(result: CreateSpaceResult, res: StringResolver): Destro
         isError = true,
         routeToSystemRemoval = result.state is SpaceState.OrphanProfile,
     )
+    is CreateSpaceResult.ConvergenceTimeout ->
+        DestroyFeedback(res(R.string.lz_vm_create_convergence_timeout, emptyArray()), isError = true, routeToSystemRemoval = false)
     is CreateSpaceResult.Failed ->
         DestroyFeedback(res(R.string.lz_vm_create_failed, arrayOf(result.reason?.takeIf { it.isNotBlank() } ?: res(R.string.lz_vm_unknown_error, emptyArray()))), isError = true, routeToSystemRemoval = false)
 }
@@ -58,6 +60,7 @@ fun specificRootSetupFailure(
     CreateSpaceResult.RootUnavailable,
     is CreateSpaceResult.CapReached,
     CreateSpaceResult.ManagedProfileLimitReached,
+    is CreateSpaceResult.ConvergenceTimeout,
     CreateSpaceResult.StateRefreshFailed -> provisioningFeedback(result, res).message
     else -> null
 }

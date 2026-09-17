@@ -89,6 +89,10 @@ class ProvisioningPathConsolidationTest {
             RootSetupResultMapping.presentation(CreateSpaceResult.Failed("install", analyticsPhase = 2)),
         )
         assertEquals(
+            RootSetupPresentation(RootSetupUiOutcome.Error, 2),
+            RootSetupResultMapping.presentation(CreateSpaceResult.ConvergenceTimeout(22)),
+        )
+        assertEquals(
             "已达本设备空间上限（最多 4 个用户），无法再创建",
             specificRootSetupFailure(CreateSpaceResult.CapReached(4)),
         )
@@ -101,6 +105,10 @@ class ProvisioningPathConsolidationTest {
             specificRootSetupFailure(CreateSpaceResult.StateRefreshFailed),
         )
         assertEquals(null, specificRootSetupFailure(CreateSpaceResult.Failed("install", analyticsPhase = 2)))
+        assertEquals(
+            "空间已创建，但空间内初始化未在预期时间内完成。请前往「设置 → 修复双开空间」自动完成初始化。",
+            specificRootSetupFailure(CreateSpaceResult.ConvergenceTimeout(22)),
+        )
     }
 
     @Test fun `all deletion entrances use the same pure route decision`() {

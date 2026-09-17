@@ -60,4 +60,45 @@ public class PrismProvisioningRevisionTest {
         assertTrue(PrismProvisioning.shouldRunProfilePostProvisioning(Intent.ACTION_USER_INITIALIZE, 10, 10));
         assertTrue(PrismProvisioning.shouldRunProfilePostProvisioning(null, 10, 10));
     }
+
+    @Test public void manualExtrasRunForManualTypeAtAnyState() {
+        assertTrue(PrismProvisioning.shouldRunManualProvisioningExtras(1, 0));
+        assertTrue(PrismProvisioning.shouldRunManualProvisioningExtras(1, 10));
+    }
+
+    @Test public void manualExtrasRunForNeverCompletedProfilesRegardlessOfType() {
+        assertTrue(PrismProvisioning.shouldRunManualProvisioningExtras(0, 0));
+        assertTrue(PrismProvisioning.shouldRunManualProvisioningExtras(0, 2));
+    }
+
+    @Test public void manualExtrasSkipCompletedSystemProvisionedProfiles() {
+        assertFalse(PrismProvisioning.shouldRunManualProvisioningExtras(0, 3));
+        assertFalse(PrismProvisioning.shouldRunManualProvisioningExtras(0, 10));
+    }
+
+    @Test public void convergeTrampolineIsRegisteredAndSelfProtecting() throws Exception {
+        final String manifest = new String(java.nio.file.Files.readAllBytes(
+                java.nio.file.Paths.get("src/main/AndroidManifest.xml")), java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(manifest.contains("PrismProvisioning$ConvergeActivity"));
+        // No launcher filter: the trampoline must never surface an icon.
+        final int entry = manifest.indexOf("PrismProvisioning$ConvergeActivity");
+        // LauncherApps.startMainActivity runtime-enforces CATEGORY_LAUNCHER, so the trampoline
+        // must declare MAIN+LAUNCHER even though it is never meant to be seen (retired on
+        // convergence by reprovisionManagedProfile / proceedProfileProvisioning).
+        final int elementEnd = manifest.indexOf("</activity>", entry);
+        final String element = manifest.substring(entry, elementEnd);
+        assertTrue(element.contains("android:exported=\"true\""));
+        assertTrue(element.contains("android.intent.action.MAIN"));
+        assertTrue(element.contains("android.intent.category.LAUNCHER"));
+
+        final String source = new String(java.nio.file.Files.readAllBytes(
+                java.nio.file.Paths.get("src/main/java/com/yzddmr6/prismspace/provisioning/PrismProvisioning.java")),
+                java.nio.charset.StandardCharsets.UTF_8);
+        final int cls = source.indexOf("class ConvergeActivity");
+        assertTrue(cls >= 0);
+        // Self-protection: only an owned profile may be converged.
+        assertTrue(source.indexOf("isParentProfile()", cls) > cls);
+        assertTrue(source.indexOf("isProfileOwner()", cls) > cls);
+        assertTrue(source.indexOf("ACTION_PROVISION_MANAGED_PROFILE", cls) > cls);
+    }
 }
