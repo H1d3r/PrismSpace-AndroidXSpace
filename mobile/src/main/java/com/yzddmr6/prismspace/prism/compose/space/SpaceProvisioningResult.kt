@@ -9,6 +9,8 @@ sealed class CreateSpaceResult {
     object ManagedProfileLimitReached : CreateSpaceResult()
     object StateRefreshFailed : CreateSpaceResult()
     data class BlockedByState(val state: SpaceState) : CreateSpaceResult()
+    /** The profile exists but profile-side provisioning did not converge in time; kept, repairable. */
+    data class ConvergenceTimeout(val userId: Int) : CreateSpaceResult()
     data class Failed(val reason: String?, val analyticsPhase: Int = 2) : CreateSpaceResult()
 }
 
@@ -38,6 +40,7 @@ object RootSetupResultMapping {
         is CreateSpaceResult.CapReached,
         CreateSpaceResult.ManagedProfileLimitReached,
         CreateSpaceResult.StateRefreshFailed -> RootSetupPresentation(RootSetupUiOutcome.Error, 1)
+        is CreateSpaceResult.ConvergenceTimeout -> RootSetupPresentation(RootSetupUiOutcome.Error, 2)
         is CreateSpaceResult.Failed -> RootSetupPresentation(RootSetupUiOutcome.Error, result.analyticsPhase)
     }
 }

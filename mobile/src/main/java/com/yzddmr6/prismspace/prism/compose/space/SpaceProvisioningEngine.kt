@@ -11,6 +11,8 @@ import com.yzddmr6.prismspace.util.UserHandles
 import com.yzddmr6.prismspace.util.Users
 import com.yzddmr6.prismspace.prism.compose.vm.CapabilityRepositoryProvider
 import com.yzddmr6.prismspace.prism.compose.vm.ShizukuUtil
+import com.yzddmr6.prismspace.prism.service.ProfileEntryLauncher
+import com.yzddmr6.prismspace.settings.PrismSettingsActivity
 import com.yzddmr6.prismspace.space.SpaceState
 import eu.chainfire.libsuperuser.Shell
 import kotlinx.coroutines.Dispatchers
@@ -132,18 +134,36 @@ object SpaceProvisioningEngine {
             DiagnosticLog.w(TAG, "privileged create incomplete user=$pid transport=${shell.name} reason=$reason")
             return@withContext CreateSpaceResult.Failed(reason, analyticsPhase = 2)
         }
+        // The privileged path never runs the system provisioning flow, so no provisioning
+        // broadcast is guaranteed (HyperOS 1 evidence). Drive profile-side convergence through
+        // the always-on trampoline — the channel that does not depend on ROM behavior.
         val pending = UserHandles.of(pid)
+        ProfileEntryLauncher.startConvergence(context, pending)
         val la = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
-        return@withContext if (la.getActivityList(context.packageName, pending).isNotEmpty()) {
-            SpaceProvisioningTracker.markReturnedSuccess()
-            DiagnosticLog.i(TAG, "privileged create success user=$pid transport=${shell.name}")
-            CreateSpaceResult.Success(pid)
-        } else {
+        // Success is convergence, not "transaction exited 0": wait until the profile-side
+        // launcher entry is actually enabled (the marker definition itself). Package
+        // resolvability alone passed on a half-provisioned HyperOS 1 profile — never again.
+        if (!awaitProfileConvergence(la, pending)) {
             SpaceProvisioningTracker.clear()
-            val reason = output?.joinToString("\n")?.ifBlank { null } ?: "provisioning incomplete"
-            DiagnosticLog.w(TAG, "privileged create incomplete user=$pid transport=${shell.name} reason=$reason")
-            CreateSpaceResult.Failed(reason, analyticsPhase = 2)
+            DiagnosticLog.w(TAG, "privileged create convergence timeout user=$pid transport=${shell.name}")
+            return@withContext CreateSpaceResult.ConvergenceTimeout(pid)
         }
+        SpaceProvisioningTracker.markReturnedSuccess()
+        DiagnosticLog.i(TAG, "privileged create success user=$pid transport=${shell.name}")
+        return@withContext CreateSpaceResult.Success(pid)
+    }
+
+    private suspend fun awaitProfileConvergence(la: LauncherApps, profile: android.os.UserHandle): Boolean {
+        val deadline = SystemClock.elapsedRealtime() + PROFILE_CONVERGENCE_TIMEOUT_MS
+        while (SystemClock.elapsedRealtime() < deadline) {
+            val converged = runCatching {
+                la.getActivityList(Modules.MODULE_ENGINE, profile).orEmpty()
+                    .any { it.componentName.className == PrismSettingsActivity::class.java.name }
+            }.getOrDefault(false)
+            if (converged) return true
+            delay(PROFILE_CONVERGENCE_POLL_MS)
+        }
+        return false
     }
 
     suspend fun deleteSpace(context: Context, space: PrismSpace): DeleteSpaceResult = withContext(Dispatchers.IO) {
@@ -202,4 +222,6 @@ object SpaceProvisioningEngine {
     private const val ROOT_TRANSACTION_OUTPUT_PATH = "/data/local/tmp/prism-provisioning-transaction.log"
     private const val ROOT_TRANSACTION_TIMEOUT_MS = 120_000L
     private const val ROOT_TRANSACTION_POLL_MS = 200L
+    private const val PROFILE_CONVERGENCE_TIMEOUT_MS = 45_000L
+    private const val PROFILE_CONVERGENCE_POLL_MS = 500L
 }

@@ -39,6 +39,7 @@
     <!-- ProvisioningFeedback: create -->
     <string name="lz_vm_create_success">A new dual space has been created</string>
     <string name="lz_vm_create_root_unavailable">A privileged channel is required to create a space: install and start Shizuku (Android 11+ can activate it via wireless debugging) or Sui, or enable Root, then retry</string>
+    <string name="lz_vm_create_convergence_timeout">The space was created, but in-space initialization did not finish in time. Go to Settings → Repair dual space to finish it automatically.</string>
     <string name="lz_vm_create_cap_reached">Reached this device\'s space limit (up to %1$d users); cannot create more</string>
     <string name="lz_vm_create_managed_profile_limit">This device only allows one dual space (the system work-profile limit has been reached); cannot create more</string>
     <string name="lz_vm_create_failed">Failed to create space: %1$s. You can retry</string>

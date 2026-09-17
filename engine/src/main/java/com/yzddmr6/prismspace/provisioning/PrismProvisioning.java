@@ -188,6 +188,7 @@ public class PrismProvisioning extends IntentService {
 		enableCriticalAppsIfNeeded(context, policies);
 
 		setupLauncherActivityInPrism(context);     // Must before setProfileEnabled() is invoked.
+		if (! Users.isParentProfile()) retireConvergeTrampoline(context);
 
 		if (! is_manual_setup) {	// Enable the profile here, launcher will show all apps inside.
 			Log.d(TAG, "Enable profile now.");
@@ -249,6 +250,12 @@ public class PrismProvisioning extends IntentService {
 
 	static boolean shouldRunOneTimePostProvisionMigration(final int state, final int revision) {
 		return state >= FIRST_COMPLETED_POST_PROVISION_REV && state < revision;
+	}
+
+	/** Manual-equivalent steps belong to convergence for any profile whose initial provisioning never
+	 *  completed, not only for profiles explicitly marked as manually provisioned. */
+	static boolean shouldRunManualProvisioningExtras(final int provisionType, final int provisionState) {
+		return provisionType == 1 || provisionState < FIRST_COMPLETED_POST_PROVISION_REV;
 	}
 
 	static boolean shouldAdvanceRevisionAfterExplicitRepair(final boolean runningInParent,
@@ -320,17 +327,28 @@ public class PrismProvisioning extends IntentService {
 			// This is also required for manual provision via ADB shell.
 			policies.execute(DevicePolicyManager::clearCrossProfileIntentFilters);
 			final int provision_type = prefs.getInt(PREF_KEY_PROFILE_PROVISION_TYPE, 0);
-			if (provision_type == 1) ProfileOwnerManualProvisioning.start(context, policies);	// Simulate the stock managed profile provision
+			// Convergence must cover profiles whose initial provisioning never completed at all
+			// (e.g. privileged-created ones never touched by the system flow), not only manual ones.
+			if (shouldRunManualProvisioningExtras(provision_type, prefs.getInt(PREF_KEY_PROVISION_STATE, 0)))
+				ProfileOwnerManualProvisioning.start(context, policies);	// Simulate the stock managed profile provision
 			}
 			startProfileOwnerPostProvisioning(context, policies);
 			enableCriticalAppsIfNeeded(context, policies);
 			if (! owner) {
 				setupLauncherActivityInPrism(context);
+				retireConvergeTrampoline(context);
 				final int state = prefs.getInt(PREF_KEY_PROVISION_STATE, 0);
 				if (shouldAdvanceRevisionAfterExplicitRepair(owner, state, POST_PROVISION_REV)
 						&& ! prefs.edit().putInt(PREF_KEY_PROVISION_STATE, POST_PROVISION_REV).commit())
 					throw new IllegalStateException("Failed to persist completed profile repair revision");
 			}
+	}
+
+	/** The trampoline exists so the profile can be reached before convergence; once converged the
+	 *  settings entry is the user-facing surface and the trampoline icon must not linger. */
+	@ProfileUser private static void retireConvergeTrampoline(final Context context) {
+		context.getPackageManager().setComponentEnabledSetting(
+				new ComponentName(context, ConvergeActivity.class), COMPONENT_ENABLED_STATE_DISABLED, DONT_KILL_APP);
 	}
 
 	public static void startDeviceAndProfileOwnerSharedPostProvisioning(final Context context, final DevicePolicies policies) {
@@ -472,6 +490,28 @@ public class PrismProvisioning extends IntentService {
 
 			SafeAsyncTask.execute(this, a -> proceed(a, new Intent(ACTION_PROFILE_PROVISIONING_COMPLETE)),
 					activity -> { progress.dismiss(); activity.finish(); });
+		}
+	}
+
+	/**
+	 * Always-enabled exported trampoline into profile-side convergence. The privileged creation
+	 * path never runs the system provisioning flow, so no provisioning broadcast is guaranteed to
+	 * arrive (HyperOS 1 evidence); and when the settings entry is still disabled, neither the
+	 * Shuttle bridge nor LauncherApps entry-open can reach profile-side code. This trampoline is
+	 * the one channel left: the parent app starts it via LauncherApps in its own profile. It only
+	 * converges a profile we own; anywhere else it is a no-op.
+	 */
+	public static class ConvergeActivity extends Activity {
+
+		@Override protected void onCreate(@Nullable final Bundle savedInstanceState) {
+			super.onCreate(savedInstanceState);
+			if (! Users.isParentProfile() && new DevicePolicies(this).isProfileOwner()) {
+				DiagnosticLog.INSTANCE.i(TAG, "converge trampoline entered; starting profile reprovision");
+				PrismProvisioning.start(this, DevicePolicyManager.ACTION_PROVISION_MANAGED_PROFILE);
+			} else {
+				Log.w(TAG, "ConvergeActivity started outside an owned profile; ignoring.");
+			}
+			finish();
 		}
 	}
 
