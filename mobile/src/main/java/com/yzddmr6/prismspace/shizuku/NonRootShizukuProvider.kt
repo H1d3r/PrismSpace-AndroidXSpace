@@ -18,6 +18,9 @@ class NonRootShizukuProvider: ShizukuProvider() {
         Shizuku.addBinderReceivedListenerSticky {
             logTransport(packageName, initialized, phase = "binder_received")
         }
+        Shizuku.addBinderDeadListener {
+            logTransport(packageName, initialized, phase = "binder_dead")
+        }
         return created
     }
 

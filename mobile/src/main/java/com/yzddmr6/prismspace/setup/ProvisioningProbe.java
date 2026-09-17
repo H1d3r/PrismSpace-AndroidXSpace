@@ -28,6 +28,10 @@ import static android.app.admin.DevicePolicyManager.ACTION_PROVISION_MANAGED_PRO
  * (vendor dual-apps features are known to occupy the entry — recoverable), or the component
  * is enabled yet declares no matching filter (ROM stripping). These need different user
  * guidance, so the probe separates them and the decision functions stay pure for JVM tests.
+ * The privileged (Shizuku/ROOT) fallback never touches this package, so it is offered
+ * whenever the platform can run managed users at all — withholding it in the ABSENT case
+ * (ROM stripped the entry but supports profiles, e.g. HyperOS 1) strands exactly the users
+ * the fallback exists for.
  *
  * <p>Everything collected is safe to log: package presence/enabled states, handler counts,
  * booleans and restriction key names — no personal data.
@@ -122,10 +126,20 @@ public final class ProvisioningProbe {
 	}
 
 	/** Pure copy decision: the dual-apps-occupation copy is only honest when a handler exists to be occupied. */
-	static @StringRes int errorMessageFor(final MissingState state, final int profile_count) {
+	static @StringRes int errorMessageFor(final MissingState state, final int profile_count, final boolean managed_users_feature) {
 		if (profile_count > 0 && state != MissingState.ABSENT && state != MissingState.NO_HANDLER)
 			return R.string.setup_error_provisioning_blocked_by_profile;
+		if (managed_users_feature)
+			return R.string.setup_error_provisioning_entry_stripped;
 		return R.string.setup_error_missing_managed_provisioning;
+	}
+
+	/** Pure policy: the privileged fallback never touches the missing provisioning package, so it
+	 *  is worth offering whenever the platform itself can run managed users. Withholding it in the
+	 *  ABSENT case (ROM stripped the entry but supports profiles, e.g. HyperOS 1) strands exactly
+	 *  the users this path exists for. */
+	static boolean shouldOfferPrivilegedFallback(final boolean managed_users_feature) {
+		return managed_users_feature;
 	}
 
 	public String toLogString() {

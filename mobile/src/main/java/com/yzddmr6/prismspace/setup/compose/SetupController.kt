@@ -152,11 +152,10 @@ class SetupController(
             SpaceProvisioningTracker.clear()
             Log.w(TAG, "Managed provisioning activity not found", e)
             DiagnosticLog.w(TAG, "managed provisioning launch failed: ${e.message}")
-            stateVm.setUiState(SetupUiState.Error(
-                messageRes = R.string.setup_error_missing_managed_provisioning,
-                messageParams = null,
-                extraActionRes = R.string.button_setup_help,
-            ))
+            // Same probe-driven error as the pre-check path: identical copy and identical
+            // actions (privileged fallback included) — the launch failure just confirmed
+            // the probe's verdict, it must not strand the user with fewer options.
+            stateVm.setUiState(SetupViewModel.missingProvisioningErrorPublic(activity).toErrorState())
         }
     }
 
