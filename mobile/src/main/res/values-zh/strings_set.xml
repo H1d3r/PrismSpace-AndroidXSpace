@@ -34,6 +34,7 @@
     <string name="lz_set_reconnect_timed_out">双开空间连接超时；请打开空间入口后重试。</string>
     <string name="lz_set_reconnect_failed">双开空间连接失败；请打开空间入口诊断并重新连接。</string>
     <string name="lz_set_reconnect_not_checked">尚未完成一次成功的连接检查；请打开空间入口后重试。</string>
+    <string name="lz_set_reconnect_miui_hint">小米/红米设备：若连接反复断开，请在系统设置中为 PrismSpace 开启「自启动」并保持后台运行。</string>
     <string name="lz_set_ready_title">双开空间已就绪</string>
     <string name="lz_set_ready_summary">点击查看分身数量与空间信息。</string>
     <string name="lz_set_delete_space_title">删除双开空间</string>

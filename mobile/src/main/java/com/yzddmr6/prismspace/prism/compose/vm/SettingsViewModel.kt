@@ -727,7 +727,12 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             res = prismResolver(getApplication()),
         )
         val freezeState = observeSpaceFreezeState(context, presentation.kind)
-        val spaceAction = settingsSpaceAction(presentation.kind, presentation.bridgeCause, prismResolver(context))
+        val spaceAction = settingsSpaceAction(
+            presentation.kind,
+            presentation.bridgeCause,
+            prismResolver(context),
+            isMiui = com.yzddmr6.prismspace.util.RomVariants.isMiui(),
+        )
         val dual = spaceRepo.dualSpace()
         val usability = dual?.let { spaceRepo.usabilityOf(it) } ?: SpaceUsability.NotProvisioned
         val cloneCount = runCatching {

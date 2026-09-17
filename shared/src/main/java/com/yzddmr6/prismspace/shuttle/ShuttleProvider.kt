@@ -40,9 +40,7 @@ class ShuttleProvider: ContentProvider() {
 			}
 			val uri = buildCrossProfileUri(targetUser)
 			return try {
-				val response = requireNotNull(
-					context.contentResolver.call(uri, BridgeWire.methodName(command), null, BridgeWire.request(command)),
-				) { "Missing bridge response for ${command.id}" }
+				val response = callWithTransientRetry(context, uri, command)
 				ShuttleOutcome.Value(BridgeWire.decode(command, response))
 			} catch (error: RuntimeException) {
 				val permissionGranted = isReady(context, target)
@@ -69,6 +67,37 @@ class ShuttleProvider: ContentProvider() {
 		private fun isReady(c: Context, profile: UserHandle) = c.isPermissionGranted(buildCrossProfileUri(profile.toId()))
 		@OwnerUser private fun isBackwardReady(c: Context, profile: UserHandle) =
 			c.isPermissionGranted(Uri.parse(CONTENT_URI), uid = UserHandles.getUid(profile.toId(), Process.myUid()))
+
+		/**
+		 * The wire protocol never returns a null Bundle (BridgeDispatcher always answers), so a null
+		 * response means the framework failed to acquire the provider — a transient state on ROMs with
+		 * aggressive background management (HyperOS 1 evidence: process alive, grants held, null in
+		 * 13ms, self-heals in ~2s). Retry nulls with a small budget; thrown failures (grant loss et al.)
+		 * are structural and propagate immediately.
+		 */
+		private fun <R> callWithTransientRetry(context: Context, uri: Uri, command: BridgeCommand<R>): Bundle {
+			val method = BridgeWire.methodName(command)
+			val request = BridgeWire.request(command)
+			var nulls = 0
+			while (true) {
+				val response = context.contentResolver.call(uri, method, null, request)
+				if (response != null) {
+					if (nulls > 0)
+						DiagnosticLog.i(TAG, "bridge call recovered operation=${command.id} nullRetries=$nulls")
+					return response
+				}
+				nulls++
+				if (nulls >= BRIDGE_CALL_MAX_ATTEMPTS) break
+				DiagnosticLog.i(TAG, "bridge call null response operation=${command.id} attempt=$nulls; retrying")
+				try {
+					Thread.sleep(BRIDGE_CALL_RETRY_DELAY_MS)
+				} catch (e: InterruptedException) {
+					Thread.currentThread().interrupt()
+					break
+				}
+			}
+			throw IllegalArgumentException("Missing bridge response for ${command.id} after $nulls attempts")
+		}
 
 		private fun Context.uriPermissionCheck(uri: Uri, uid: Int = Process.myUid()) =
 			checkUriPermission(uri, 0, uid, Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
@@ -190,6 +219,8 @@ class ShuttleProvider: ContentProvider() {
 		private const val AUTHORITY = "com.yzddmr6.prismspace.shuttle"
 		const val CONTENT_URI = "$SCHEME_CONTENT://$AUTHORITY"
 		private const val SHUTTLE_HEALTH_TIMEOUT_MS = 1_500L
+		private const val BRIDGE_CALL_MAX_ATTEMPTS = 3
+		private const val BRIDGE_CALL_RETRY_DELAY_MS = 200L
 	}
 
 	override fun call(method: String, arg: String?, extras: Bundle?): Bundle? {
