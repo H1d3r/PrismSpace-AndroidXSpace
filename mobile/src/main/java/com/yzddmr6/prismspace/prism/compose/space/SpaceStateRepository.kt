@@ -204,6 +204,15 @@ private object SpaceStateStores {
                         val line = "reason=$reason ${facts.diagnosticLine()} -> $state"
                         store.lastFactsLine = line
                         DiagnosticLog.i(SpaceStateRepository.TAG, line)
+                        SpaceBridgeAutoRecovery.maybeRecover(context, state) { userId ->
+                            // The carrier exchange completes in ~1s; nudge a re-verification so the
+                            // UI flips back to Healthy promptly instead of waiting out the health TTL.
+                            scope.launch {
+                                delay(2_500L)
+                                SpaceBridgeHealthStores.app.invalidate(userId)
+                                store.invalidate("auto_recover_recheck:user=$userId")
+                            }
+                        }
                     }
                 }
             },

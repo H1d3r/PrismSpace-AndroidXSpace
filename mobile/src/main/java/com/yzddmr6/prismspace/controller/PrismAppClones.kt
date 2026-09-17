@@ -415,6 +415,11 @@ class PrismAppClones(
 				CloneRoute.ROOT -> {
 					val result = installExistingViaRoot(context, target)
 					if (result.installed) {
+						// install-existing restores nothing else: a system/policy-imposed suspend or
+						// hide on the fresh clone would leave it instantly unlaunchable. Clear it now,
+						// while the clone flow is still on the call stack. Best-effort; su was just
+						// used, so probing it here raises no new prompt.
+						CloneSuspendRecovery.ensureUnsuspended(context, target, pkg, allowSuProbe = true)
 						PrismAppListProvider.getInstance(context).refreshPackage(pkg, target, true)
 						onCloneStateChanged()
 						feedback(PrismLocale.wrap(context).getString(R.string.toast_successfully_cloned, source.label))

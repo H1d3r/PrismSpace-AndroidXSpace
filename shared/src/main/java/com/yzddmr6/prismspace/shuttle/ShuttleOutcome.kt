@@ -74,6 +74,9 @@ data class ShuttleHealth(
 	val ping: ShuttleOutcome<Boolean>,
 	val forwardGrantCheck: Int = if (forwardGrant) 0 else -1,
 	val backwardGrantCheck: Int = if (backwardGrant) 0 else -1,
+	/** Profile-side own-package state as seen from the parent; null when the query failed. */
+	val packageEnabled: Boolean? = null,
+	val packageSuspended: Boolean? = null,
 ) {
 	val available: Boolean get() = running && !quietMode && unlocked && ping is ShuttleOutcome.Value
 
@@ -81,5 +84,6 @@ data class ShuttleHealth(
 		"shuttleHealth profile=$profileId running=$running quietMode=$quietMode unlocked=$unlocked " +
 			"forwardGrant=$forwardGrant forwardGrantCheck=$forwardGrantCheck " +
 			"backwardGrant=$backwardGrant backwardGrantCheck=$backwardGrantCheck " +
+			"pkgEnabled=${packageEnabled?.toString() ?: "-"} pkgSuspended=${packageSuspended?.toString() ?: "-"} " +
 			"ping=${ping.diagnosticValue()} available=$available"
 }

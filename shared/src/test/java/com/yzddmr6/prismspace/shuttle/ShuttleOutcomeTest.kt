@@ -53,4 +53,32 @@ class ShuttleOutcomeTest {
         assertTrue(line.contains("backwardGrantCheck=0"))
         assertTrue(line.contains("ping=not_ready:PermissionDenied"))
     }
+
+    @Test fun healthDiagnosticIncludesPackageState() {
+        val line = ShuttleHealth(
+            profileId = 10,
+            running = true,
+            quietMode = false,
+            unlocked = true,
+            forwardGrant = true,
+            backwardGrant = true,
+            ping = ShuttleOutcome.NotReady(ShuttleNotReadyCause.UnknownAuthority),
+            packageEnabled = true,
+            packageSuspended = false,
+        ).diagnosticLine()
+        assertTrue(line.contains("pkgEnabled=true"))
+        assertTrue(line.contains("pkgSuspended=false"))
+
+        val unknown = ShuttleHealth(
+            profileId = 10,
+            running = true,
+            quietMode = false,
+            unlocked = true,
+            forwardGrant = true,
+            backwardGrant = true,
+            ping = ShuttleOutcome.TimedOut,
+        ).diagnosticLine()
+        assertTrue(unknown.contains("pkgEnabled=-"))
+        assertTrue(unknown.contains("pkgSuspended=-"))
+    }
 }

@@ -3,6 +3,8 @@ package com.yzddmr6.prismspace.shuttle
 import android.app.Activity
 import android.content.*
 import android.content.ContentResolver.SCHEME_CONTENT
+import android.content.pm.LauncherApps
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager.PERMISSION_DENIED
 import android.content.pm.PackageManager.PERMISSION_GRANTED
 import android.database.Cursor
@@ -123,6 +125,18 @@ class ShuttleProvider: ContentProvider() {
 					)
 				}.getOrDefault(PERMISSION_DENIED)
 				val backwardGrant = backwardGrantCheck == PERMISSION_GRANTED
+				// Own-package state inside the profile, parent-side view: splits "the system touched
+				// the package" from "provider alone is unresolvable" when the bridge breaks.
+				val launcherApps = context.getSystemService(LauncherApps::class.java)
+				val profilePackageInfo = runCatching {
+					launcherApps?.getApplicationInfo(context.packageName, 0, profile)
+				}.getOrNull()
+				val packageEnabled = runCatching {
+					launcherApps?.isPackageEnabled(context.packageName, profile)
+				}.getOrNull()
+				val packageSuspended = profilePackageInfo?.let {
+					(it.flags and ApplicationInfo.FLAG_SUSPENDED) != 0
+				}
 				val ping = when {
 					quietMode -> ShuttleOutcome.Skipped("profile_quiet_mode")
 					!running -> ShuttleOutcome.Skipped("profile_not_running")
@@ -142,6 +156,8 @@ class ShuttleProvider: ContentProvider() {
 					ping,
 					forwardGrantCheck,
 					backwardGrantCheck,
+					packageEnabled,
+					packageSuspended,
 				)
 			}
 

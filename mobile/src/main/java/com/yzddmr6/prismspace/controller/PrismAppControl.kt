@@ -15,6 +15,7 @@ import com.yzddmr6.prismspace.analytics.Analytics.Param.CONTENT
 import com.yzddmr6.prismspace.analytics.Analytics.Param.ITEM_CATEGORY
 import com.yzddmr6.prismspace.analytics.Analytics.Param.ITEM_ID
 import com.yzddmr6.prismspace.analytics.analytics
+import com.yzddmr6.prismspace.analytics.DiagnosticLog
 import com.yzddmr6.prismspace.bridge.BridgeTargets
 import com.yzddmr6.prismspace.bridge.EnsureAppFreeToLaunch
 import com.yzddmr6.prismspace.bridge.EnsureAppHiddenState
@@ -102,7 +103,19 @@ object PrismAppControl {
 			else -> return toastBridgeFailure(context, result)
 		}
 		if (ready == null) return toastLaunch(context, LaunchResult.Unknown("empty_unfreeze_result"), app.label.toString(), pkg)
-		if (ready.isNotEmpty()) return toastLaunch(context, LaunchResult.Unknown(ready), app.label.toString(), pkg)
+		// The bridge reports a failure string, but DPM can also report success while a
+		// system-imposed suspension stays set — verify the flag either way, then fall back
+		// to the privileged shell before declaring the launch impossible.
+		if (ready.isNotEmpty() || CloneSuspendRecovery.isSuspended(context, app.user, pkg) == true) {
+			if (!CloneSuspendRecovery.privilegedUnsuspend(context, app.user, pkg))
+				return toastLaunch(
+					context,
+					LaunchResult.Unknown(ready.ifEmpty { "still_suspended" }),
+					app.label.toString(),
+					pkg,
+				)
+			DiagnosticLog.i(TAG, "unfreeze before launch recovered via privileged unsuspend pkg=$pkg")
+		}
 		toastLaunch(context, PrismManager.launchApp(context, pkg, app.user), Apps.of(context).getAppName(pkg).toString(), pkg)
 	}
 
@@ -144,8 +157,18 @@ object PrismAppControl {
 	}
 
 	@JvmStatic fun unfreeze(app: PrismAppInfo) = unfreeze(app.context(), app.user, app.packageName)
-	private fun unfreeze(context: Context, profile: UserHandle, pkg: String) =
-		runAppControl(context, profile, "unfreeze pkg=$pkg", SetAppFrozen(pkg, false))
+	private fun unfreeze(context: Context, profile: UserHandle, pkg: String): Boolean? {
+		val viaBridge = runAppControl(context, profile, "unfreeze pkg=$pkg", SetAppFrozen(pkg, false))
+		// A suspension imposed by the system/shell survives the profile owner's DPM unsuspend —
+		// and worse, DPM can report success while the flag stays set (proven on-device). Never
+		// trust the call result; verify the flag. Bridge-down stays null for honest reporting.
+		if (viaBridge == true && CloneSuspendRecovery.isSuspended(context, profile, pkg) == false) return true
+		if (CloneSuspendRecovery.privilegedUnsuspend(context, profile, pkg)) {
+			DiagnosticLog.i(TAG, "unfreeze pkg=$pkg recovered via privileged unsuspend")
+			return true
+		}
+		return viaBridge
+	}
 
 	@OwnerUser @ProfileUser internal fun setAppFrozenLocally(context: Context, pkg: String, hidden: Boolean): Boolean {
 		val policies = DevicePolicies(context)
@@ -160,10 +183,14 @@ object PrismAppControl {
 
 	@JvmStatic fun setSuspended(app: PrismAppInfo, suspended: Boolean): Boolean {
 		val pkg = app.packageName
-		return runAppControl(
+		val viaBridge = runAppControl(
 			app.context(), app.user, "set suspended pkg=$pkg suspended=$suspended",
 			SetPackageSuspended(pkg, suspended),
 		) == true
+		if (suspended) return viaBridge
+		// Same cross-suspender gap as unfreeze, including the false-success case: verify the flag.
+		if (viaBridge && CloneSuspendRecovery.isSuspended(app.context(), app.user, pkg) == false) return true
+		return CloneSuspendRecovery.privilegedUnsuspend(app.context(), app.user, pkg)
 	}
 	fun setPackagesSuspended(context: Context, pkgs: Array<String>, suspended: Boolean): Array<String>
 			= DevicePolicies(context).invoke(DevicePolicyManager::setPackagesSuspended, pkgs, suspended)
