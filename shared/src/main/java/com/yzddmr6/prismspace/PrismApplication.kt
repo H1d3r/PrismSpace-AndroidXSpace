@@ -36,7 +36,7 @@ class PrismApplication : Application() {
 	override fun onCreate() {
 		super.onCreate()
 		DiagnosticLog.init(this)
-		CrashReport.initCrashHandler()
+		CrashReport.initCrashHandler(this)
 		retireConvergeTrampolineInOwner()
 		// ROM identity separates vendor-profile quirks (MIUI XSpace, OEM clone users) from AOSP behavior.
 		val miuiVersion = Hacks.SystemProperties_get.invoke("ro.miui.ui.version.name").statically().orEmpty()

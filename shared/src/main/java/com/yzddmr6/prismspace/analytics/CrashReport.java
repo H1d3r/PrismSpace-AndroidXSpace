@@ -1,5 +1,6 @@
 package com.yzddmr6.prismspace.analytics;
 
+import android.content.Context;
 import android.os.Process;
 
 import androidx.annotation.NonNull;
@@ -26,7 +27,17 @@ public abstract class CrashReport {
 	static void setProperty(final String key, final int value) { setProperty(key, String.valueOf(value)); }
 	static void setProperty(final String key, final boolean value) { setProperty(key, String.valueOf(value)); }
 
-	public static void initCrashHandler() {
+	public static void initCrashHandler() { installHandler(); }
+
+	/** Binds the application context: the crash marker can now persist synchronously, and any
+	 *  crash stashed before the context existed is flushed to disk. */
+	public static void initCrashHandler(final Context context) {
+		sAppContext = context.getApplicationContext();
+		CrashMarker.flushStashed(context);
+		installHandler();
+	}
+
+	private static void installHandler() {
 		final Thread.UncaughtExceptionHandler current_exception_handler = Thread.getDefaultUncaughtExceptionHandler();
 		if (! (current_exception_handler instanceof LocalThreadExceptionHandler))
 			Thread.setDefaultUncaughtExceptionHandler(new LocalThreadExceptionHandler(current_exception_handler));
@@ -35,6 +46,9 @@ public abstract class CrashReport {
 	private static class LocalThreadExceptionHandler implements Thread.UncaughtExceptionHandler {
 
 		@Override public void uncaughtException(final @NonNull Thread thread, final @NonNull Throwable e) {
+			// First: the synchronous on-disk marker — DiagnosticLog below is async and the process
+			// dies right after, so without this the crash scene can be lost entirely.
+			CrashMarker.record(sAppContext, thread.getName(), e);
 			if (BuildConfig.DEBUG) DiagnosticLog.INSTANCE.e(TAG, "Handling:", e);
 			DiagnosticLog.INSTANCE.e(TAG, "Uncaught exception in " + thread.getName() + " user=" + Process.myUserHandle().hashCode() + " properties=" + sProperties, e);
 			if (mOriginalHandler != null) mOriginalHandler.uncaughtException(thread, e);
@@ -47,6 +61,7 @@ public abstract class CrashReport {
 		private final Thread.UncaughtExceptionHandler mOriginalHandler;
 	}
 
+	private static volatile Context sAppContext;
 	private static final Map<String, String> sProperties = new ConcurrentHashMap<>();
 	private static final String TAG = "Prism.Crash";
 }

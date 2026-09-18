@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import com.yzddmr6.prismspace.analytics.CrashMarker
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
 import com.yzddmr6.prismspace.analytics.DiagnosticSection
 import com.yzddmr6.prismspace.bridge.BridgeTargets
@@ -30,7 +31,14 @@ object DiagnosticsExporter {
         attachedText: (String) -> String,
     ): Pair<String, Intent> = withContext(Dispatchers.IO) {
         DiagnosticLog.i(TAG, "diagnostic export start")
-        val sections = collectProfileDiagnostics(context.applicationContext)
+        val sections = buildList {
+            // A pending crash marker rides along on every export until consumed, so a user who
+            // exports manually from Settings also captures the crash scene.
+            CrashMarker.pending(context.applicationContext)?.let { crash ->
+                add(DiagnosticSection(title = "Last uncaught crash (pending report)", body = crash))
+            }
+            addAll(collectProfileDiagnostics(context.applicationContext))
+        }
         val file = DiagnosticLog.createExportFile(
             context,
             extraSections = sections,

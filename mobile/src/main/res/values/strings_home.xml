@@ -69,4 +69,10 @@
     <string name="lz_home_profile_not_created">Not created</string>
     <string name="lz_home_profile_suspended">Suspended</string>
     <string name="lz_home_profile_ready">Dual space ready</string>
+
+    <!-- Crash report prompt: shown once on home after an uncaught crash -->
+    <string name="lz_home_crash_title">Unexpected exit detected</string>
+    <string name="lz_home_crash_message">PrismSpace quit unexpectedly last time. Send the diagnostic log to help locate the cause? It contains only runtime status, no personal data.</string>
+    <string name="lz_home_crash_send">Send diagnostics</string>
+    <string name="lz_home_crash_dismiss">Not now</string>
 </resources>

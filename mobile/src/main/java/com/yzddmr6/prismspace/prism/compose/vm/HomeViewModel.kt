@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.yzddmr6.prismspace.analytics.CrashMarker
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
 import com.yzddmr6.prismspace.controller.ClonePreparationStore
 import com.yzddmr6.prismspace.controller.UserCloneRegistry
@@ -239,6 +240,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private val _updateInfo = MutableStateFlow<UpdateInfo?>(null)
     val updateInfo: StateFlow<UpdateInfo?> = _updateInfo
 
+    private val _pendingCrashReport = MutableStateFlow(false)
+    val pendingCrashReport: StateFlow<Boolean> = _pendingCrashReport
+
     init {
         viewModelScope.launch {
             stateRepo.state.collectLatest { snapshot ->
@@ -256,6 +260,41 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             val decision = UpdateChecker.check(getApplication(), force = false)
             if (decision is UpdateDecision.Prompt) _updateInfo.value = decision.info
         }
+        viewModelScope.launch {
+            _pendingCrashReport.value = withContext(Dispatchers.IO) {
+                CrashMarker.pending(getApplication()) != null
+            }
+        }
+    }
+
+    /** Send the pending crash scene via the standard diagnostics export + system share sheet. */
+    fun sendCrashReport() {
+        val context: Context = getApplication()
+        viewModelScope.launch {
+            try {
+                val subject = PrismLocale.wrap(context).getString(R.string.lz_setvm_report_subject)
+                val (fileName, intent) = DiagnosticsExporter.buildShare(
+                    context,
+                    subject = subject,
+                    attachedText = { name -> PrismLocale.wrap(context).getString(R.string.lz_setvm_report_attached, name) },
+                )
+                CrashMarker.clear(context)
+                _pendingCrashReport.value = false
+                DiagnosticsExporter.launchShare(context, subject, intent)
+                DiagnosticLog.i(TAG, "pending crash report shared file=$fileName")
+            } catch (e: Exception) {
+                // Keep the marker: a failed share must not destroy the only crash scene copy.
+                DiagnosticLog.e(TAG, "pending crash report share failed", e)
+                _pendingCrashReport.value = false
+            }
+        }
+    }
+
+    /** User declined: consume the marker and never prompt for this crash again. */
+    fun dismissCrashReport() {
+        CrashMarker.clear(getApplication())
+        _pendingCrashReport.value = false
+        DiagnosticLog.i(TAG, "pending crash report dismissed by user")
     }
 
     /** Dismiss the home update dialog: the same version never prompts again automatically. */

@@ -57,6 +57,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.yzddmr6.prismspace.mobile.R
 import com.yzddmr6.prismspace.notification.NotificationPermissionPrompt
+import com.yzddmr6.prismspace.prism.compose.component.CrashReportDialog
 import com.yzddmr6.prismspace.prism.compose.component.GroupCard
 import com.yzddmr6.prismspace.prism.compose.component.PrismIcons
 import com.yzddmr6.prismspace.prism.compose.component.StatusHeroCard
@@ -93,6 +94,7 @@ fun HomeScreen(nav: NavHostController) {
     val vm: HomeViewModel = viewModel()
     val uiState by vm.uiState.collectAsState()
     val updateInfo by vm.updateInfo.collectAsState()
+    val pendingCrashReport by vm.pendingCrashReport.collectAsState()
     val context = LocalContext.current
     val activity = Activities.findActivityFrom(context)
 
@@ -307,6 +309,14 @@ fun HomeScreen(nav: NavHostController) {
     // ── 自动检查更新：发现新版本时弹窗（「稍后」后同版本不再提示） ──────────────
     updateInfo?.let { info ->
         UpdateAvailableDialog(info = info, context = context, onDismiss = { vm.dismissUpdate() })
+    }
+
+    // ── 上次运行异常退出：询问是否发送诊断日志（确认/拒绝都只提示一次） ──────────
+    if (pendingCrashReport) {
+        CrashReportDialog(
+            onSend = { vm.sendCrashReport() },
+            onDismiss = { vm.dismissCrashReport() },
+        )
     }
 }
 
