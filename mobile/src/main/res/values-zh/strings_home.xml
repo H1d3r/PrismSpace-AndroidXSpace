@@ -69,4 +69,10 @@
     <string name="lz_home_profile_not_created">未创建</string>
     <string name="lz_home_profile_suspended">已暂停</string>
     <string name="lz_home_profile_ready">双开空间已就绪</string>
+
+    <!-- 崩溃上报提示：发生未捕获崩溃后在首页提示一次 -->
+    <string name="lz_home_crash_title">检测到异常退出</string>
+    <string name="lz_home_crash_message">PrismSpace 上次运行时异常退出。是否发送诊断日志帮助定位原因？日志仅包含运行状态，不包含个人数据。</string>
+    <string name="lz_home_crash_send">发送诊断日志</string>
+    <string name="lz_home_crash_dismiss">暂不发送</string>
 </resources>

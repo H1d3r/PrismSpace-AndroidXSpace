@@ -167,6 +167,10 @@
     <string name="lz_home_profile_not_created">未建立</string>
     <string name="lz_home_profile_suspended">已暫停</string>
     <string name="lz_home_profile_ready">雙開空間已就緒</string>
+    <string name="lz_home_crash_title">偵測到異常結束</string>
+    <string name="lz_home_crash_message">PrismSpace 上次執行時異常結束。是否傳送診斷記錄協助找出原因？記錄僅包含執行狀態，不含個人資料。</string>
+    <string name="lz_home_crash_send">傳送診斷記錄</string>
+    <string name="lz_home_crash_dismiss">暫不傳送</string>
     <string name="lz_home_pending_title_one">%1$s 等待安裝確認</string>
     <string name="lz_home_pending_title_more">%1$s 等 %2$d 個應用程式等待安裝確認</string>
     <string name="lz_home_pending_body">安裝包已傳到雙開空間，下一步在 Android 系統安裝器中確認。</string>
