@@ -66,6 +66,15 @@
     <string name="lz_space_main_copy_lost_title">Main-space app is no longer installed</string>
     <string name="lz_space_main_copy_lost_body">After the system uninstall flow for %1$s, its main-space copy is no longer present. This is the state reported by Android. Restore the app and its data from your backup if needed.</string>
 
+    <!-- Suspend recovery: shown when a restore could not lift a suspension imposed by someone else. -->
+    <string name="lz_space_suspend_recovery_title">Clone still suspended</string>
+    <string name="lz_space_suspend_recovery_body">This clone was suspended by %1$s, and Android only lets that same component lift it — in-app restore cannot work here. You can force a recovery by reinstalling the clone via Shizuku/Root (the clone\'s data will be erased), or uninstall it and clone again manually.</string>
+    <string name="lz_space_suspend_recovery_reinstall">Reinstall (erase data)</string>
+    <string name="lz_space_suspend_recovery_cancel">Cancel</string>
+    <string name="lz_space_suspend_unknown_suspender">a system component</string>
+    <string name="lz_space_suspend_reinstall_ok">%1$s recovered; suspension cleared</string>
+    <string name="lz_space_suspend_reinstall_failed">Reinstall failed: Shizuku/Root authorization and a matching main-space copy are required</string>
+
     <!-- Clone uninstall gate: guidance shown when the dual space cannot present the uninstaller. -->
     <string name="lz_uninstall_gate_suspended">Resume the dual space in Settings before uninstalling clones</string>
     <string name="lz_uninstall_gate_locked">Unlock the dual space (lock-screen password) before uninstalling clones</string>

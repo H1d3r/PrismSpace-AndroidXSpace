@@ -82,6 +82,7 @@ import com.yzddmr6.prismspace.prism.compose.component.DisabledAlpha
 import com.yzddmr6.prismspace.prism.compose.component.PrismIcons
 import com.yzddmr6.prismspace.prism.compose.component.PrismTextButton
 import com.yzddmr6.prismspace.prism.compose.component.SpaceSegmentChips
+import com.yzddmr6.prismspace.prism.compose.component.SuspendRecoveryDialog
 import com.yzddmr6.prismspace.prism.compose.nav.AppLaunchSignals
 import com.yzddmr6.prismspace.prism.compose.space.SpaceUsability
 import com.yzddmr6.prismspace.prism.compose.space.selectedDualChipId
@@ -371,6 +372,16 @@ fun SpaceScreen() {
                     Text(stringResource(android.R.string.ok))
                 }
             },
+        )
+    }
+
+    // ── Suspend dead-end escape: restore provably cannot lift a foreign suspension → offer
+    //    the user-confirmed reinstall (data erasing) instead of a silently dead button. ──────
+    uiState.suspendRecovery?.let { prompt ->
+        SuspendRecoveryDialog(
+            prompt = prompt,
+            onReinstall = { vm.forceRecoverSuspendedClone() },
+            onDismiss = { vm.dismissSuspendRecovery() },
         )
     }
 

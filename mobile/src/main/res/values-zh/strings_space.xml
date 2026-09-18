@@ -66,6 +66,15 @@
     <string name="lz_space_main_copy_lost_title">主空间应用已不存在</string>
     <string name="lz_space_main_copy_lost_body">完成 %1$s 的系统卸载流程后，检测到它在主空间中的副本已不存在。这是 Android 当前返回的真实状态；如有需要，请从备份恢复应用及其数据。</string>
 
+    <!-- 暂停恢复：恢复操作无法解除他人施加的暂停时展示。 -->
+    <string name="lz_space_suspend_recovery_title">分身仍被暂停</string>
+    <string name="lz_space_suspend_recovery_body">该分身被 %1$s 暂停，Android 只允许暂停者本人解除，应用内恢复对它无效。可以通过 Shizuku/Root 重装分身强制恢复（分身内的数据会被清除），也可以手动卸载后重新克隆。</string>
+    <string name="lz_space_suspend_recovery_reinstall">重装分身（清除数据）</string>
+    <string name="lz_space_suspend_recovery_cancel">取消</string>
+    <string name="lz_space_suspend_unknown_suspender">系统组件</string>
+    <string name="lz_space_suspend_reinstall_ok">%1$s 已恢复，暂停状态已清除</string>
+    <string name="lz_space_suspend_reinstall_failed">重装失败：需要 Shizuku 或 Root 授权，且主空间仍存在该应用</string>
+
     <!-- 分身卸载门禁：双开空间无法呈现系统卸载确认时展示的引导。 -->
     <string name="lz_uninstall_gate_suspended">请先在设置中恢复双开空间，然后再卸载分身</string>
     <string name="lz_uninstall_gate_locked">请先解锁双开空间（锁屏密码），然后再卸载分身</string>

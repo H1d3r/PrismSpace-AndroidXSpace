@@ -84,6 +84,13 @@
     <string name="lz_home_status_needsrepair_body">雙開空間連線需要修復。點擊「修復」並完成可見的空間內步驟；即使拒絕通知權限，此入口仍可使用。</string>
     <string name="lz_space_main_copy_lost_title">主空間應用程式已不存在</string>
     <string name="lz_space_main_copy_lost_body">完成 %1$s 的系統解除安裝流程後，偵測到它在主空間中的副本已不存在。這是 Android 目前回傳的真實狀態；如有需要，請從備份還原應用程式及其資料。</string>
+    <string name="lz_space_suspend_recovery_title">分身仍被暫停</string>
+    <string name="lz_space_suspend_recovery_body">該分身被 %1$s 暫停，Android 只允許暫停者本人解除，應用程式內的恢復對它無效。可以透過 Shizuku/Root 重裝分身強制恢復（分身內的資料會被清除），也可以手動解除安裝後重新克隆。</string>
+    <string name="lz_space_suspend_recovery_reinstall">重裝分身（清除資料）</string>
+    <string name="lz_space_suspend_recovery_cancel">取消</string>
+    <string name="lz_space_suspend_unknown_suspender">系統元件</string>
+    <string name="lz_space_suspend_reinstall_ok">%1$s 已恢復，暫停狀態已清除</string>
+    <string name="lz_space_suspend_reinstall_failed">重裝失敗：需要 Shizuku 或 Root 授權，且主空間仍存在該應用程式</string>
     <string name="lz_vm_uninstall_queue_summary">解除安裝完成：已移除 %1$d 個、未移除 %2$d 個、無法確認 %3$d 個。</string>
     <string name="lz_vm_uninstall_queue_aborted">解除安裝已停止：已移除 %1$d 個、未移除 %2$d 個、無法確認 %3$d 個、%4$d 個未執行。%5$s</string>
     <string name="toast_shortcut_failed">快速啟動方式建立失敗</string>
