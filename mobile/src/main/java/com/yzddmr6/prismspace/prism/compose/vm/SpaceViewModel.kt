@@ -12,6 +12,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.yzddmr6.prismspace.analytics.DiagnosticLog
 import com.yzddmr6.prismspace.mobile.R
+import com.yzddmr6.prismspace.controller.CloneSuspendRecovery
 import com.yzddmr6.prismspace.controller.PrismAppClones
 import com.yzddmr6.prismspace.controller.PrismAppControl
 import com.yzddmr6.prismspace.controller.ClonePreparationStore
@@ -272,6 +273,8 @@ data class SpaceUiState(
     val feedbackIsError: Boolean = false,
     val dualUsability: SpaceUsability = SpaceUsability.Unknown,
     val mainCopyLostPackage: String? = null,
+    // Dead-end escape offer: set when a restore left the clone suspended by a foreign suspender.
+    val suspendRecovery: SuspendRecoveryPrompt? = null,
 ) {
     val activeSpaceId: String get() = if (segment == SpaceSegment.Main) "main" else selectedDualSpaceId ?: "dual"
     val browse: SpaceBrowseOptions get() = browsing[activeSpaceId] ?: SpaceBrowseOptions()
@@ -293,6 +296,9 @@ data class SpaceUiState(
 // ---------------------------------------------------------------------------
 
 enum class BatchAction { Freeze, Uninstall, CopyToDual }
+
+/** Offered when a restore could not lift a foreign suspension: pkg + suspender (null = unknown). */
+data class SuspendRecoveryPrompt(val pkg: String, val suspender: String?)
 
 /** Which batch actions are available for a given segment. */
 internal fun batchActionsFor(segment: SpaceSegment): List<BatchAction> = when (segment) {
@@ -715,6 +721,18 @@ class SpaceViewModel(app: Application, private val savedState: SavedStateHandle)
                     // paused by either path becomes launchable again.
                     PrismAppControl.unfreeze(app)
                     runCatching { PrismAppControl.setSuspended(app, false) }
+                    // Honest dead-end escape: a suspension imposed by the system/root survives
+                    // every in-app lever (cross-suspender protection). Offer the guaranteed
+                    // reinstall path instead of leaving the user with a silently dead button.
+                    if (CloneSuspendRecovery.isSuspended(app.context(), app.user, pkg) == true) {
+                        val suspender = CloneSuspendRecovery
+                            .diagnoseSuspension(app.context(), app.user, pkg, allowSuProbe = false)
+                            ?.suspendingPackage
+                        DiagnosticLog.w(TAG, "unfreeze dead end pkg=$pkg suspender=${suspender ?: "unknown"}")
+                        _uiState.value = _uiState.value.copy(
+                            suspendRecovery = SuspendRecoveryPrompt(pkg, suspender),
+                        )
+                    }
                 }
                 // Re-query the package as a "package change" (add=false) so the cached isHidden reflects
                 // the freeze NOW — add=true would force isHidden=false (that path is for fresh installs).
@@ -723,6 +741,36 @@ class SpaceViewModel(app: Application, private val savedState: SavedStateHandle)
             }
             refresh()
         }
+    }
+
+    /** User-confirmed forced recovery: privileged unsuspend across transports first (no data
+     *  loss), reinstall as the last resort. Explicit user action, so probing su is fair. */
+    fun forceRecoverSuspendedClone() {
+        val prompt = _uiState.value.suspendRecovery ?: return
+        val app = appFor(prompt.pkg, SpaceSegment.Dual)
+        _uiState.value = _uiState.value.copy(suspendRecovery = null)
+        if (app == null) return
+        val res = prismResolver(getApplication())
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                CloneSuspendRecovery.forceRecoverViaPrivileged(
+                    app.context(), app.user, prompt.pkg, allowSuProbe = true,
+                )
+            }
+            if (ok) {
+                setFeedback(res(R.string.lz_space_suspend_reinstall_ok, arrayOf(prompt.pkg)), isError = false)
+                withContext(Dispatchers.IO) {
+                    PrismAppListProvider.getInstance(getApplication()).refreshPackage(prompt.pkg, app.user, false)
+                }
+                refresh()
+            } else {
+                setFeedback(res(R.string.lz_space_suspend_reinstall_failed, arrayOf()), isError = true)
+            }
+        }
+    }
+
+    fun dismissSuspendRecovery() {
+        _uiState.value = _uiState.value.copy(suspendRecovery = null)
     }
 
     fun remove(activity: Activity, pkg: String, segment: SpaceSegment) {
